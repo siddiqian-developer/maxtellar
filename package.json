@@ -1,0 +1,14 @@
+{
+  "name": "timekeeper",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Opinionated sleep-anchored time-management system (see SPEC-timekeeper.md)",
+  "scripts": {
+    "test": "pnpm -r test",
+    "build": "pnpm -r build",
+    "typecheck": "pnpm -r typecheck"
+  },
+  "devDependencies": {
+    "typescript": "^5.5.0"
+  }
+}
