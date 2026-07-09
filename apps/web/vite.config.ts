@@ -9,7 +9,11 @@ const isolationHeaders = {
 
 export default defineConfig({
   plugins: [react()],
-  server: { headers: isolationHeaders },
+  server: {
+    headers: isolationHeaders,
+    // WSL: /mnt/d is a Windows drive — inotify events don't propagate, poll instead.
+    watch: { usePolling: true, interval: 300 },
+  },
   preview: { headers: isolationHeaders },
   optimizeDeps: {
     exclude: ["@sqlite.org/sqlite-wasm"],

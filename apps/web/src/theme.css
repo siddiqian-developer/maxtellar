@@ -1,8 +1,9 @@
-/* Timekeeper visual language (SPEC 1.5): premium, subtle, sharp, work-focused.
+/* maxtellar visual language (SPEC 1.5): premium, subtle, sharp, work-focused.
    Claude-inspired: ivory canvas, charcoal ink, one terracotta accent for the
    LIVING elements only. Hairline borders, tabular numerals, minimal radius. */
 
 :root {
+  color-scheme: light;
   --paper: #f4f1ea;
   --paper-raised: #fbf9f4;
   --ink: #2d2a26;
@@ -17,6 +18,53 @@
   --radius: 3px;
   --serif: Georgia, "Times New Roman", serif;
   --sans: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    color-scheme: dark;
+    --paper: #1a1a1a;
+    --paper-raised: #252525;
+    --ink: #e8e8e8;
+    --ink-soft: #a0a0a0;
+    --ink-faint: #707070;
+    --hairline: #3a3a3a;
+    --accent: #ff7a59;
+    --accent-soft: #3d2520;
+    --plan-card: #252525;
+    --past-card: #2a2a2a;
+    --danger: #e86b52;
+  }
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+  --paper: #f4f1ea;
+  --paper-raised: #fbf9f4;
+  --ink: #2d2a26;
+  --ink-soft: #6f6a62;
+  --ink-faint: #a39d92;
+  --hairline: #e2ddd2;
+  --accent: #d97757;
+  --accent-soft: #f3d9cd;
+  --plan-card: #fbf9f4;
+  --past-card: #eceade;
+  --danger: #b3543e;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --paper: #1a1a1a;
+  --paper-raised: #252525;
+  --ink: #e8e8e8;
+  --ink-soft: #a0a0a0;
+  --ink-faint: #707070;
+  --hairline: #3a3a3a;
+  --accent: #ff7a59;
+  --accent-soft: #3d2520;
+  --plan-card: #252525;
+  --past-card: #2a2a2a;
+  --danger: #e86b52;
 }
 
 * { box-sizing: border-box; }
