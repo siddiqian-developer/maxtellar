@@ -4,10 +4,29 @@ One spine, multiple projections.
 1. **Active timeline (MAIN):** Google-Calendar day view; **pinned now-seam** (~35% height, day
    flows upward through it); left time axis; box heights ∝ duration; ticks every minute; strong
    seam duality; gently-witnessed reflow. Gaps = hatched empty space. Overrun = box tail past a
-   budget mark.
+   budget mark. **No time label on the seam** — just a plain dot on the axis (Google-Calendar
+   style); the global clock already shows the time. When scrolled away from the seam, a quiet
+   icon-only **"back to now"** control floats bottom-center (no label text — see
+   `docs/design-tokens.md` "floating icon buttons").
+   **Running block (2026-07-11): full projected span, never shrinks.** The running task
+   renders start → projected end at all times (countdown: `now + remaining`; stopwatch: open
+   tail rides `now`), split two-tone by the seam: **spent above (stronger accent fill,
+   ~32% mix, accent bottom hairline), remaining below (accent-soft)**. Label shows elapsed
+   and (countdown) time left. The earlier render — a sliver that grew from the start point,
+   reading as the task "shrinking" out of its planned height — is superseded.
 2. **Pipeline:** Running + unstarted only; uniform cards; gaps as subtle spacing; a **control
    surface** (Start/Pause/Cancel sync to timeline unconditionally; scroll-sync only when
    co-displayed). Desktop shows timeline + pipeline side-by-side; mobile uses bottom tabs.
+   **Cards follow TIME order (2026-07-11), mirroring the timeline** — sorted by each item's
+   first placed part, not by raw priority rank (an anchored task can be placed earlier in
+   time than a higher-priority float; the two projections must agree). Unplaced items sink
+   to the end in rank order.
+   **Unstarted-card Cancel buttons carry the danger accent** (2026-07-11, per the semantic
+   action-button color law — outline `--danger`, same as the drawer's Cancel).
+   **The split is user-resizable (2026-07-11):** a 6px drag handle between the columns
+   (hairline at rest, accent-soft on hover/drag) sets the pipeline width — clamped
+   240px…60% of the window, persisted locally (`pipelineWidth`), default 340px. The new-task
+   fab tracks the divider (anchored to the timeline's bottom-right corner, 20px inset).
 3. **Analytics — the 24h zero-sum ledger (from the author's 8-yr Google Sheet; core feature).**
    - **24-hour zero-sum mechanism:** every day's 24h is fully budgeted and fully accounted —
      Sleep + Waking; Waking = Work + OTW-Productive + Wasted + Lost. Nothing escapes a bucket;
@@ -27,17 +46,152 @@ One spine, multiple projections.
 4. **History:** exact as-happened flow; history editor for pre-SOD edits (no-overlap enforced;
    end ≤ now wall). Cloud-offload provision (e.g. Drive) for unbounded growth.
 
-**Task entry:** FAB → four-field drawer (Title / Start / End / Budget + head), live type-morph
+**Task entry:** FAB → drawer (Title / Sub-head / Start / End / Budget), live type-morph
 chip, inline physics-snapping, `[Start now ⚡]`. Title accepts deterministic shorthand tokens
-("1h30", "@18:00", "15:50-16:20", "#head") parsed by a plain grammar. **No AI/LLM anywhere —
-100% local & offline.**
+("1h30", "@18:00", "15:50-16:20", "#head") parsed by a plain grammar.
+**AI/ML policy (amended 2026-07-10, supersedes "No AI/LLM anywhere"):** cloud LLM/AI only in
+very late stages and only where it provides real value, always with local fallbacks — even
+cloud-exclusive features must never block the app's regular functionality. **On-device ML
+inference is permitted** — some features on by default, some opt-in, always overridable,
+**never load-bearing for correctness: the app must work identically with ML off.**
+Full design: §7.0.1.
+Drawer behavior (see also `docs/drawer-reference.md`):
+- **Chrome:** right-side slide-in card (max 440px) over a scrim. **Clicking the scrim does
+  NOT dismiss (revised 2026-07-11** — half-typed tasks are too easy to lose to a stray
+  click); close via **Escape**, the header ×, or Cancel only. Sticky header (title + ×),
+  footer **`Add(primary) · Add & start now ⚡ · [space] ·
+  Cancel(danger outline)`** — Cancel is not neutral-styled (it would recede to nothing next
+  to the primary) and its accent must **match its meaning**: danger-toned outline, not the
+  brand teal. General law in `docs/design-tokens.md` "semantic action-button colors".
+- **Sub-head, not a flat head field** (§2.1 Head/Activity hierarchy — "flat heads" in §8
+  means this two-level shape, one head per activity, not a single unstructured field):
+  a searchable dropdown of existing **activities** (sub-heads, e.g. "Project — AI
+  Automation"). Selecting a known activity **auto-derives and displays its head as a
+  read-only line** (`Head: Labor Work`) the moment it's picked — never editable there.
+  Typing a brand-new activity reveals one extra required field, "New sub-head's head" (pick
+  an existing head or type a new one); submitting registers the pairing in the heads
+  registry so it's remembered next time. Managed at the registry level via the full-screen
+  **Heads & Sub-heads** configuration screen (below), not just inline creation.
+- **Default on open: `budgeted` with budget prefilled 00:30** (DEFAULT_BUDGET = 30 min).
+- **Type chips are always selectable** (the app never says no): the type is derived live
+  from field presence (§3.6), and tapping a chip **pre-fills** its fields — budgeted →
+  budget 00:30; semi-head → start `now`; semi-tail → end `now`+30; fixed → start `now` +
+  budget 00:30 (end derives); unscheduled → all cleared. Fields a type excludes are cleared.
+- **Field roles are shown minimally, never as words:** a **required** field gets a quiet
+  accent dot after its label; **optional** shows nothing; a **not-used** field is dimmed
+  (~45% opacity). The full role is still in the label tooltip. A **fixed** task treats
+  start, end and budget as all required (symmetrical): all three are mandatory values,
+  entered as any two with the third auto-derived per §3.6.
+- **Time fields** show no format hint in their labels (minimalism) — the placeholder
+  (`00:30`) carries the shape. Budget parses HH:MM or a bare integer as minutes; ±5-min
+  stepper chevrons on all time fields (steppers skipped by tab order).
+- **Flags on one row**, terse: `OMMF` (uppercase), `slideable`, `breakable`.
+- **Title, Sub-head, and the new-sub-head's-head field each carry a very subtle inline
+  clear (×)** — appears only once non-empty, `ink-faint` at 50% opacity, brightens on
+  hover; tab-skipped. Quiet by default, matching the house floating-icon-button style
+  (`docs/design-tokens.md`), not a heavy always-visible affordance.
+- **All behavior flags (§2.5) exposed:** ommf, slideable, breakable as checkboxes.
+  Defaults derive from the type (slideable ← type ≠ fixed; breakable ← budgeted ∧ ¬ommf);
+  the §2.5 validity matrix is enforced live by disabling invalid combinations
+  (fixed → slideable off; budgeted → slideable on; breakable only for budgeted; ommf →
+  breakable off).
+- Time-field derivation runs on field commit per §3.6 (second field present derives the
+  third; overnight end wraps +1 day); hard blocks (zero duration, missing title) surface
+  as an inline error banner, never a browser alert.
+- **Section headings ("Timing type", "Flags") are removed.** Each of those rows instead
+  carries a **very subtle `ⓘ` glyph at its right edge** (ink-faint, ~35% opacity, brightens
+  on hover/focus) whose tooltip holds the guidance.
+- **Tooltips are custom and subtle** (never native `title`): trigger carries `data-tip`;
+  a quiet paper-raised card with hairline border and ink-soft 11px text fades in above the
+  element after a ~0.5s dwell. Used for the section glyphs and the remaining terse labels
+  (field roles, Head, individual flags). No inline parenthetical hints or instructional
+  label suffixes anywhere in the drawer.
+
+**Splash screen (2026-07-11):** shown on every app open, held a **minimum of 3 seconds**
+from first paint even if the store loads sooner, then fades out over 450ms. Composition,
+top to bottom, centered on bare `--paper`: the serif wordmark ("maxtellar", 58px) rising
+in with letter-spacing easing from wide to normal; beneath it the **now-seam motif** — a
+280px accent-soft line that draws out from its center, carrying a 12px accent dot that
+then sweeps end-to-end and back on a ~2.4s ease loop (the app's signature living element,
+previewed before the app itself); last, the tagline **"every minute accounted"** (13px
+uppercase, wide-tracked, ink-soft). Staggered entrances (wordmark → seam → tagline); same
+visual language as everything else — no gradients, no glow. Exact timings/sizes in
+`docs/design-tokens.md` ("splash").
+
+**Global clock:** absolutely centered in the topbar (independent of side content width),
+stacked layout — muted short date (e.g. "Mon, 9 Jul") **above** a bold serif time with
+seconds. **12h with AM/PM by default**, 24h available. Hidden below 720px width. Ambient
+only — it displays real wall time and is distinct from the scheduler's logical `now` /
+the now-seam.
 
 **Time formats:**
 - Timeline/history → absolute times; pipeline cards → durations (absolute only on anchored
-  edges); analytics → durations. 24h default; 12h setting.
+  edges); analytics → durations. **12h with AM/PM by default**, 24h available — one app-wide
+  setting (below), not per-view.
 - **Durations:** `MM:WW:DD:HH:MM`, with MM/WW/DD shown only when non-zero (90m → `01:30`;
   8d 2h → `01:01:02:00`).
 - **Absolute dates:** current calendar date shows **no date label (not even "Today")** — bare
   time; previous → "yesterday"/exact; next → "tomorrow"/exact; farther → exact date.
+
+**Settings panel:** gear icon in the topbar opens a panel using the same slide-in chrome as
+the task drawer (right-side card, scrim, sticky header, `Done` footer, Escape closes it too).
+Holds a **Dev sandbox** toggle (2026-07-11, persisted `devSandbox`): testing affordances
+only, never a semantics change — when on, the running task's pipeline card gains **⏩ +5m /
++15m speed-up buttons** (budgeted-hue outline) that fast-forward logical `now` via a batch
+`TICK` to `now + n`; wall-clock ticks resume once real time catches up.
+Holds the app-wide **clock format** (12h/24h) as its first setting, applied uniformly to the
+global clock, timeline tick labels, and pipeline card times — a single source, not
+per-component toggles. Also links out to the Heads & Sub-heads screen below. Extend this
+panel as more settings are added.
+
+**Heads & Sub-heads configuration — a full screen, not a modal:** reached via the Settings
+panel's "Manage heads & sub-heads →" link. Replaces the timeline+pipeline area entirely
+(back arrow returns to the main view — no overlay/scrim, this is real navigation, not a
+dialog). Two forms, **sub-head first** (revised 2026-07-10 — this is the primary flow: a
+sub-head name, a head field (pick existing, type a new one, or leave it to the ML
+suggester), Add), then **"Add a head" second**, explicitly scoped to the one case the
+sub-head form can't cover — a head with no sub-heads yet (adding a sub-head above creates
+its head automatically, existing or freshly typed, so this second form is the exception,
+not the main path). Plus a listing of the registry grouped by head. Each sub-head chip
+carries a quiet **× delete**
+(ink-faint, turns danger on hover). **Heads carry the same quiet × delete, except the
+built-ins** (§2.10: only `Self-Management` is spec-protected here — Wasted Time/Lost Hours
+never enter this registry at all; `Main Work` is a convenience default seed, not
+spec-protected, so it CAN be deleted). **Built-in heads sort first** in the registry
+listing, marked only by a very subtle dot (`docs/design-tokens.md` "built-in marker") — no
+badge/label text, the delete button's absence is the primary signal, the dot a secondary
+quiet hint.
+
+**Deletion guard — a sub-head or head still referenced by any task cannot be deleted
+outright (revised 2026-07-10, supersedes the earlier "always low-stakes, no-confirm"
+rule):** clicking × checks real usage across **plan, running, and history** (not just the
+registry list, so a registry already out of sync with actual references can't be gamed).
+- **Unused** → deletes immediately, still no confirm dialog (genuinely low-stakes when
+  nothing references it).
+- **In use** → opens an inline **reassign panel** instead of deleting: pick a target
+  sub-head (existing, via the same fuzzy dropdown, or a brand-new one — which then also
+  needs its head chosen, exactly like the drawer's new-sub-head flow). Confirming
+  bulk-reassigns every plan/running/history reference from the old (head, sub-head) pair
+  to the new one (`REASSIGN_HEAD` event, `packages/core`, a pure label swap — headId/
+  activityId never influence placement/timing, so no resettle is needed), *then* deletes
+  the now-unused registry entry.
+- **Deleting an entire in-use head** reassigns **every distinct sub-head actually used
+  under it** (scanned from real task data, not the registry) to the *same* chosen target,
+  then deletes the head.
+- Sub-head chip and head delete-button tooltips say "In use by a task — deleting will ask
+  you to reassign first" when applicable, so the guard is discoverable before clicking.
+
+This is where the head/activity registry that the drawer's sub-head field reads from is
+authored and grown.
+
+**Filtered/highlighted dropdowns — the one combobox pattern, used everywhere a dropdown
+appears** (drawer's Sub-head and New-sub-head's-head fields; this screen's head picker for
+adding a sub-head): opens on focus, filters live via **subsequence ("literal letters, in
+order") matching** — typed characters must appear in the candidate in the same order, not
+necessarily contiguous (e.g. "te" matches "The Exercise" via the T and e of "The") — with
+matched letters **bolded**, not colored. Arrow-key navigable; Enter selects the highlighted
+option; Escape closes only the open list (never the parent drawer — stops propagation
+before the drawer's own Escape-closes handler sees it). Implementation: `fuzzy.ts`
+(`fuzzyMatch`/`fuzzyScore`) + `components/FuzzyDropdown.tsx`.
 
 ---

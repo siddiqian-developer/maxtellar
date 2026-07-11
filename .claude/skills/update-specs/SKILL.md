@@ -1,38 +1,49 @@
 ---
-description: Use whenever the user's prompt changes, adds, or overrides a design decision, rule, behavior, law, or scope for the maxtellar app — even if the prompt is primarily a coding request. Updates the modular spec in specs/ so it stays the single source of truth.
+description: Fire on EVERY user prompt that introduces any decision, preference, behavior, design change, or constraint for the maxtellar app — even mid-coding-request. Enforces the "code is disposable" rule; prompts must become spec/docs markdown so the app is fully regenerable from the md files alone.
 ---
 
-# Update Specs
+# Update Specs — the "code is disposable" doctrine
 
-The spec lives in `specs/` as one file per part, with `specs/00-index.md` as the
-table of contents. It is the contract the build follows — when the user decides
-something new in conversation, the decision must land in the spec or it is lost.
+**The law:** if all code were deleted, the markdown in this repo (`specs/` + `docs/`)
+must suffice to regenerate *exactly this app*. Code is never the only home of a
+decision. Every prompt that adds information must land that information in markdown
+**in the same turn** as (or before) the code change.
 
-## When to fire
+## What must be captured, and where
 
-- The user states a new rule, changes an existing behavior, or reverses a prior decision.
-- The user answers an open question (check `specs/10-open-items.md` — resolve and remove it there).
-- The user expands or trims MVP scope (`specs/08-mvp-boundary.md`).
-- A coding prompt implies a spec change ("actually make pause also stop the quota clock").
+| Kind of decision | Destination |
+|---|---|
+| Behavior, rule, law, scope change | the affected `specs/` part (via `00-index.md`) |
+| Resolved open question | edit + remove from `specs/10-open-items.md` |
+| UI/UX interaction or layout decision | `specs/06-views.md` |
+| Visual design values (colors, type, radius, motion) | `docs/design-tokens.md` (exact values, not adjectives) |
+| Implementation patterns worth keeping (algorithms, wire contracts) | a `docs/*.md` reference file |
+| Tech-stack / architecture choice | `specs/07-engineering.md` |
 
-Do NOT fire for pure implementation choices (variable names, file layout, refactors)
-that the spec doesn't govern.
+NOT captured: transient debugging, environment quirks (WSL, ports), one-off requests
+that leave no trace in the app's behavior.
 
 ## Procedure
 
-1. Read `specs/00-index.md` to pick the affected part(s). Read only those files.
-2. Edit the relevant section in place. Match existing style: rule tags (G#, E#, R#),
-   terse contractual prose, `**bold**` for load-bearing terms.
-3. New rules get the next free tag in their family (grep all of `specs/` for the
-   highest existing G/E/R number first).
-4. If the change contradicts a locked core law (Part I §1.3, no-overlap §3.1), don't
-   silently overwrite — tell the user which law it conflicts with and confirm.
-5. If a change resolves an item in `10-open-items.md`, delete it from there.
-6. Bump nothing else: no version churn, no reformatting of untouched sections.
-7. In your reply, state which spec file(s) and section(s) you updated.
+1. Read `specs/00-index.md`; open only the affected part(s).
+2. Land the change in markdown FIRST (or same turn), then code it.
+3. Match spec style: rule tags (G#, E#, R# — grep for the highest free number),
+   terse contractual prose, **bold** load-bearing terms.
+4. Conflicts with a locked core law (Part I §1.3, no-overlap §3.1): flag to the user,
+   don't silently overwrite. External *reference material* that conflicts: reject
+   silently (the reference-triage rule).
+5. Exact values beat adjectives: hex codes, px, ms, easing curves go in
+   `docs/design-tokens.md` whenever the UI's look changes.
+6. In your reply, state which md file(s) you updated.
+
+## The regeneration test (run mentally every time)
+
+Ask: "could a fresh session rebuild this exact feature from the md alone?"
+If any part of the answer lives only in code or only in the conversation, the
+capture is incomplete — fix it before finishing the turn.
 
 ## Layout
 
-- `00-index.md` — preamble + links (update only when adding/removing a part)
-- `01-philosophy.md` … `10-open-items.md` — one part each
-- (the old root-level `SPEC.md` / `SPEC-timekeeper.md` were deleted 2026-07-09)
+- `specs/00-index.md` — preamble + links; `01`…`10` — one part each
+- `docs/design-tokens.md` — exact visual values (single source for theme.css)
+- `docs/*.md` — implementation references

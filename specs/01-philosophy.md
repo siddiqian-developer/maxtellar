@@ -52,8 +52,13 @@ crystallizes into certain history. The app dramatizes that crossing.
 - **Density: spacious & focused** — one thing at a time; depth via navigation, not cramming.
 
 ### 1.5 Visual language
-- **Inspiration:** Claude's own theme — warm ivory/cream, charcoal text, a single terracotta
-  accent reserved for *living* elements (now-seam, running task, primary action).
+- **Palette (decided 2026-07-09, supersedes the terracotta draft):** warm minimal
+  "concierge calm" — warm neutral surfaces (ivory light / warm dark), a single **petrol-teal**
+  accent reserved for *living* elements (now-seam, running task; strong variant on primary
+  buttons), and a **state-hue pill palette**: one hue per timing type (unscheduled
+  burnt-orange, budgeted mustard, semi indigo, fixed plum) used identically on type chips
+  and card badges. No gradients, no glass, no glow. Defaults to the system light/dark theme
+  with a manual toggle. **Exact values: `docs/design-tokens.md` (that file wins over CSS).**
 - **Bar:** very premium, subtle, clean, professional, sharp, work-focused (Linear × Things 3 ×
   Claude's warmth). Hairline borders over shadows; strict type scale; **tabular-lining
   numerals** for all times/durations; minimal corner radius; quiet, composed empty states.

@@ -139,7 +139,11 @@ export type Event =
   | { type: "CANCEL_TASK"; taskId: string }
   | { type: "LOG_CHANNEL"; channel: keyof Channels; minutes: Dur } // reattribute on running
   | { type: "BACKLOG"; entry: Omit<HistoryEntry, "id"> }
-  | { type: "EDIT_COMMIT"; batch: PlanItem[] }; // fork commit: replacement plan (re-settled at real now)
+  | { type: "EDIT_COMMIT"; batch: PlanItem[] } // fork commit: replacement plan (re-settled at real now)
+  // Bulk-reassigns every plan/running/history reference from one (head,activity)
+  // pair to another — used when deleting a head/sub-head still in use (§2.1).
+  // Pure label swap: never touches timing/placement, no resettle needed.
+  | { type: "REASSIGN_HEAD"; fromHeadId: string; fromActivityId: string; toHeadId: string; toActivityId: string };
 
 export interface RunningView {
   mode: TimerMode;

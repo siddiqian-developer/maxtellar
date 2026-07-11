@@ -12,11 +12,20 @@ export const toDate = (m: Min): Date => new Date(m * 60000);
 
 const pad = (n: number): string => String(n).padStart(2, "0");
 
-/** Absolute time: bare HH:mm; date labels only for non-current calendar dates
- *  ("yesterday"/"tomorrow"/exact) — never a label for today (SPEC VI). */
-export function fmtAbs(m: Min, opts: { now?: Min } = {}): string {
+/** Clock string for a Date, honoring the app-wide 12h/24h setting (SPEC VI,
+ * "Time formats"). 12h appends an uppercase AM/PM suffix. */
+export function fmtClock(d: Date, hour12: boolean): string {
+  if (!hour12) return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const h24 = d.getHours();
+  const h12 = h24 % 12 || 12;
+  return `${h12}:${pad(d.getMinutes())} ${h24 >= 12 ? "PM" : "AM"}`;
+}
+
+/** Absolute time: bare HH:mm (or 12h+am/pm); date labels only for non-current
+ *  calendar dates ("yesterday"/"tomorrow"/exact) — never a label for today. */
+export function fmtAbs(m: Min, opts: { now?: Min; hour12?: boolean } = {}): string {
   const d = toDate(m);
-  const hhmm = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  const hhmm = fmtClock(d, opts.hour12 ?? false);
   const now = toDate(opts.now ?? nowMin());
   const dayOf = (x: Date): number =>
     Math.floor(new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime() / 86400000);

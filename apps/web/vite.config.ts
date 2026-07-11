@@ -16,6 +16,14 @@ export default defineConfig({
   },
   preview: { headers: isolationHeaders },
   optimizeDeps: {
-    exclude: ["@sqlite.org/sqlite-wasm"],
+    // @xenova/transformers (v2, archived) + its bundled onnxruntime-web broke
+    // under Vite's worker dependency pre-bundling: "Cannot read properties of
+    // undefined (reading 'registerBackend')". Switched to @huggingface/
+    // transformers (the actively-maintained v3 successor, bundler-friendly).
+    // Keeping both excluded here is defensive, not load-bearing for the fix.
+    exclude: ["@sqlite.org/sqlite-wasm", "@huggingface/transformers", "onnxruntime-web"],
+  },
+  worker: {
+    format: "es",
   },
 });

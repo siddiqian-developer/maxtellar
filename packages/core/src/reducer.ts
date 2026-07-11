@@ -423,6 +423,28 @@ export function reduce(state: State, event: Event): State {
       const plan = placeBatch(snapped, state.now, state.minFragment);
       return resettle(applyAmputations({ ...state, plan }));
     }
+
+    case "REASSIGN_HEAD": {
+      // Pure label swap (§2.1) — headId/activityId never influence placement,
+      // so no resettle/re-snap is needed; matches by the (head,activity) PAIR,
+      // not activity alone (an activity name only means something under its head).
+      const { fromHeadId, fromActivityId, toHeadId, toActivityId } = event;
+      const matches = (headId: string, activityId: string): boolean =>
+        headId === fromHeadId && activityId === fromActivityId;
+      const plan = state.plan.map((i) =>
+        i.kind === "task" && matches(i.headId, i.activityId)
+          ? { ...i, headId: toHeadId, activityId: toActivityId }
+          : i,
+      );
+      const running =
+        state.running && matches(state.running.headId, state.running.activityId)
+          ? { ...state.running, headId: toHeadId, activityId: toActivityId }
+          : state.running;
+      const history = state.history.map((h) =>
+        matches(h.headId, h.activityId) ? { ...h, headId: toHeadId, activityId: toActivityId } : h,
+      );
+      return { ...state, plan, running, history };
+    }
   }
 }
 

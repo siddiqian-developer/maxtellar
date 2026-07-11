@@ -1,0 +1,229 @@
+# maxtellar design tokens — single source of truth for theme.css
+
+Spec §1.5 names the language ("concierge calm", warm minimal); this file pins the
+exact values. `apps/web/src/theme.css` implements these — if they diverge, this
+file wins. Theme defaults to system light/dark; a topbar toggle cycles
+system → light → dark (persisted to localStorage as `theme`, applied via
+`data-theme` on `<html>`).
+
+## Typography
+
+- Body: `"Inter", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif`, 14px, line-height 1.45
+- Display (h1–h3): `"Lora", Georgia, "Times New Roman", serif`, weight 600
+- All times/durations: `font-variant-numeric: tabular-nums lining-nums` (class `num`)
+
+## Shape & motion
+
+- Corner radius: 6px
+- Drawer entrance: `translateX(100%) → 0`, 0.25s `cubic-bezier(0.16, 1, 0.3, 1)`
+- Plan-block reflow: `top/height 0.6s ease` ("gently witnessed")
+- Shadow (floating elements): light `0 4px 16px rgba(40,36,28,0.08)`, dark `0 4px 16px rgba(0,0,0,0.3)`
+
+## Core palette
+
+| Token | Light | Dark |
+|---|---|---|
+| paper (canvas) | `#faf9f5` | `#1b1a17` |
+| paper-raised (surfaces) | `#ffffff` | `#232220` |
+| ink (text) | `#21201c` | `#f0eee7` |
+| ink-soft | `#55524a` | `#c7c3b6` |
+| ink-faint | `#6d6a60` | `#a5a08e` |
+| hairline (borders) | `rgba(31,30,26,0.11)` | `rgba(255,255,255,0.09)` |
+| accent (petrol teal — living elements) | `#2f6d68` | `#7bc0b8` |
+| accent-strong (primary buttons) | `#2f6d68` | `#3e8b84` |
+| on-accent (text on buttons, on `accent-strong`) | `#ffffff` | `#ffffff` |
+| accent-soft (running tint) | `color-mix(accent 12%, transparent)` | `color-mix(accent 14%, transparent)` |
+| plan-card | `#ffffff` | `#232220` |
+| past-card | `#f3f1ea` | `#2b2a26` |
+| danger | `#b91c1c` | `#ef4444` |
+| scrim (overlays) | `rgba(12,11,9,0.6)` | same |
+
+## State-hue pills (one hue per timing type; chips + card badges, white text)
+
+| Timing type | Light | Dark |
+|---|---|---|
+| unscheduled (burnt orange) | `#c05e1a` | `#d2701f` |
+| budgeted (mustard) | `#a8821a` | `#c9a227` |
+| semi-head / semi-tail (indigo) | `#6366f1` | `#6366f1` |
+| fixed (plum) | `#7048b6` | `#9a7bd8` |
+
+## Label casing (convention — applies everywhere, now and future)
+
+- **User-facing labels are Capitalized** (first letter upper, e.g. `Slideable`, `Breakable`,
+  `Start`, `Budget`). Implemented via `text-transform: capitalize` where a group of labels
+  shares a class, so future additions inherit it automatically.
+- **Acronyms stay all-caps** (`OMMF`) — `capitalize` leaves already-uppercase letters intact.
+- **Pills/badges** (timing chips, role tags, card badges) use their own `text-transform:
+  uppercase` style — a deliberate exception, not the default.
+
+## Tooltips & section hint glyphs
+
+- **Labelless sections** (timing-type row, flags row): no heading text; a trailing `ⓘ`
+  glyph (`.hint-glyph`) sits at the row's right edge — `ink-faint`, opacity 0.35, brightens
+  to 0.8 on hover/focus. Layout via `.hint-row { display:flex; align-items:center; gap:10px }`
+  with the content `flex:1` and the glyph `flex:none`.
+- **Tooltip** (custom, never native `title`): trigger carries `data-tip="…"`; a `::after`
+  renders it. Surface `paper-raised`, 1px hairline border, `ink-soft` 11px/1.35 text
+  (weight 400, no transform), `--shadow-2`, radius 6px, max-width 220px. Above the element
+  (`bottom: 100% + 6px`), fades in (opacity + 3px→0 rise) after a **0.5s dwell**. Glyphs
+  right-anchor the tip and render it **downward** (`top: 100% + 6px`) so it clears the
+  drawer header; form labels left-anchor it and render upward.
+- **Anchor direction follows available space** (general rule): open a tip toward the side
+  that has room. Near the top edge → downward; near the right edge → right-anchored so it
+  opens leftward (e.g. the rightmost flag, `Breakable`); near the left/bottom → the mirror.
+  Default is upward + left-anchored; override per element when it would clip.
+
+## Global clock (topbar)
+
+Absolutely centered (`left/top: 50%; transform: translate(-50%,-50%)`) so it stays exact
+regardless of side content; `pointer-events: none`; hidden below 720px viewport width.
+Stacked column: date line (above) — 13px, `ink-faint`, short format (weekday, day, month);
+time line (below) — serif, 600 weight, 18px, tabular-nums, `ink`, includes seconds. Format
+(12h/24h) reads from the app-wide setting (below), not a local default.
+
+## Time format setting (app-wide)
+
+One setting — `12h` (default, AM/PM) or `24h` — in `apps/web/src/settings.tsx`
+(`SettingsProvider`/`useSettings`, persisted to localStorage key `timeFormat`). Consumed
+by the global clock, `Timeline`'s tick/block labels, and `Pipeline`'s card times via the
+shared `fmtClock(date, hour12)` / `fmtAbs(min, { hour12 })` helpers in `time.ts` — never a
+per-component 12h/24h prop with its own default. Changed via the Settings panel (gear icon,
+topbar) using the drawer's slide-in chrome.
+
+**AM/PM is always uppercase** — `time.ts`'s `fmtClock` emits `"AM"`/`"PM"` literally;
+`GlobalClock` uses the native `toLocaleTimeString` (locale-dependent casing) and forces
+`.toUpperCase()` on the result to guarantee the same casing everywhere.
+
+## Now-seam marker
+
+**No time label at all** (settled 2026-07-09, replacing the badge entirely — after several
+failed text-color attempts on it, the fix was to remove the text, not keep re-coloring it:
+the global clock already shows the time, so the seam repeating it was redundant). Just a
+plain **dot** on the time axis, Google-Calendar style: `.now-dot`, 10px circle, `background:
+accent`, centered on the axis where the seam line begins (`left: 0; top: 0; transform:
+translate(-50%, -50%)` relative to `.now-seam`, which sits at `left: 0` inside
+`.timeline-canvas` — i.e. exactly on the canvas's left border-line). No color-contrast
+question to solve since there's no text.
+
+## Floating icon buttons (quiet pattern)
+
+Confirmed pattern, used by the theme toggle, settings gear, and the timeline's
+"back to now" control: **icon-only, no label text**, monoline SVG (stroke `currentColor`,
+~1.6 width, 16px), `ink-faint` at rest with `opacity: 0.7` (back-to-now) or plain
+`ink-faint` (topbar buttons), brightening to `ink` (full opacity + color) on hover. Never
+a filled/primary button for these — quiet by default, discoverable on hover, is the house
+style for incidental controls (as opposed to the drawer's primary Add button, which stays
+filled because it's the one deliberate action per screen).
+
+**Icon choice must read as its function at a glance** — an up/down chevron for "back to
+now" was ambiguous (which direction is "now"?); replaced with a **crosshair/recenter**
+glyph (circle + four tick marks pointing in), the same symbol maps apps use for "return to
+current location" — instantly parseable as "recenter on the present" without relying on
+scroll direction.
+
+## Icons
+
+**No emoji in the UI** — they render in fixed, fully-saturated platform colors that ignore
+the theme palette and read as loud/unpolished against the warm-neutral surfaces. Use
+monoline SVG (stroke `currentColor`, ~1.6 width, round caps/joins, 16px) instead. Default
+tint is theme tokens (`ink-faint` at rest → `ink` on hover), but a **muted, desaturated**
+literal color is fine where it carries real meaning (not decoration) — e.g. the theme-toggle:
+system uses the ink-faint default; light uses a muted amber `#b8860b` (hover `#d4a017`);
+dark uses a muted indigo `#6b7fd7` (hover `#8b9ce8`). Muted enough to sit quietly against
+the warm-neutral surface, saturated enough to read as day/night at a glance — the line
+emoji cross is full platform saturation with zero theme awareness.
+
+## Usage rules
+
+- Accent is reserved for **living** elements only: now-seam (2px top border + badge),
+  running block/card (accent border + accent-soft fill), primary action.
+- Hairline borders over shadows; shadows only on floating elements (back-to-now, drawer).
+- **`accent` and `accent-strong` are NOT interchangeable for text contrast**: they're equal
+  in light theme but diverge in dark theme (`accent` is a light pastel teal for the seam
+  line/running fill; `accent-strong` is a darker teal for buttons, dark enough in both
+  themes for white text). The now-seam no longer carries text at all (replaced by a plain
+  dot, see below) — but if any future element needs light text on a filled accent, use
+  `accent-strong`, not `accent`.
+- **Dark-theme `ink-soft`/`ink-faint` were hardened** (2026-07-09) for general legibility:
+  `ink-soft` `#b8b4a7`→`#c7c3b6`, `ink-faint` `#94907f`→`#a5a08e`. If dark-mode text still
+  reads as too dim anywhere, it's a candidate for the same treatment — check the specific
+  element's background pairing before changing the shared token further.
+- Seam duality: blocks above `now` solid/settled (past-card, hairline border); below
+  `now` provisional (plan-card, dashed ink-faint border; anchored → solid ink-soft border).
+- No gradients, no glass, no glow.
+
+## Semantic action-button colors (law — applies to every action button, now and future)
+
+**A button's accent must match its meaning**, never just the brand color (corrected
+2026-07-10: Cancel was teal-accented, which read as "affirmative"):
+- **Confirm / create / primary action** → `accent-strong` fill + `on-accent` text
+  (`button.primary`).
+- **Cancel / abandon / destructive** → `danger` outline (transparent fill; hover tints
+  `color-mix(danger 10%, transparent)`) — `button.cancel-accent`.
+- **Neutral secondary** (e.g. "Add & start now") → default hairline outline button.
+Outline (not filled) for non-primary actions so they stay present next to a solid primary
+without competing. Drawer footer order (settled 2026-07-10):
+`Add(primary) · Add & start now ⚡ · [flex space] · Cancel(danger outline)`.
+
+## Sub-head / derived-head display
+
+`.derived-head`: 12px, `ink-soft`, with the head name in `<strong>` (`ink`). Shown directly
+under the sub-head input the instant a known activity is selected — never editable there;
+it's read straight from the registry (§2.1 head/activity hierarchy). Uses the same subtle
+`data-tip` mechanism as other drawer fields to note it's derived, not a separate heading.
+
+## Heads & Sub-heads config screen (full page)
+
+Not a modal — replaces the timeline+pipeline grid area entirely (`grid-column: 1/3;
+grid-row: 1/3`), scrollable, `max-width: 640px` centered body. Sticky header (`back`
+chevron + title) matches the topbar's height/border-bottom for visual continuity. Section
+headings are small (`14px`, `ink-soft`) — this screen is data-entry-first, no fancy chrome
+needed since it's visited rarely. Head delete (×) sits inline with the head name
+(`.config-head-title`, flex gap 6px) — same `.chip-delete` quiet-ink-faint-to-danger style
+as sub-head chip deletes; simply absent (not disabled/greyed) for built-in heads.
+
+**Built-in marker** (`.built-in-dot`): a plain 5px circle, `ink-faint` at 60% opacity, no
+text at all — the tooltip ("Built-in — can't be deleted") only appears on hover. Registry
+list is sorted built-ins first (stable sort, order preserved within each group). This is
+the quietest possible signal: the missing delete button already communicates
+"protected"; the dot is just a secondary hint for *why*, not a loud "BUILT-IN" badge.
+
+## Reassign panel (config screen)
+
+`.reassign-panel`: 1px `accent` border (not hairline — this is an active, in-progress
+action, deserves more visual weight than the surrounding static sections), `--radius`,
+12px padding. Appears inline in place of a plain delete when the target is still
+referenced by a task (see spec Part VI "Deletion guard"). Footer-style row: fuzzy dropdown
+for the target sub-head, a second fuzzy dropdown for its head (only shown when the typed
+target is new), `primary` "Reassign & delete", `cancel-accent` "Cancel" — same button
+semantics as the drawer footer (§ "Semantic action-button colors").
+
+## Fuzzy filtered dropdown (the one combobox pattern, everywhere)
+
+`.fuzzy-combobox` wraps a `.clearable-field` input + an absolutely-positioned
+`.fuzzy-list` (`top: 100% + 4px`, `paper-raised` surface, hairline border, `--shadow-2`,
+radius, `max-height: 220px` scrollable, `z-index: 50`). Each `.fuzzy-option` is 13px
+`ink-soft`; matched letters render in `<strong>` at full `ink` + weight 700 — **bold only,
+no color change** (deliberately not tinted, per the request that specified "bolded").
+Active/hovered option gets `accent-soft` background. Matching algorithm is subsequence
+("literal letters, in order"), not fuzzy-with-typo-tolerance and not plain substring —
+see `apps/web/src/fuzzy.ts`. Ranking: tighter match-span first, then earliest first-match
+position, so more precise matches float to the top.
+
+## Splash screen
+
+- Overlay: `position: fixed; inset: 0; z-index: 100`, background `--paper`, exit
+  `transition: opacity 450ms ease` (class `splash-leave`).
+- Hold: minimum **3000ms** from mount (constant `SPLASH_MIN_MS` in `App.tsx`), fade
+  **450ms** (`SPLASH_FADE_MS`); splash also covers the pre-`ready` store window.
+- Stack: column, centered, `gap: 22px`.
+- Wordmark: serif (h1), **58px**, `--ink`; enters via `splash-rise` 1000ms
+  `cubic-bezier(0.2,0.7,0.3,1)`: opacity 0→1, `translateY(14px)`→0, letter-spacing
+  `0.08em`→`0.01em`.
+- Seam: **280 × 2px**, `--accent-soft`, draws via `splash-draw` (scaleX 0→1 from center)
+  800ms, 400ms delay.
+- Dot: 12px circle, `--accent`, centered on the seam's left end; fades in 400ms @1000ms,
+  then `splash-sweep` (left 0→100%→0) 2400ms `cubic-bezier(0.45,0.05,0.55,0.95)` infinite
+  from 1200ms.
+- Tagline: "every minute accounted", 13px, uppercase, letter-spacing `0.28em`,
+  `--ink-soft`; fades in 800ms @900ms.

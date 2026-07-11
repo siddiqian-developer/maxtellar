@@ -59,20 +59,31 @@ export class EventStore {
     return this.state;
   }
 
+  /** Serializes dispatches (E5: ONE sequential reducer). Without this, two
+   *  rapid dispatches (e.g. CREATE_TASK + START_TASK from "Add & start now")
+   *  both reduce from the same stale `this.state` across the append `await`,
+   *  and the second silently discards the first's result. */
+  private chain: Promise<unknown> = Promise.resolve();
+
   /** Apply + persist one event. The state change and the append are one unit:
    *  if reduce throws, nothing is persisted (sandbox principle, §3.12). */
-  async dispatch(event: Event): Promise<State> {
-    const next = reduce(this.state, event); // may throw → nothing persisted
-    this.lastSeq = await this.adapter.append(event);
-    this.state = next;
-    if (++this.appendedSinceSnapshot >= this.snapshotEvery) {
-      await this.adapter.saveSnapshot({
-        uptoSeq: this.lastSeq,
-        stateJson: JSON.stringify(this.state),
-      });
-      this.appendedSinceSnapshot = 0;
-    }
-    return next;
+  dispatch(event: Event): Promise<State> {
+    const run = this.chain.then(async () => {
+      const next = reduce(this.state, event); // may throw → nothing persisted
+      this.lastSeq = await this.adapter.append(event);
+      this.state = next;
+      if (++this.appendedSinceSnapshot >= this.snapshotEvery) {
+        await this.adapter.saveSnapshot({
+          uptoSeq: this.lastSeq,
+          stateJson: JSON.stringify(this.state),
+        });
+        this.appendedSinceSnapshot = 0;
+      }
+      return next;
+    });
+    // A rejected dispatch must not jam the queue for later events.
+    this.chain = run.catch(() => undefined);
+    return run;
   }
 
   async close(): Promise<void> {

@@ -1,6 +1,8 @@
 # PART VIII — MVP BOUNDARY
 
-**In:** single lane; flat heads/activities; all 5 timing types; subtasks; full scheduler +
+**In:** single lane; flat heads/activities (§2.1: exactly two levels, head → activity — an
+activity belongs to exactly one head; "flat" means no deeper nesting than that, not that
+heads and activities are undifferentiated); all 5 timing types; subtasks; full scheduler +
 fork + settle-pass; SOD/EOD/weekly ceremonies; quotas; pomodoro; best-effort alarms; timeline +
 pipeline + analytics + history; back-logging & pruning; off-periods; the premium Claude-themed
 UI. Schema *provisions* for riders, multilane, wearable, cloud, per-task MIN_FRAGMENT.
