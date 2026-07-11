@@ -32,11 +32,41 @@ export const NAME_FALLBACK_THRESHOLD = 0.60;
  * with potentially different noise floors. Starts equal to
  * `NAME_FALLBACK_THRESHOLD` (0.60); retune this one on its own evidence. */
 export const HEAD_FALLBACK_THRESHOLD = 0.60;
+/** Thresholds for the taxonomy "new"-name classifier (title vs universal label),
+ * split by title length — BIASED AGAINST echoing (2026-07-12): a wrong label is
+ * one keystroke to fix, an echo helps nobody. Multi-word titles embed as
+ * sentences whose cosine against single-word labels runs structurally lower, so
+ * they get an aggressive bar; single words sit in the high noise floor
+ * ("cycling" vs "networking" = 0.577) and keep the conservative one. */
+export const TAXONOMY_THRESHOLD_MULTI = 0.45;
+export const TAXONOMY_THRESHOLD_SINGLE = 0.60;
+/** How decisively a taxonomy label must beat a passing registry-name match to
+ * override it (§7.0.1 "prefer existing, but don't force bad pairings"): the
+ * registry keeps ties and small deficits; a clearly-better universal label wins. */
+export const TAXONOMY_MARGIN = 0.05;
 const TOP_K = 5;
+
+/** Universal activity taxonomy for naming NEW sub-heads: when neither the title
+ * corpus nor the registry names match, the title is classified against these
+ * labels (same embedding + cosine machinery, same `mlNameVectors` cache) and a
+ * confident winner is proposed as the new sub-head's name. Curated, extendable —
+ * replaced the removed on-device generative namer (2026-07-12), which at 77–250M
+ * parameters produced coin-flip quality for a 360MB download. */
+export const TAXONOMY: readonly string[] = [
+  "Socialization", "Shopping", "Groceries", "Finance", "Banking", "Bills",
+  "Fitness", "Exercise", "Sports", "Health", "Medical", "Grooming",
+  "Cooking", "Cleaning", "Laundry", "Chores", "Repair", "Maintenance",
+  "Errands", "Commute", "Travel", "Driving",
+  "Reading", "Writing", "Studying", "Learning", "Research",
+  "Coding", "Meetings", "Planning", "Email", "Admin", "Job Search", "Networking",
+  "Family", "Friends", "Dating", "Parenting", "Pets",
+  "Gardening", "Gaming", "Entertainment", "Movies", "Music", "Art", "Hobbies",
+  "Volunteering", "Religion", "Meditation", "Rest", "Sleep", "Phone Calls",
+];
 
 export type Suggestion =
   | { kind: "existing"; activity: string; confidence: number }
-  | { kind: "new"; confidence: number } 
+  | { kind: "new"; confidence: number; name?: string }
   | { kind: "none" };
 
 export type HeadSuggestion =
@@ -107,11 +137,14 @@ export async function suggestSubhead(title: string, knownActivities: string[]): 
     }
   }
 
-  // 2) Cold-start fallback: compare against sub-head NAME embeddings. Iterate only
-  // the CURRENT registry activities, never the whole cache — the name-vector cache
-  // is not pruned on delete, so a deleted sub-head (e.g. "cycling") lingers there and
-  // would otherwise self-match at ~1.0 and be wrongly returned as an existing pick.
-  const nameVectors = await ensureNameVectors(knownActivities);
+  // 2+3) Name comparisons — registry sub-head names (existing match) and the
+  // universal TAXONOMY labels (proposed NEW name) share the same embedding cache.
+  // Iterate only CURRENT registry activities, never the whole cache — the
+  // name-vector cache is not pruned on delete, so a deleted sub-head (e.g.
+  // "cycling") lingers there and would otherwise self-match at ~1.0 and be
+  // wrongly returned as an existing pick.
+  const labels = TAXONOMY.filter((l) => !knownActivities.includes(l)); // already-registered labels are step-2's job
+  const nameVectors = await ensureNameVectors([...knownActivities, ...labels]);
   let bestName: string | null = null;
   let bestSim = 0;
   for (const name of knownActivities) {
@@ -120,13 +153,33 @@ export async function suggestSubhead(title: string, knownActivities: string[]): 
     const sim = cosine(vector, v);
     if (sim > bestSim) { bestSim = sim; bestName = name; }
   }
-  if (bestName && bestSim >= NAME_FALLBACK_THRESHOLD) {
+  let bestLabel: string | null = null;
+  let labelSim = 0;
+  for (const label of labels) {
+    const v = nameVectors[label];
+    if (!v) continue;
+    const sim = cosine(vector, v);
+    if (sim > labelSim) { labelSim = sim; bestLabel = label; }
+  }
+
+  // 2) Existing registry name wins when confident — but must not FORCE a
+  // mediocre pairing: a taxonomy label that beats it by a clear margin takes
+  // over (prefer existing on ties/small deficits, yield when clearly worse).
+  if (bestName && bestSim >= NAME_FALLBACK_THRESHOLD && labelSim < bestSim + TAXONOMY_MARGIN) {
     return { kind: "existing", activity: bestName, confidence: bestSim };
   }
 
-  // 3) Nothing confident — explicitly labeled as a NEW sub-head suggestion,
-  // never as an existing-list pick (the whole point of the grilled rule).
-  return { kind: "new", confidence: bestSim };
+  // 3) Taxonomy classifier: a confident universal label is proposed as the NEW
+  // sub-head's name ("Alumni meetup" → "Socialization"). Multi-word titles get
+  // the aggressive echo-averse bar; single words the conservative one.
+  const taxonomyThreshold = /\s/.test(t) ? TAXONOMY_THRESHOLD_MULTI : TAXONOMY_THRESHOLD_SINGLE;
+  if (bestLabel && labelSim >= taxonomyThreshold) {
+    return { kind: "new", confidence: labelSim, name: bestLabel };
+  }
+
+  // 4) Nothing confident — a nameless NEW suggestion (caller echoes the title),
+  // never disguised as an existing-list pick (the whole point of the grilled rule).
+  return { kind: "new", confidence: Math.max(bestSim, labelSim) };
 }
 
 /** Suggests a head for a brand-new sub-head name, config-screen cold-start

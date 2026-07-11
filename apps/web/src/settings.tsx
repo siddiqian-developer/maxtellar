@@ -34,7 +34,6 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
   useEffect(() => {
     localStorage.setItem("devSandbox", devSandbox ? "1" : "0");
   }, [devSandbox]);
-
   return (
     <SettingsContext.Provider value={{ timeFormat, setTimeFormat, devSandbox, setDevSandbox }}>
       {children}

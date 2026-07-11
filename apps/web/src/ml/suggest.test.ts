@@ -68,8 +68,48 @@ describe("suggestSubhead", () => {
     expect((await suggestSubhead("cycling", [])).kind).toBe("new");
   });
 
-  it("returns 'new' when nothing is confident", async () => {
+  it("returns 'new' (nameless → title echo) when nothing is confident", async () => {
     const s = await suggestSubhead("something entirely unrelated", ["Cycling"]);
     expect(s.kind).toBe("new");
+    if (s.kind === "new") expect(s.name).toBeUndefined();
+  });
+});
+
+describe("taxonomy classifier (new-name proposals) and precedence", () => {
+  it("proposes a taxonomy label as the NEW name when the registry has no match", async () => {
+    const s = await suggestSubhead("Shopping", ["Cycling"]); // registry unrelated
+    expect(s.kind).toBe("new");
+    if (s.kind === "new") expect(s.name).toBe("Shopping");
+  });
+
+  it("works with an EMPTY registry (the taxonomy is always there)", async () => {
+    const s = await suggestSubhead("Socialization", []);
+    expect(s.kind).toBe("new");
+    if (s.kind === "new") expect(s.name).toBe("Socialization");
+  });
+
+  it("PREFERS an existing sub-head from the corpus over a taxonomy label", async () => {
+    // The user paired this exact title with their own sub-head — behavior wins,
+    // even though the title is also a perfect taxonomy match.
+    await corpusEntry("Shopping", "MySub");
+    const s = await suggestSubhead("Shopping", ["MySub"]);
+    expect(s.kind).toBe("existing");
+    if (s.kind === "existing") expect(s.activity).toBe("MySub");
+  });
+
+  it("PREFERS an existing registry name over the identical taxonomy label", async () => {
+    // "Shopping" is both a registry sub-head and a taxonomy label: the registry
+    // wins (already-registered labels are excluded from taxonomy candidates).
+    const s = await suggestSubhead("Shopping", ["Shopping"]);
+    expect(s.kind).toBe("existing");
+    if (s.kind === "existing") expect(s.activity).toBe("Shopping");
+  });
+
+  it("falls through past a WEAK registry to the taxonomy — no forced bad pairings", async () => {
+    // Registry exists but nothing in it relates to the title (cosine 0 in the
+    // one-hot mock) → step 2 must yield to the taxonomy, not force a match.
+    const s = await suggestSubhead("Meditation", ["Cycling", "Coding"]);
+    expect(s.kind).toBe("new");
+    if (s.kind === "new") expect(s.name).toBe("Meditation");
   });
 });

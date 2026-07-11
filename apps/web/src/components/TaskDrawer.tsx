@@ -166,11 +166,15 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   // on a title edit), so `autofillSubhead` is a gate read at that moment, not a dependency.
   const allActivities = useMemo(() => heads.flatMap((h) => registry[h] ?? []), [heads, registry]);
   const suggestion = useSubheadSuggestion(title, allActivities);
+  // §7.0.1 "new" namer: when nothing existing matches, the suggester's taxonomy
+  // step may carry a proposed NAME (a universal category label, e.g. "Alumni
+  // meetup" → "Socialization"); without one, echo the title.
+  const proposedNew = (suggestion?.kind === "new" && suggestion.name) || title.trim();
   const autofillSubhead = subheadSource !== "user" || activity.trim() === "";
   useEffect(() => {
     if (!suggestion || !autofillSubhead) return;
     if (suggestion.kind === "existing") setActivity(suggestion.activity);
-    else if (suggestion.kind === "new") setActivity(title.trim());
+    else if (suggestion.kind === "new") setActivity(proposedNew);
     setSubheadSource("app"); // autofilled → app-sourced, replaceable on the next title edit
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [suggestion]);
@@ -182,7 +186,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   // suggestion with a one-click "Use" so the choice is theirs.
   const suggestedSubhead =
     suggestion?.kind === "existing" ? suggestion.activity
-    : suggestion?.kind === "new" ? title.trim()
+    : suggestion?.kind === "new" ? proposedNew
     : null;
   // The head to show for the suggested sub-head. Existing sub-head → its assigned head.
   // Brand-new sub-head → also run the head-suggester on it (§7.0.1 Feature 2) and show a
@@ -407,13 +411,18 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
               ariaLabel="Sub-head"
             />
             {offerSubheadChoice && (
-              <div className="ml-choice" data-tip="Your new title suggests a different sub-head — keep yours or use the suggestion">
+              <div className="ml-choice" data-tip="Your new title suggests a different sub-head — click it to use the suggestion">
                 <span className="ml-choice-text">
                   <span className="ml-choice-lead">
                     <span className={`ml-tag ${suggestion?.kind === "new" ? "ml-tag-new" : "ml-tag-existing"}`}>
                       {suggestion?.kind === "new" ? "suggested new" : "suggested"}
                     </span>
-                    <span className="ml-choice-value">{suggestedSubhead}</span>
+                    <button
+                      type="button"
+                      className="ml-choice-value"
+                      onClick={() => { setActivity(suggestedSubhead!); setSubheadSource("user"); setDismissedSuggestion(null); }}
+                      data-tip="Use this sub-head"
+                    >{suggestedSubhead}</button>
                     {suggestedHead && <span className="ml-choice-in">in</span>}
                   </span>
                   {suggestedHead && (
@@ -426,18 +435,6 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
                       {suggestedHead}
                     </strong>
                   )}
-                </span>
-                <span className="ml-choice-actions">
-                  <button
-                    type="button"
-                    className="ml-choice-use"
-                    onClick={() => { setActivity(suggestedSubhead!); setSubheadSource("user"); setDismissedSuggestion(null); }}
-                  >Use this</button>
-                  <button
-                    type="button"
-                    className="ml-choice-keep"
-                    onClick={() => setDismissedSuggestion(suggestedSubhead)}
-                  >Keep mine</button>
                 </span>
               </div>
             )}

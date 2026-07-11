@@ -36,6 +36,24 @@ let extractor: any = null;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 let loading: Promise<any> | null = null;
 
+/** Purge POISONED entries from transformers.js's Cache Storage: the library
+ * caches every model-file response in `transformers-cache` — including a dev
+ * server's `index.html` SPA fallback from a failed attempt — and reads them
+ * back forever WITHOUT hitting the network (diagnostic signature: a
+ * `getModelJSON` JSON-parse error on `<!doctype …` with NO network request).
+ * Deleting only text/html entries keeps valid cached weights intact. */
+async function purgePoisonedCache(): Promise<void> {
+  try {
+    const cache = await caches.open("transformers-cache");
+    for (const req of await cache.keys()) {
+      const res = await cache.match(req);
+      if ((res?.headers.get("content-type") ?? "").includes("text/html")) await cache.delete(req);
+    }
+  } catch {
+    // Cache API unavailable — nothing to purge.
+  }
+}
+
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 async function getExtractor(): Promise<any> {
   if (extractor) return extractor;
@@ -43,7 +61,9 @@ async function getExtractor(): Promise<any> {
     // dtype "q8" is the default for the wasm device anyway (maps to the
     // "_quantized" file suffix we already have locally) — set explicitly so
     // this doesn't silently change if the library's default ever does.
-    loading = pipeline("feature-extraction", "Xenova/bge-small-en-v1.5", { dtype: "q8" });
+    loading = purgePoisonedCache().then(() =>
+      pipeline("feature-extraction", "Xenova/bge-small-en-v1.5", { dtype: "q8" }),
+    );
   }
   extractor = await loading;
   return extractor;

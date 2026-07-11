@@ -32,6 +32,66 @@ identically with ML off).
     rendered in a provisional style until confirmed/edited.
   - **Below threshold:** do NOT stay silent — offer a **create-new suggestion**, explicitly
     labeled as "suggest creating a new sub-head", never disguised as a registry match.
+  - **The "new" name is GENERATED, not echoed (ADOPTED 2026-07-11; model TBD):** echoing the
+    whole title as the proposed new sub-head is unusable. Instead, an **on-device generative
+    (text2text) model** proposes a concise sub-head, **few-shot conditioned on the user's
+    existing `title → sub-head` pairings** so new names follow the user's own naming
+    *pattern/abstraction* (empty corpus → three universal SEED demonstrations fill in, since a
+    77M model can't follow the format zero-shot — tuned 2026-07-12 after live degeneration
+    ("- a - a - a"); as real pairings accumulate they replace the seeds and the user's style
+    dominates — e.g. once titles map to short activity nouns, "went for a swim at the pool" →
+    "Swimming", not the sentence). **Prompt is PURE pattern completion** (bare
+    `Task:/Category:` pairs, NO instruction line — a 77M model parrots instructions back,
+    seen live 2026-07-12). Decoding: `max_new_tokens: 8`, greedy, `repetition_penalty: 1.3`.
+    Post-processing (unit-tested against live outputs in `generate.test.ts`): strips a leading
+    `Category:` label; **truncates at a continued `Task:` marker** (the model answers, then
+    keeps completing the pattern — "Socialization Task: How to pay" → "Socialization");
+    extracts a **double**-quoted answer from prose wrappers (incl. an unclosed trailing quote;
+    apostrophes must not count as quotes — `I'm sorry` mangled into "M Sorry"); **truncates at
+    the first function word** ("Shopping for a new dress" → "Shopping"); caps at 2 words; and
+    **rejects** chat refusals ("I'm sorry…"), question-style prose ("What is the best way…"),
+    prompt-echo lines (checked on the full line, pre-slice), outputs with no name before the
+    first function word ("To fix a leak…"), and single-letter degeneration → all rejections
+    fall back to the title echo. This is real **generation**,
+    which the embedding model cannot do — hence a second, separate model. **Never load-bearing:**
+    if the generator is unavailable/slow/fails, it **falls back to the title echo** (current
+    behavior) — the app still works with ML off. On-device only (self-hosted like the embedding
+    model, per the law); no cloud. Output is post-processed (trim, cap length, Capitalize).
+  - **User-selectable model, lazy per-selection load (2026-07-11):** the app offers a **list of
+    generative models** (Settings); the user picks one. All candidate models are *hosted on the
+    server*, but **only the selected model is streamed into the browser**, on first use — never
+    all of them. Switching selection loads the newly-chosen model on demand (and drops the old
+    from memory). The model id lives in one config constant/registry so the list is easy to
+    extend. **Default is "Off" (echo the title)** — generation is opt-in, since it's a
+    multi-tens-to-hundreds-MB download; nothing downloads until the user selects a model.
+  - **Implementation (built 2026-07-11):** `ml/genModels.ts` (registry + `GEN_OFF`),
+    `ml/genWorker.ts` + `ml/genClient.ts` (a `text2text-generation` worker mirroring the
+    embed worker — one model held at a time, self-hosted under `public/models/`), `ml/generate.ts`
+    (`generateNewSubhead`: few-shot prompt from `loadTitleCorpus` pairings → post-process to a
+    1–3 word Capitalized name), `ml/useGeneratedSubhead.ts` (500ms-debounced hook, only fires
+    for a `"new"` suggestion with a model selected). Wired in `TaskDrawer.tsx`:
+    `proposedNew = generatedNew ?? title.trim()` feeds both the autofill and the choice-row
+    display; the autofill effect re-runs when the async name resolves, upgrading the echoed
+    title to the generated name while still app-sourced. Setting is `genModel` in `settings.tsx`,
+    picker in `SettingsPanel.tsx`. **Operational note:** a selected model only works once its
+    files are hosted at `public/models/<id>/` (same as the embedding model); until then it
+    fails closed → title echo.
+  - **Dev/preview server must 404 missing `/models/` files, not SPA-fallback (fixed
+    2026-07-11):** transformers.js probes *optional* model files (e.g. `added_tokens.json`) that
+    many repos don't ship. A real static host 404s them and the library ignores it, but Vite's
+    dev/preview answers `200 + index.html`, which the library then `JSON.parse`s ("Unexpected
+    token '<'") and the whole model load fails. The `modelFile404` plugin in `vite.config.ts`
+    returns a real 404 for missing files under `/models/` (dev *and* preview), matching
+    production. Symptom this fixes: a model whose `config.json` loads fine but loading still
+    dies on a `<!doctype …>` JSON parse error.
+  - **transformers.js poisons its own Cache Storage with bad responses (fixed 2026-07-12):**
+    the library caches every model-file response in the `transformers-cache` Cache Storage —
+    including an `index.html` SPA fallback from attempts made before the files were hosted.
+    Poisoned entries are read back forever **without hitting the network**, so server-side
+    fixes alone never resolve the load (diagnostic signature: `getModelJSON` JSON-parse error
+    with NO network request). `genWorker.ts`'s `purgePoisonedCache()` deletes any
+    `text/html` entries from that cache before each pipeline load, keeping valid cached
+    weights intact.
   - **Both retrieval paths are scoped to the CURRENT registry** (2026-07-11): the kNN vote
     **and** the name-fallback filter their candidates to activities still in the registry, so a
     deleted sub-head never surfaces as an *existing* pick (only ever as "suggested new"). This
@@ -44,9 +104,15 @@ identically with ML off).
     name is re-created — re-fighting the vote against any newer pairing (e.g. an old
     `Cycling→Cycling` outvoting a deliberate `Cycling→Sports` retag). Forgetting makes a
     same-name re-create start clean. (The corpus/name cache remain purely derived, rebuilt from
-    future task creations; the event log is the source of truth. **Reassign-on-delete** also
-    forgets, since it deletes the sub-head — the moved *tasks* are preserved, but their ML
-    training pairings are not re-homed.)
+    future task creations; the event log is the source of truth.)
+  - **Reassign-on-delete RE-HOMES, it doesn't forget (2026-07-11):** deleting a sub-head that's
+    *in use* forces reassigning its tasks to another sub-head — a genuine *move*, not a discard.
+    So the config screen calls `rehomeActivity(from, to)` (re-labels the corpus entries to the
+    destination, drops the old name vector) **before** the delete, so the title→sub-head
+    training follows the tasks to their new sub-head. Plain (unused) delete still forgets.
+  - **Tests:** `apps/web/src/ml/vectorStore.test.ts` (forget/rehome mechanics) and
+    `suggest.test.ts` (deleted sub-head returns "new" not "existing", via a one-hot `embed`
+    mock) cover this; `embed` is mocked so no model/worker is needed.
 
 **Feature 2 — sub-head → head suggestion (implemented 2026-07-10, revised 2026-07-11):** the
 same duality, wherever a brand-new sub-head needs a head — the Heads & Sub-heads config
@@ -87,16 +153,17 @@ silences the suggester for that session.
   - **User-sourced** — the user *acted* on the field: typed it, explicitly picked it from the
     dropdown, **or accepted a suggestion via _Use this_** (accepting is a user action → user
     intent). A title edit **never overwrites** a user-sourced sub-head. When the fresh
-    suggestion *differs* from it, a **visible keep-mine-vs-use-suggested choice** appears below
+    suggestion *differs* from it, a **visible use-suggested choice** appears below
     the field: the `suggested`/`suggested new` **tag/pill** followed by the proposed sub-head
-    name in **plain text** and its **head** — `in` + the head name as a **brand-tinted pill**.
+    name as a **clickable quiet-outline pill** and its **head** — `in` + the head name as a
+    **brand-tinted pill**.
     For an existing sub-head that's its assigned head; for a `suggested new` sub-head the
     head-suggester (Feature 2) is run on it too and a confidently-matched **existing** head is
-    shown as the suggested head (nothing shown when unconfident/"new"). A **Use this** action
-    (swaps
-    it in — the swapped-in value is **still user-sourced**, so it too is protected on later
-    edits), and **Keep mine**
-    (dismisses the prompt for that suggestion). Nothing is applied silently. Clearing a
+    shown as the suggested head (nothing shown when unconfident/"new"). **Clicking the sub-head
+    pill uses the suggestion** (swaps it in — the swapped-in value is **still user-sourced**, so
+    it too is protected on later edits). There is no separate "Use this"/"Keep mine" pair — the
+    single pill *is* the accept affordance; leaving it untouched keeps the user's own value.
+    Nothing is applied silently. Clearing a
     user-sourced field back to empty makes it app-sourced again, so the *next* title edit
     autofills.
 - **Intent wins — head fields (Feature 2) unchanged:** once the user touches a head field in
@@ -126,8 +193,8 @@ fields** use a `touched` flag that permanently silences the suggester for the se
 **Title → Sub-head** uses a `subheadSource` (`"app" | "user"`) that never silences — title
 edits always recompute — and only decides autofill-vs-choice:
 - `TaskDrawer.tsx`, Title → Sub-head (`subheadSource`) — a title edit replaces an app-authored
-  sub-head, but protects a user-authored one, offering a Use-this/Keep-mine choice instead, per
-  Feature 1.
+  sub-head, but protects a user-authored one, offering a clickable use-suggested pill instead,
+  per Feature 1.
 - `TaskDrawer.tsx`, new Sub-head → "New sub-head's head" (`newHeadTouched`, added 2026-07-11)
   — autofills from an empty start, per Feature 2.
 - `HeadsConfigScreen.tsx`, "Add a sub-head" form's head field (`headTouched`) — autofills

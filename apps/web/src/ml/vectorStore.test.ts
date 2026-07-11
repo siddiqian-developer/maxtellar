@@ -67,6 +67,6 @@ describe("rehomeActivity — reassign moves a sub-head's pairings to the target"
   it("is a no-op when from === to", () => {
     addTitleEntry({ title: "morning ride", activity: "Cycling", vector: [1, 0] });
     rehomeActivity("Cycling", "Cycling");
-    expect(loadTitleCorpus()[0].activity).toBe("Cycling");
+    expect(loadTitleCorpus()[0]?.activity).toBe("Cycling");
   });
 });

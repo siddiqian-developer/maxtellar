@@ -182,10 +182,16 @@ it's read straight from the registry (§2.1 head/activity hierarchy). Uses the s
 `data-tip` mechanism as other drawer fields to note it's derived, not a separate heading.
 
 **Sub-head suggestion choice row (`.ml-choice`, §7.0.1):** a flex row, `align-items: center`
-(buttons centered against the possibly-taller head pill), `gap: 0` (no gap before the buttons).
+(content centered against the possibly-taller head pill), `gap: 0`.
 `.ml-choice-text` is itself a flex row (`align-items: center`): the **lead**
-(`.ml-choice-lead`: `suggested` pill + sub-head name + plain `in`) stays whole on one line
+(`.ml-choice-lead`: `suggested` pill + **clickable sub-head pill** + plain `in`) stays whole on one line
 (`flex-shrink: 0`); the **head pill** sits **beside** it and takes the remaining width.
+
+The **sub-head name** renders as a **clickable quiet-outline pill** (`.ml-choice-value`, a
+`<button>`: `color: ink-faint`, `border: 1px solid hairline`, transparent background, `font-size:
+11px`, `padding: 1px 8px`, `border-radius: 8px`; `:hover` → `ink-soft`) — the same quiet theme the
+retired "Keep mine" button used. **Clicking it uses the suggestion.** It *is* the accept
+affordance: there is no separate "Use this"/"Keep mine" button pair.
 
 The **head** renders as a **subtly brand-filled pill** (`.ml-choice-headpill`: `background:
 accent-soft`, text `on-accent` white, `padding: 3px 8px`, `border-radius: 8px`) that **stays beside
@@ -193,9 +199,7 @@ the sub-head and never drops below it**. As a flex cell (`flex: 0 1 auto; min-wi
 the remaining width and, when the head is long, **wraps its text INSIDE — the pill grows taller**
 rather than moving to the next line (`overflow-wrap: anywhere` breaks a single over-long token in
 place). **Note:** the brand tint is a deliberate, user-directed exception to the "accent is
-reserved for living elements only" usage rule below. The **Use this / Keep mine** buttons sit in `.ml-choice-actions` immediately
-after the text — **no gap before the button group** — travelling together (`flex-shrink: 0`)
-with only their own 6px inter-button gap, never wrapping their own text (`white-space: nowrap`).
+reserved for living elements only" usage rule below.
 
 ## Heads & Sub-heads config screen (full page)
 
