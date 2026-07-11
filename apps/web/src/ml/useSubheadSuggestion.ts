@@ -1,7 +1,9 @@
 /**
  * React hook wiring the suggestion engine into the drawer (SPEC §7.0.1).
- * Debounces ~400ms after typing stops; never fires once the user has
- * touched the sub-head field this session ("intent wins", always).
+ * Debounces ~400ms after typing stops; recomputes on EVERY title change —
+ * a new title = new intent = a fresh suggestion (revised 2026-07-11). Whether
+ * that suggestion autofills or lands as a tag-only hint is the caller's call
+ * (it depends on whether the sub-head field holds hand-typed content).
  */
 
 import { useEffect, useRef, useState } from "react";
@@ -9,7 +11,6 @@ import { suggestSubhead, type Suggestion } from "./suggest";
 
 export function useSubheadSuggestion(
   title: string,
-  touched: boolean,
   knownActivities: string[],
 ): Suggestion | null {
   const [suggestion, setSuggestion] = useState<Suggestion | null>(null);
@@ -17,7 +18,7 @@ export function useSubheadSuggestion(
   latestTitle.current = title;
 
   useEffect(() => {
-    if (touched || title.trim().length < 3) {
+    if (title.trim().length < 3) {
       setSuggestion(null);
       return;
     }
@@ -32,7 +33,7 @@ export function useSubheadSuggestion(
     }, 400);
     return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [title, touched]);
+  }, [title]);
 
   return suggestion;
 }

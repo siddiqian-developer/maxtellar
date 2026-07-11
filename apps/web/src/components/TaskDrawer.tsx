@@ -134,7 +134,12 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
 
   const [title, setTitle] = useState("");
   const [activity, setActivity] = useState("");
-  const [subheadTouched, setSubheadTouched] = useState(false);
+  // Who SOURCED the sub-head in the field. "app" = autofilled by a suggestion and left
+  // untouched. "user" = the user acted on it — typed it, explicitly picked it, or accepted
+  // a suggestion via "Use this" (accepting is a user action → user intent). Only app-sourced
+  // sub-heads are silently replaced on a later title edit; user-sourced ones carry intent, so
+  // they're protected and get the keep-mine choice instead (§7.0.1).
+  const [subheadSource, setSubheadSource] = useState<"app" | "user">("app");
   // Starts empty — no static default; only the ML suggestion or the user fills it.
   const [newHeadChoice, setNewHeadChoice] = useState("");
   const [newHeadTouched, setNewHeadTouched] = useState(false);
@@ -151,16 +156,43 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   const derivedHead = headFor(activity);
   const isNewActivity = activity.trim() !== "" && derivedHead === undefined;
 
-  // §7.0.1 ML-assist: title → sub-head suggestion. Never fires once the user
-  // has touched the sub-head field ("intent wins", always); never load-bearing
-  // (silent no-op if the model fails or hasn't loaded — see ml/suggest.ts).
+  // §7.0.1 ML-assist: title → sub-head suggestion. The TITLE is the only trigger
+  // (new title = new intent = new suggestion); never load-bearing (silent no-op if
+  // the model fails or hasn't loaded — see ml/suggest.ts). A freshly-computed
+  // suggestion autofills (replacing what's there) whenever the field is empty or its
+  // content is app-authored; only a USER-authored sub-head is protected — it never
+  // gets overwritten, and instead surfaces the keep-mine choice below. Editing/clearing
+  // the sub-head is NOT a trigger — the effect keys off `suggestion` (which only changes
+  // on a title edit), so `autofillSubhead` is a gate read at that moment, not a dependency.
   const allActivities = useMemo(() => heads.flatMap((h) => registry[h] ?? []), [heads, registry]);
-  const suggestion = useSubheadSuggestion(title, subheadTouched, allActivities);
+  const suggestion = useSubheadSuggestion(title, allActivities);
+  const autofillSubhead = subheadSource !== "user" || activity.trim() === "";
   useEffect(() => {
-    if (subheadTouched || !suggestion) return;
+    if (!suggestion || !autofillSubhead) return;
     if (suggestion.kind === "existing") setActivity(suggestion.activity);
     else if (suggestion.kind === "new") setActivity(title.trim());
-  }, [suggestion, subheadTouched, title]);
+    setSubheadSource("app"); // autofilled → app-sourced, replaceable on the next title edit
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [suggestion]);
+
+  // The value a fresh title-driven suggestion proposes (existing pick, or the
+  // title itself for a "new" sub-head). Used both for the autofill above and for
+  // the keep-mine-vs-use-suggested choice offered when the user has hand-typed a
+  // sub-head (§7.0.1): we never silently overwrite their entry, but we surface the
+  // suggestion with a one-click "Use" so the choice is theirs.
+  const suggestedSubhead =
+    suggestion?.kind === "existing" ? suggestion.activity
+    : suggestion?.kind === "new" ? title.trim()
+    : null;
+  // The head the suggested sub-head lives under — only an existing sub-head has one
+  // (a "new" suggestion is a brand-new sub-head with no head assigned yet).
+  const suggestedHead = suggestion?.kind === "existing" ? headFor(suggestion.activity) : undefined;
+  const [dismissedSuggestion, setDismissedSuggestion] = useState<string | null>(null);
+  const offerSubheadChoice =
+    !autofillSubhead &&
+    suggestedSubhead !== null &&
+    suggestedSubhead !== activity.trim() &&
+    suggestedSubhead !== dismissedSuggestion;
 
   // §7.0.1 ML-assist "same duality" clause: sub-head → head suggestion for a
   // brand-new sub-head. A confident match auto-fills (provisional, tagged);
@@ -350,21 +382,51 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
           <div className="field">
             <label data-tip="Search existing sub-heads, or type a new one">
               Sub-head <span className="req-dot" aria-label="required">•</span>
-              {!subheadTouched && suggestion?.kind === "existing" && (
+              {autofillSubhead && suggestion?.kind === "existing" && (
                 <span className="ml-tag ml-tag-existing" data-tip="Suggested from your past titles — still fully editable">suggested</span>
               )}
-              {!subheadTouched && suggestion?.kind === "new" && (
+              {autofillSubhead && suggestion?.kind === "new" && (
                 <span className="ml-tag ml-tag-new" data-tip="No close match — suggesting a NEW sub-head, not a pick from the existing list">suggested new</span>
               )}
             </label>
             <FuzzyDropdown
               value={activity}
-              onChange={(v) => { setActivity(v); setSubheadTouched(true); }}
+              onChange={(v) => { setActivity(v); setSubheadSource("user"); }}
               options={allActivities}
               placeholder="e.g. Project — AI Automation"
               clearable
               ariaLabel="Sub-head"
             />
+            {offerSubheadChoice && (
+              <div className="ml-choice" data-tip="Your new title suggests a different sub-head — keep yours or use the suggestion">
+                <span className="ml-choice-text">
+                  <span className="ml-choice-lead">
+                    <span className={`ml-tag ${suggestion?.kind === "new" ? "ml-tag-new" : "ml-tag-existing"}`}>
+                      {suggestion?.kind === "new" ? "suggested new" : "suggested"}
+                    </span>
+                    <span className="ml-choice-value">{suggestedSubhead}</span>
+                    {suggestedHead && <span className="ml-choice-in">in</span>}
+                  </span>
+                  {suggestedHead && (
+                    <strong className="ml-choice-headpill" data-tip="The head this suggested sub-head lives under">
+                      {suggestedHead}
+                    </strong>
+                  )}
+                </span>
+                <span className="ml-choice-actions">
+                  <button
+                    type="button"
+                    className="ml-choice-use"
+                    onClick={() => { setActivity(suggestedSubhead!); setSubheadSource("user"); setDismissedSuggestion(null); }}
+                  >Use this</button>
+                  <button
+                    type="button"
+                    className="ml-choice-keep"
+                    onClick={() => setDismissedSuggestion(suggestedSubhead)}
+                  >Keep mine</button>
+                </span>
+              </div>
+            )}
             {derivedHead && (
               <div className="derived-head" data-tip="Derived from the sub-head — not editable here">
                 Head: <strong>{derivedHead}</strong>
@@ -434,7 +496,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
         </div>
         <div className="drawer-footer">
           <button className="primary" onClick={() => add(false)}>Add</button>
-          <button onClick={() => add(true)}>Add &amp; start now ⚡</button>
+          <button className="start-accent" onClick={() => add(true)}>Add &amp; start now ⚡</button>
           <span style={{ flex: 1 }} />
           <button className="cancel-accent" onClick={onClose}>Cancel</button>
         </div>

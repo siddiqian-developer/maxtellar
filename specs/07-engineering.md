@@ -59,8 +59,32 @@ silences the suggester for that session.
   "Add sub-head" button is disabled while either the sub-head or the head is empty. The
   drawer's "New sub-head's head" field likewise starts empty (no `heads[0]` default);
   its existing required-dot/validation already covered the rest.
-- **Intent wins:** once the user touches the sub-head field in a drawer session, the model
-  never fires again that session. Suggestions never auto-create registry entries.
+- **Intent wins — the Title is the only trigger; it re-fires on every title edit (revised
+  2026-07-11):** a changed title = changed intent = a *fresh* suggestion. Editing the Title is
+  never silenced by an earlier sub-head edit; the suggester recomputes on every title change.
+  Editing or clearing the **sub-head** is **never** a trigger — it does not summon or re-apply
+  a suggestion. What the next title-driven suggestion does depends on **who *sourced* the
+  sub-head currently in the field** (tracked as a `subheadSource` of `"app" | "user"`) — the
+  axis is *source*, not the field's value and not whether it is non-empty:
+  - **App-sourced** (empty, or a value the app autofilled and the user left untouched) → the
+    fresh suggestion simply **replaces** it. No choice prompt — there is no user intent to
+    protect.
+  - **User-sourced** — the user *acted* on the field: typed it, explicitly picked it from the
+    dropdown, **or accepted a suggestion via _Use this_** (accepting is a user action → user
+    intent). A title edit **never overwrites** a user-sourced sub-head. When the fresh
+    suggestion *differs* from it, a **visible keep-mine-vs-use-suggested choice** appears below
+    the field: the `suggested`/`suggested new` **tag/pill** followed by the proposed sub-head
+    name in **plain text** and, for an existing sub-head, its **head** — `in` + the head name
+    as a **subtly-filled pill** (a `suggested new` sub-head has no head yet, so none is shown),
+    a **Use this** action (swaps
+    it in — the swapped-in value is **still user-sourced**, so it too is protected on later
+    edits), and **Keep mine**
+    (dismisses the prompt for that suggestion). Nothing is applied silently. Clearing a
+    user-sourced field back to empty makes it app-sourced again, so the *next* title edit
+    autofills.
+- **Intent wins — head fields (Feature 2) unchanged:** once the user touches a head field in
+  a drawer session, that head-suggester never fires again that session. Suggestions never
+  auto-create registry entries.
 - **Runtime:** transformers.js + `bge-small-en-v1.5` quantized (~34MB), lazy-loaded on first
   drawer open. **WebGPU is an optional accelerator, not a requirement** — automatic fallback
   to WASM on CPU (single-title embed ~50–200ms there; fine under a 400ms debounce). No GPU,
@@ -79,10 +103,14 @@ cloud offload (§7.2) remains the eventual answer.
 cache: past-title vectors capped at 1000 entries, sub-head-name vectors), `suggest.ts`
 (`suggestSubhead`, `suggestHeadForSubhead`, `recordTitleActivity`), `useSubheadSuggestion.ts`
 and `useHeadSuggestion.ts` (400ms-debounced hooks, same shape). Wired into **three** spots,
-each with its own `touched` flag (set the instant the user edits the suggested field, which
-permanently silences that suggester for the session) and the same `suggested`/`suggested new`
-tag (accent-strong outline vs dashed budgeted-hue, never conflated):
-- `TaskDrawer.tsx`, Title → Sub-head (`subheadTouched`) — autofills, per Feature 1.
+with the same `suggested`/`suggested new` tag (accent-strong outline vs dashed budgeted-hue,
+never conflated), but the intent-guard differs by suggester (revised 2026-07-11): the **head
+fields** use a `touched` flag that permanently silences the suggester for the session;
+**Title → Sub-head** uses a `subheadSource` (`"app" | "user"`) that never silences — title
+edits always recompute — and only decides autofill-vs-choice:
+- `TaskDrawer.tsx`, Title → Sub-head (`subheadSource`) — a title edit replaces an app-authored
+  sub-head, but protects a user-authored one, offering a Use-this/Keep-mine choice instead, per
+  Feature 1.
 - `TaskDrawer.tsx`, new Sub-head → "New sub-head's head" (`newHeadTouched`, added 2026-07-11)
   — autofills from an empty start, per Feature 2.
 - `HeadsConfigScreen.tsx`, "Add a sub-head" form's head field (`headTouched`) — autofills

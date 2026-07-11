@@ -160,10 +160,19 @@ emoji cross is full platform saturation with zero theme awareness.
   (`button.primary`).
 - **Cancel / abandon / destructive** → `danger` outline (transparent fill; hover tints
   `color-mix(danger 10%, transparent)`) — `button.cancel-accent`.
-- **Neutral secondary** (e.g. "Add & start now") → default hairline outline button.
+- **Secondary affirmative** (e.g. "Add & start now") → **`accent-strong` outline**
+  (transparent fill; hover tints `color-mix(accent-strong 10%, transparent)`) —
+  `button.start-accent` (revised 2026-07-11). It's a create action, so the brand accent
+  matches its meaning; outline (not filled) keeps it from competing with the solid `Add`.
+- **Neutral secondary** (no affirmative/destructive meaning) → default hairline outline button.
 Outline (not filled) for non-primary actions so they stay present next to a solid primary
 without competing. Drawer footer order (settled 2026-07-10):
-`Add(primary) · Add & start now ⚡ · [flex space] · Cancel(danger outline)`.
+`Add(primary) · Add & start now ⚡(accent outline) · [flex space] · Cancel(danger outline)`.
+
+## Task drawer size
+
+`.drawer`: `width: 100%; max-width: 450px` (widened 2026-07-11 from 440px, +25%), full height,
+slides in from the right over the scrim with `border-left` hairline.
 
 ## Sub-head / derived-head display
 
@@ -171,6 +180,22 @@ without competing. Drawer footer order (settled 2026-07-10):
 under the sub-head input the instant a known activity is selected — never editable there;
 it's read straight from the registry (§2.1 head/activity hierarchy). Uses the same subtle
 `data-tip` mechanism as other drawer fields to note it's derived, not a separate heading.
+
+**Sub-head suggestion choice row (`.ml-choice`, §7.0.1):** a flex row, `align-items: center`
+(buttons centered against the possibly-taller head pill), `gap: 0` (no gap before the buttons).
+`.ml-choice-text` is itself a flex row (`align-items: center`): the **lead**
+(`.ml-choice-lead`: `suggested` pill + sub-head name + plain `in`) stays whole on one line
+(`flex-shrink: 0`); the **head pill** sits **beside** it and takes the remaining width.
+
+The **head** renders as a **subtly brand-filled pill** (`.ml-choice-headpill`: `background:
+accent-soft`, text `accent-strong`, `padding: 3px 8px`, `border-radius: 8px`) that **stays beside
+the sub-head and never drops below it**. As a flex cell (`flex: 0 1 auto; min-width: 0`) it takes
+the remaining width and, when the head is long, **wraps its text INSIDE — the pill grows taller**
+rather than moving to the next line (`overflow-wrap: anywhere` breaks a single over-long token in
+place). **Note:** the brand tint is a deliberate, user-directed exception to the "accent is
+reserved for living elements only" usage rule below. The **Use this / Keep mine** buttons sit in `.ml-choice-actions` immediately
+after the text — **no gap before the button group** — travelling together (`flex-shrink: 0`)
+with only their own 6px inter-button gap, never wrapping their own text (`white-space: nowrap`).
 
 ## Heads & Sub-heads config screen (full page)
 
