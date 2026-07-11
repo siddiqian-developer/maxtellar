@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import type { Event } from "@timekeeper/core";
+import type { Event } from "@maxtellar/core";
 import { EventStore } from "../src/eventStore.js";
 import { MemoryAdapter } from "../src/memory.js";
 

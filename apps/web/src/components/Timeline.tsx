@@ -5,8 +5,8 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { State } from "@timekeeper/core";
-import { runningView } from "@timekeeper/core";
+import type { State } from "@maxtellar/core";
+import { runningView } from "@maxtellar/core";
 import { fmtDur, fmtClock } from "../time";
 import { useSettings } from "../settings";
 

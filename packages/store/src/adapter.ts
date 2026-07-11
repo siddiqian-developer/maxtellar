@@ -4,7 +4,7 @@
  * expo-sqlite. Cloud offload later: export log segments through this interface.
  */
 
-import type { Event } from "@timekeeper/core";
+import type { Event } from "@maxtellar/core";
 
 export interface StoredEvent {
   /** monotonically increasing sequence (assigned by the adapter on append) */

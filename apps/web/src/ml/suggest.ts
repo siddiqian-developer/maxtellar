@@ -36,7 +36,7 @@ const TOP_K = 5;
 
 export type Suggestion =
   | { kind: "existing"; activity: string; confidence: number }
-  | { kind: "new"; confidence: number }
+  | { kind: "new"; confidence: number } 
   | { kind: "none" };
 
 export type HeadSuggestion =

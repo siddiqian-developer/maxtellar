@@ -80,30 +80,46 @@ or by explicit user drag. **User-creatable** as deliberate buffers. *(The v1 "bu
 adjacent gaps equally" rule is deleted — it was the only backward-motion rule and broke
 termination.)*
 
-### 3.9 Presumed extent — a real capped reservation — G22 (re-grilled & settled 2026-07-11)
+### 3.9 Presumed extent — fair-share of contested free space — G22 (settled 2026-07-11)
 A budget-less **open** task (unscheduled, or a semi-head/semi-tail with no budget) reserves a
-**real capped extent**, not just MIN_FRAGMENT. *(This supersedes the earlier "display-only,
-scheduler reserves MIN_FRAGMENT" reading — a 5-minute reservation let a later budgeted task
-land right behind an open task and visually crush it to 5 min, which is wrong: the open task
-is the one meant to fill the free time.)*
-- **The reservation = up to `openExtentCap` (default 10 h; user-configurable in Settings,
-  `SET_OPEN_CAP`), clamped by the next wall.** An open unscheduled task fills the current free
-  slot up to the cap; lower-rank tasks are placed **after** it, not on top of it.
-  Example (now = 2:00 PM, one unscheduled "Read", then a budgeted 30-min "Email"): Read fills
-  2:00 PM → 12:00 AM (10 h cap), Email lands after at 12:00–12:30 AM. Read does not shrink.
-- **Rank wins.** Layout is strict priority-rank order; timing type does not reorder. An open
-  task ranked above a budgeted one sits first and pushes the budgeted after its capped extent
-  (that is the meaning of "honor the drag").
-- **Open tasks still yield to real WALLS.** The capped fill stops at the next fixed/semi
-  anchored commitment, so a fixed meeting still shows at its time and the open task fills only
-  up to it. A budget-less semi-head/semi-tail is itself a *soft* wall: its presumed side is
-  clamped to the neighbouring wall so it never overlaps a real commitment.
-- **Still forward-only / terminating (R10 preserved in spirit):** a finite capped reservation
-  consumes space forward like any placement; it never induces backward motion. The cap keeps
-  it bounded.
-- **Labeled "open", never a number** — same never-disguise rule as the ML tags: a presumption
-  must not read as data. Pipeline cards show "open" where a budget would sit; the block shows
-  its capped span but is edge-styled as floating (§6), not as a committed duration.
+**real capped extent**, not MIN_FRAGMENT *(a 5-min reservation let a later task land right
+behind an open task and crush it to 5 min — wrong; the open task is the one meant to fill the
+free time)*. **The size of that reservation is a *space-sharing* rule, NOT an ordering/priority
+rule** — it decides only how much of the free time an open task grabs, calibrated to what (if
+anything) is contending for that same region below it (= next in time). It never crowds out a
+neighbour with a definite need, and shares fairly with equals.
+
+**The law — an open task grabs its fair share of the free space below it:**
+- **Nothing below → the full default (`openExtentCap`, 10 h; user-configurable, `SET_OPEN_CAP`).**
+  Nobody's competing, so take it all. Example (now = 2 PM, one unscheduled "Read"): fills 2 PM →
+  12 AM.
+- **A FIRM task below (fixed / budgeted / semi-head — each has a definite space claim) → yield
+  to a small slice (`CROWDED_CAP`, 2 h).** Example: unscheduled "Read" then a budgeted "Email"
+  → Read keeps only 2 h (2 PM–4 PM), Email lands after; the rest of the day is left for the
+  commitment.
+- **Open peers below (another unscheduled, or a semi-tail — indefinite, equal claims) → split
+  the space evenly.** Example: two unscheduled tasks, nothing else → each 5 h (10 h ÷ 2). A run
+  of N consecutive open peers shares one cap, `⌊cap ÷ N⌋` each (cap = 10 h uncontested, else
+  2 h).
+
+**Not an ordering rule.** Which task is placed *first* is still decided by priority rank
+(§3.11); this only sizes an open task's claim. **Firm vs open is the whole axis** — an open
+task's greed is scaled to its neighbour's *need*, never to who outranks whom.
+
+- **Open tasks still yield to real WALLS.** The fill is additionally clamped by the next
+  fixed/semi anchored commitment, so a fixed meeting still shows at its time. A budget-less
+  semi-head/semi-tail is itself a *soft* wall clamped to its neighbour so it never overlaps a
+  real commitment.
+- **Still forward-only / terminating:** a finite capped reservation consumes space forward like
+  any placement; never backward motion.
+- **Labeled "open", never a number** — same never-disguise rule as the ML tags. Pipeline cards
+  show "open" where a budget would sit; the block shows its capped span, edge-styled as floating
+  (§6), never as a committed duration.
+- **Scope note (partial, 2026-07-11):** implemented for **unscheduled** subjects (the demonstrated
+  cases: vs nothing / vs firm / split among unscheduled). Still TODO: a budget-less **semi-head**
+  as *subject* uses the older soft-wall clamp, not yet the 10 h/2 h/split rule; and a **semi-tail**
+  *below* is currently treated as firm (2 h) rather than an even split — its anchored-end geometry
+  needs its own pass.
 
 ### 3.10 Pause — G23/G25
 Pause splits: occupied part → history segment; unspent budget → a **budgeted "remainder"** in

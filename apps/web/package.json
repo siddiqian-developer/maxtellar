@@ -1,5 +1,5 @@
 {
-  "name": "@timekeeper/web",
+  "name": "@maxtellar/web",
   "version": "0.1.0",
   "type": "module",
   "private": true,
@@ -12,8 +12,8 @@
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",
-    "@timekeeper/core": "workspace:*",
-    "@timekeeper/store": "workspace:*",
+    "@maxtellar/core": "workspace:*",
+    "@maxtellar/store": "workspace:*",
     "react": "^18.3.0",
     "react-dom": "^18.3.0",
     "zustand": "^4.5.0"

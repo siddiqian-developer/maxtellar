@@ -4,7 +4,7 @@
  * Formats per SPEC Part VI.
  */
 
-import type { Min, Dur } from "@timekeeper/core";
+import type { Min, Dur } from "@maxtellar/core";
 
 export const nowMin = (): Min => Math.floor(Date.now() / 60000);
 

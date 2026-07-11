@@ -12,7 +12,7 @@
  */
 
 import { useEffect, useState } from "react";
-import type { Event, State } from "@timekeeper/core";
+import type { Event, State } from "@maxtellar/core";
 import { useHeads, BUILT_IN_HEADS } from "../heads";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";

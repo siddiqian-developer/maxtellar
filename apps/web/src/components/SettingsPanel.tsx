@@ -5,7 +5,7 @@
  * as more settings are added rather than scattering per-component toggles.
  */
 
-import type { Event } from "@timekeeper/core";
+import type { Event } from "@maxtellar/core";
 import { useSettings } from "../settings";
 import { useEscClose } from "../useEscClose";
 

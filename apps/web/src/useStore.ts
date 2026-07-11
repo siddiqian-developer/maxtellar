@@ -5,8 +5,8 @@
  */
 
 import { create } from "zustand";
-import type { Event, State } from "@timekeeper/core";
-import { EventStore, MemoryAdapter, SqliteAdapter, type StorageAdapter } from "@timekeeper/store";
+import type { Event, State } from "@maxtellar/core";
+import { EventStore, MemoryAdapter, SqliteAdapter, type StorageAdapter } from "@maxtellar/store";
 import { nowMin } from "./time";
 
 interface UiStore {

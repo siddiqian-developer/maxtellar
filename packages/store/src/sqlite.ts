@@ -4,7 +4,7 @@
  * Requires COOP/COEP headers (configured in the web app's vite config).
  */
 
-import type { Event } from "@timekeeper/core";
+import type { Event } from "@maxtellar/core";
 import type { Snapshot, StorageAdapter, StoredEvent } from "./adapter.js";
 
 const SCHEMA = `
@@ -31,7 +31,7 @@ export class SqliteAdapter implements StorageAdapter {
 
   /** Open (and migrate) the OPFS database. Falls back to an in-memory VFS when
    *  OPFS is unavailable (e.g. non-isolated context) — caller may warn. */
-  static async open(filename = "timekeeper.db"): Promise<SqliteAdapter> {
+  static async open(filename = "maxtellar.db"): Promise<SqliteAdapter> {
     const mod = await import("@sqlite.org/sqlite-wasm");
     const sqlite3 = await mod.default({ print: () => {}, printErr: () => {} });
     const hasOpfs = "opfs" in sqlite3;

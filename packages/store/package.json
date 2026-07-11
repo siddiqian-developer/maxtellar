@@ -1,5 +1,5 @@
 {
-  "name": "@timekeeper/store",
+  "name": "@maxtellar/store",
   "version": "0.1.0",
   "type": "module",
   "main": "./src/index.ts",
@@ -9,7 +9,7 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "@timekeeper/core": "workspace:*",
+    "@maxtellar/core": "workspace:*",
     "@sqlite.org/sqlite-wasm": "^3.46.1-build3"
   },
   "devDependencies": {

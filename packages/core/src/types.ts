@@ -1,5 +1,5 @@
 /**
- * Core types — SPEC-timekeeper.md Part II.
+ * Core types — SPEC.md Part II.
  * All times are INTEGER MINUTES since an arbitrary epoch (absolute), durations in minutes.
  */
 

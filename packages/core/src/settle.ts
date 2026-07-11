@@ -71,9 +71,42 @@ function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur): Wall | null {
   }
 }
 
+/** §3.9 crowded cap: when a FIRM task sits immediately below an open task,
+ * the open task yields — it grabs only this modest slice, not the full
+ * `openExtentCap`. (2h; the "10h vs 2h" pair are the uncontested vs yielding
+ * fallbacks — the real rule is fair-share of contested free space.) */
+const CROWDED_CAP: Dur = 120;
+
+/** A FIRM neighbour has a definite space claim → an open task above it yields.
+ * (fixed/budgeted, and semi-head which pins a start and occupies downward.) */
+const isFirm = (t: UnstartedTask): boolean =>
+  t.timing === "fixed" || t.timing === "budgeted" || t.timing === "semi-head";
+
 export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: SettleInput): Placement[] {
   const placements = new Map<string, Placement>();
   const squeezeTol = minFragment - 1;
+
+  // §3.9 fair-share sizing (2026-07-11): an open unscheduled task's reserved
+  // extent depends on what sits immediately BELOW it (next in time), NOT on
+  // priority. Nothing below → full `openExtentCap` (10h). A FIRM task below
+  // → yield to CROWDED_CAP (2h). A run of open peers → they SPLIT one cap
+  // evenly. Precomputed here over the rank-ordered task subsequence; walls
+  // still clamp the actual fill below.
+  const taskSeq = plan.filter(isTask);
+  const openCapById = new Map<string, Dur>();
+  for (let i = 0; i < taskSeq.length; ) {
+    if (taskSeq[i]!.timing !== "unscheduled") { i++; continue; }
+    let j = i;
+    while (j < taskSeq.length && taskSeq[j]!.timing === "unscheduled") j++;
+    const run = j - i; // consecutive open peers share one cap
+    const after = taskSeq[j];
+    // Uncontested (nothing below) → 10h; contested by a firm OR another
+    // floater (semi-tail) below → the group's cap tightens, split evenly.
+    const groupCap = !after ? openExtentCap : CROWDED_CAP;
+    const share = Math.max(minFragment, Math.floor(groupCap / run));
+    for (let k = i; k < j; k++) openCapById.set(taskSeq[k]!.id, share);
+    i = j;
+  }
 
   // ---- 1. Pin anchors (walls), clipped to the cursor ------------------------
   // Collect raw walls first, sort, then CLAMP soft (budget-less) presumed
@@ -150,11 +183,13 @@ export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: Settl
     if (isTask(item) && wallOf(item, minFragment, openExtentCap)) continue; // walls already placed
 
     // Open (budget-less) UNSCHEDULED task: fills the current free slot up to
-    // the presumed-extent cap (§3.9), clamped by the next wall — like a task
-    // sized to its remaining nominal window. Lower-rank items land after it.
+    // its fair-share cap (§3.9 — 10h uncontested / 2h yielding / split among
+    // open peers; precomputed in openCapById), clamped by the next wall.
+    // Lower-rank items land after it.
     if (isTask(item) && isOpen(item)) {
       skipWalls();
-      const width = Math.min(openExtentCap, slotWidth());
+      const cap = openCapById.get(item.id) ?? openExtentCap;
+      const width = Math.min(cap, slotWidth());
       const parts: Part[] = width > 0 ? [{ start: ptr, end: ptr + width }] : [];
       ptr += width;
       placements.set(item.id, {

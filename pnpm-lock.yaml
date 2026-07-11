@@ -17,10 +17,10 @@ importers:
       '@huggingface/transformers':
         specifier: ^4.2.0
         version: 4.2.0
-      '@timekeeper/core':
+      '@maxtellar/core':
         specifier: workspace:*
         version: link:../../packages/core
-      '@timekeeper/store':
+      '@maxtellar/store':
         specifier: workspace:*
         version: link:../../packages/store
       react:
@@ -66,12 +66,12 @@ importers:
 
   packages/store:
     dependencies:
+      '@maxtellar/core':
+        specifier: workspace:*
+        version: link:../core
       '@sqlite.org/sqlite-wasm':
         specifier: ^3.46.1-build3
         version: 3.46.1-build5
-      '@timekeeper/core':
-        specifier: workspace:*
-        version: link:../core
     devDependencies:
       typescript:
         specifier: ^5.5.0

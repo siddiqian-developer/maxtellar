@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import type { Event, TimingType } from "@timekeeper/core";
+import type { Event, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";

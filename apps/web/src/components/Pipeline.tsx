@@ -4,8 +4,8 @@
  * timeline unconditionally (one spine, two projections).
  */
 
-import type { Event, State, UnstartedTask } from "@timekeeper/core";
-import { runningView } from "@timekeeper/core";
+import type { Event, State, UnstartedTask } from "@maxtellar/core";
+import { runningView } from "@maxtellar/core";
 import { fmtAbs, fmtDur } from "../time";
 import { useSettings } from "../settings";
 

@@ -1,4 +1,4 @@
-import type { Event } from "@timekeeper/core";
+import type { Event } from "@maxtellar/core";
 import type { Snapshot, StorageAdapter, StoredEvent } from "./adapter.js";
 
 const clone = <T,>(v: T): T => JSON.parse(JSON.stringify(v)) as T;

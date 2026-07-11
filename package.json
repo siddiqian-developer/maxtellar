@@ -1,8 +1,8 @@
 {
-  "name": "timekeeper",
+  "name": "maxtellar",
   "private": true,
   "version": "0.1.0",
-  "description": "Opinionated sleep-anchored time-management system (see SPEC-timekeeper.md)",
+  "description": "Opinionated sleep-anchored time-management system (see SPEC.md)",
   "scripts": {
     "test": "pnpm -r test",
     "build": "pnpm -r build",

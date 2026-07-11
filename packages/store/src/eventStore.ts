@@ -5,7 +5,7 @@
  * per-minute rendering).
  */
 
-import { initialState, reduce, type Event, type Min, type State } from "@timekeeper/core";
+import { initialState, reduce, type Event, type Min, type State } from "@maxtellar/core";
 import type { StorageAdapter } from "./adapter.js";
 
 export interface EventStoreOptions {
