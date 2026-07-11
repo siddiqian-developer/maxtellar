@@ -213,7 +213,6 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   border: 1px dashed var(--ink-faint);
   transition: top 0.6s ease, height 0.6s ease; /* reflow: gently witnessed */
 }
-.block.plan.anchored { border-style: solid; border-color: var(--ink-soft); }
 /* running block: full projected span, two-tone — spent (top, stronger fill)
    vs remaining (bottom, soft). The spent fill height tracks `now`. */
 .block.running {
@@ -752,6 +751,27 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 button.dev-speed { color: var(--st-budgeted); border-color: var(--st-budgeted); font-size: 12px; }
 button.dev-speed:hover { background: color-mix(in srgb, var(--st-budgeted) 10%, transparent); }
 
-/* open-ended (floating) plan block at its presumed extent (§3.9, display
-   only): dotted border reads as "presumption, not commitment" */
-.block.plan.open-ended { border-style: dotted; }
+/* Edge encoding of anchoring (2026-07-11) — a block's borders tell you which
+   coordinates are pinned. Top edge = START, bottom edge = END, left edge =
+   whether the DURATION is committed. Solid = anchored/committed, dashed =
+   floating/presumed. Reads directly off §2.3's {start,end,budget} knowledge:
+     unscheduled → all dashed (nothing known)
+     budgeted    → top/bottom dashed, LEFT solid (duration committed, slides)
+     fixed       → all solid (start+end+duration all pinned)
+     semi-head   → top solid (start pinned), bottom dashed, left dashed
+     semi-tail   → bottom solid (end pinned), top dashed, left dashed          */
+.block.plan[data-timing="unscheduled"] { border-style: dashed; }
+.block.plan[data-timing="budgeted"]    { border-style: dashed; border-left-style: solid; }
+.block.plan[data-timing="fixed"]       { border-style: solid; }
+.block.plan[data-timing="semi-head"]   { border-style: dashed; border-top-style: solid; }
+.block.plan[data-timing="semi-tail"]   { border-style: dashed; border-bottom-style: solid; }
+
+/* plan blocks tinted by timing type — same state-hue palette as the pipeline
+   badges / drawer chips (one hue per type). Left accent bar + soft fill;
+   the dashed border still reads "provisional". */
+.block.plan[data-timing] { border-left-width: 3px; }
+.block.plan[data-timing="unscheduled"] { border-left-color: var(--st-unscheduled); background: color-mix(in srgb, var(--st-unscheduled) 10%, var(--plan-card)); }
+.block.plan[data-timing="budgeted"]    { border-left-color: var(--st-budgeted);    background: color-mix(in srgb, var(--st-budgeted) 10%, var(--plan-card)); }
+.block.plan[data-timing="semi-head"],
+.block.plan[data-timing="semi-tail"]   { border-left-color: var(--st-semi);        background: color-mix(in srgb, var(--st-semi) 10%, var(--plan-card)); }
+.block.plan[data-timing="fixed"]       { border-left-color: var(--st-fixed);       background: color-mix(in srgb, var(--st-fixed) 10%, var(--plan-card)); }

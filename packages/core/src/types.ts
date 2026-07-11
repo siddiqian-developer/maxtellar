@@ -116,6 +116,10 @@ export interface RunningTask {
 export interface State {
   now: Min;
   minFragment: Dur;
+  /** §3.9: a budget-less (open) task reserves its presumed extent up to this
+   * cap (default 600 = 10h), not just minFragment — so lower-rank tasks land
+   * after it rather than shrinking it. User-configurable. */
+  openExtentCap: Dur;
   running: RunningTask | null;
   /** Append-only past. Occupancy entries non-overlapping, end ≤ now. */
   history: HistoryEntry[];
@@ -137,6 +141,7 @@ export type Event =
   | { type: "PAUSE_RUNNING" }
   | { type: "COMPLETE_RUNNING" }
   | { type: "CANCEL_TASK"; taskId: string }
+  | { type: "SET_OPEN_CAP"; minutes: Dur } // §3.9 open-task presumed-extent cap
   | { type: "LOG_CHANNEL"; channel: keyof Channels; minutes: Dur } // reattribute on running
   | { type: "BACKLOG"; entry: Omit<HistoryEntry, "id"> }
   | { type: "EDIT_COMMIT"; batch: PlanItem[] } // fork commit: replacement plan (re-settled at real now)

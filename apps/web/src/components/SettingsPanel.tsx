@@ -5,17 +5,21 @@
  * as more settings are added rather than scattering per-component toggles.
  */
 
+import type { Event } from "@timekeeper/core";
 import { useSettings } from "../settings";
 import { useEscClose } from "../useEscClose";
 
 interface Props {
+  openExtentCap: number;
+  dispatch: (e: Event) => void;
   onClose: () => void;
   onOpenHeadsConfig: () => void;
 }
 
-export function SettingsPanel({ onClose, onOpenHeadsConfig }: Props): JSX.Element {
+export function SettingsPanel({ openExtentCap, dispatch, onClose, onOpenHeadsConfig }: Props): JSX.Element {
   const { timeFormat, setTimeFormat, devSandbox, setDevSandbox } = useSettings();
   useEscClose(onClose);
+  const capHours = Math.round((openExtentCap / 60) * 10) / 10;
 
   return (
     <div className="drawer-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -45,6 +49,22 @@ export function SettingsPanel({ onClose, onOpenHeadsConfig }: Props): JSX.Elemen
                 24h
               </button>
             </div>
+          </div>
+          <div className="field">
+            <label data-tip="How far an open (unscheduled / budget-less) task fills the day before lower-priority tasks are placed after it (§3.9)">
+              Open-task cap (hours)
+            </label>
+            <input
+              type="number"
+              min={0.5}
+              max={24}
+              step={0.5}
+              value={capHours}
+              onChange={(e) => {
+                const h = Number(e.target.value);
+                if (Number.isFinite(h) && h > 0) dispatch({ type: "SET_OPEN_CAP", minutes: Math.round(h * 60) });
+              }}
+            />
           </div>
           <div className="field">
             <label>Heads &amp; sub-heads</label>

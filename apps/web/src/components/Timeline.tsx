@@ -5,7 +5,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { State, UnstartedTask } from "@timekeeper/core";
+import type { State } from "@timekeeper/core";
 import { runningView } from "@timekeeper/core";
 import { fmtDur, fmtClock } from "../time";
 import { useSettings } from "../settings";
@@ -44,52 +44,14 @@ export function Timeline({ state }: { state: State }): JSX.Element {
 
   const planItems = new Map(state.plan.map((i) => [i.id, i]));
 
-  // §3.9 presumed extent (display only, R10 — the scheduler reserves just
-  // MIN_FRAGMENT for these and never reads what we draw): floating tasks are
-  // STRETCHED to the remaining nominal day (= next local midnight; grilled
-  // 2026-07-11). Unscheduled floats (no anchors) divide the remainder evenly,
-  // stacking in rank order; a budget-less semi-head keeps its anchored start
-  // and extends to the next placement. All clamped by anchored placements.
-  const nowDate = new Date(state.now * 60000);
-  const dayEnd = Math.floor(
-    new Date(nowDate.getFullYear(), nowDate.getMonth(), nowDate.getDate() + 1).getTime() / 60000,
-  );
-  const isFloating = (id: string): boolean => {
+  // §3.9 presumed extent is now a REAL capped reservation the scheduler lays
+  // out (grilled 2026-07-11) — placements already carry the open task's full
+  // extent, so the timeline just draws them. A budget-less task is flagged
+  // "open" (its span is presumed, not a committed duration).
+  const isOpen = (id: string): boolean => {
     const it = planItems.get(id);
-    return it?.kind === "task" && it.budget === undefined && it.anchorEnd === undefined;
+    return it?.kind === "task" && it.budget === undefined;
   };
-  const anchoredStartsAfter = (min: number): number | undefined =>
-    state.placements
-      .filter((p) => !isFloating(p.itemId))
-      .flatMap((p) => p.parts.map((pt) => pt.start))
-      .filter((s) => s > min)
-      .sort((a, b) => a - b)[0];
-  const presumed = new Map<string, { start: number; end: number }>();
-  {
-    const floats = state.placements.filter((p) => isFloating(p.itemId) && p.parts.length > 0);
-    const drifters = floats.filter((p) => planItems.get(p.itemId)?.kind === "task" && (planItems.get(p.itemId) as UnstartedTask).anchorStart === undefined);
-    const semiHeads = floats.filter((p) => !drifters.includes(p));
-    // budget-less semi-head: anchored start → next placement (or day end)
-    for (const p of semiHeads) {
-      const start = p.parts[0]!.start;
-      const end = Math.max(start + state.minFragment, Math.min(anchoredStartsAfter(start) ?? dayEnd, dayEnd));
-      presumed.set(p.itemId, { start, end });
-    }
-    // unscheduled drifters: divide the remaining day evenly, stacked in order
-    const first = drifters[0]?.parts[0];
-    if (first && dayEnd > first.start) {
-      const share = Math.max(state.minFragment, Math.floor((dayEnd - first.start) / drifters.length));
-      let cursor = first.start;
-      for (const p of drifters) {
-        let end = Math.min(cursor + share, dayEnd);
-        const wall = anchoredStartsAfter(cursor);
-        if (wall !== undefined) end = Math.min(end, wall);
-        if (end <= cursor) end = cursor + state.minFragment; // degenerate: keep the real slot
-        presumed.set(p.itemId, { start: cursor, end });
-        cursor = end;
-      }
-    }
-  }
 
   return (
     <div className="timeline-wrap">
@@ -152,18 +114,18 @@ export function Timeline({ state }: { state: State }): JSX.Element {
               (item.timing === "fixed" ||
                 item.timing === "semi-head" ||
                 item.timing === "semi-tail");
-            const open = presumed.get(p.itemId);
-            const parts = open ? [open] : p.parts;
-            return parts.map((part, idx) => (
+            const open = isOpen(p.itemId);
+            return p.parts.map((part, idx) => (
               <div
                 key={`${p.itemId}-${idx}`}
                 className={`block plan${anchored ? " anchored" : ""}${open ? " open-ended" : ""}`}
+                data-timing={item.kind === "task" ? item.timing : undefined}
                 style={{ top: y(part.start), height: Math.max(8, (part.end - part.start) * PPM - 2) }}
-                title={open ? `${hhmm(part.start)} · open-ended (presumed extent)` : `${hhmm(part.start)}–${hhmm(part.end)}`}
+                title={open ? `${hhmm(part.start)} · open (presumed extent, capped)` : `${hhmm(part.start)}–${hhmm(part.end)}`}
               >
                 {item.kind === "task" ? item.title : "· gap ·"}
                 {open && <span className="sub"> open</span>}
-                {parts.length > 1 && <span className="sub"> — part {idx + 1}</span>}
+                {p.parts.length > 1 && <span className="sub"> — part {idx + 1}</span>}
                 {p.squeezedDeficit > 0 && <span className="sub num"> ⌁{p.squeezedDeficit}m</span>}
               </div>
             ));

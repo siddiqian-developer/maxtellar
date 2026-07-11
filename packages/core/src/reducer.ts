@@ -33,11 +33,13 @@ function rankAfterTarget(target: string, next: string | null): string {
 }
 
 export const DEFAULT_MIN_FRAGMENT: Dur = 5;
+export const DEFAULT_OPEN_EXTENT_CAP: Dur = 600; // 10h (§3.9)
 
 export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT): State {
   return {
     now,
     minFragment,
+    openExtentCap: DEFAULT_OPEN_EXTENT_CAP,
     running: null,
     history: [],
     plan: [],
@@ -83,7 +85,15 @@ export function runningView(s: State): RunningView | null {
 const totalChannels = (c: Channels): Dur => c.spent + c.wasted + c.managed + c.breaks;
 
 function resettle(s: State): State {
-  return { ...s, placements: settle({ plan: s.plan, cursor: cursorOf(s), minFragment: s.minFragment }) };
+  return {
+    ...s,
+    placements: settle({
+      plan: s.plan,
+      cursor: cursorOf(s),
+      minFragment: s.minFragment,
+      openExtentCap: s.openExtentCap,
+    }),
+  };
 }
 
 /** Record (or extend) the amputated head of an anchored task as zero-occupancy
@@ -385,6 +395,14 @@ export function reduce(state: State, event: Event): State {
         plan: state.plan.filter((i) => i.id !== t.id),
         history: [...state.history, entry],
       });
+    }
+
+    case "SET_OPEN_CAP": {
+      // §3.9: change the open-task presumed-extent cap; re-settle so the new
+      // reservation takes effect immediately. Floor at minFragment (a cap
+      // below it would make open tasks smaller than the fragment floor).
+      const cap = Math.max(state.minFragment, Math.round(event.minutes));
+      return resettle({ ...state, openExtentCap: cap });
     }
 
     case "LOG_CHANNEL": {

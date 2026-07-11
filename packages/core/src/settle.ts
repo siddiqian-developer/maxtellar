@@ -23,34 +23,47 @@ interface Wall {
   end: Min;
   /** semi-tail walls may compress: start may move later, down to end − minFragment. */
   compressibleTo?: Min;
+  /** budget-less anchored wall (presumed extent) — tail/head clamps to a
+   * neighbouring wall so the presumption never overlaps a real commitment. */
+  soft?: boolean;
 }
 
 interface SettleInput {
   plan: PlanItem[]; // rank-sorted
   cursor: Min; // first schedulable instant (now, or running task's projected end)
   minFragment: Dur;
+  /** §3.9: budget-less (open) tasks reserve their presumed extent up to this
+   * cap. Optional for back-compat; defaults to 10h. */
+  openExtentCap?: Dur;
 }
 
 const isTask = (i: PlanItem): i is UnstartedTask => i.kind === "task";
 
-/** A task acts as a WALL when it has an anchored coordinate it cannot leave. */
-function wallOf(t: UnstartedTask, minFragment: Dur): Wall | null {
+/** True for a budget-less "open" task — reserves a presumed extent (capped),
+ * not a committed duration (§3.9). */
+const isOpen = (t: UnstartedTask): boolean => t.budget === undefined;
+
+/** A task acts as a WALL when it has an anchored coordinate it cannot leave.
+ * `soft` walls are budget-less anchored tasks whose (presumed) tail may be
+ * clamped by a following wall so it never overlaps a real commitment. */
+function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur): Wall | null {
   switch (t.timing) {
     case "fixed":
       return { itemId: t.id, start: t.anchorStart!, end: t.anchorEnd! };
     case "semi-head": {
-      // Start anchored; tail floats. Scheduler reserves only the minimum extent
-      // (presumed extent is display-only, §3.9). Budgeted semi-head reserves budget.
-      const extent = t.budget ?? minFragment;
-      return { itemId: t.id, start: t.anchorStart!, end: t.anchorStart! + extent };
+      // Start anchored; tail floats. Budget-less → reserve the capped presumed
+      // extent (§3.9, clamped later to the next wall); budgeted → its budget.
+      const extent = t.budget ?? openCap;
+      return { itemId: t.id, start: t.anchorStart!, end: t.anchorStart! + extent, soft: isOpen(t) };
     }
     case "semi-tail": {
-      const budget = t.budget ?? minFragment;
+      const budget = t.budget ?? openCap;
       return {
         itemId: t.id,
         start: t.anchorEnd! - budget,
         end: t.anchorEnd!,
         compressibleTo: t.anchorEnd! - minFragment,
+        soft: isOpen(t),
       };
     }
     default:
@@ -58,17 +71,36 @@ function wallOf(t: UnstartedTask, minFragment: Dur): Wall | null {
   }
 }
 
-export function settle({ plan, cursor, minFragment }: SettleInput): Placement[] {
+export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: SettleInput): Placement[] {
   const placements = new Map<string, Placement>();
   const squeezeTol = minFragment - 1;
 
   // ---- 1. Pin anchors (walls), clipped to the cursor ------------------------
-  const walls: Wall[] = [];
+  // Collect raw walls first, sort, then CLAMP soft (budget-less) presumed
+  // extents to their neighbours so a presumption never overlaps a real
+  // commitment (§3.9) — only then build placements.
+  const rawWalls: Wall[] = [];
   for (const item of plan) {
     if (!isTask(item)) continue;
-    const w = wallOf(item, minFragment);
-    if (!w) continue;
+    const w = wallOf(item, minFragment, openExtentCap);
+    if (w) rawWalls.push(w);
+  }
+  rawWalls.sort((a, b) => a.start - b.start || a.end - b.end);
+  // Clamp each soft wall's presumed side to the nearest hard boundary. A
+  // soft semi-head shortens its tail to the next wall's start; a soft
+  // semi-tail lifts its (presumed) start to the previous wall's end. Floor
+  // at minFragment so it never vanishes.
+  for (let i = 0; i < rawWalls.length; i++) {
+    const w = rawWalls[i]!;
+    if (!w.soft) continue;
+    const next = rawWalls[i + 1];
+    const prev = rawWalls[i - 1];
+    if (next && next.start < w.end) w.end = Math.max(w.start + minFragment, next.start);
+    if (prev && prev.end > w.start) w.start = Math.min(w.end - minFragment, prev.end);
+  }
 
+  const walls: Wall[] = [];
+  for (const w of rawWalls) {
     // Cursor pressure clips a wall's head (amputation/compression — the reducer
     // records the skipped time; settle shows the surviving remainder). The
     // arithmetic is uniform: overflow = extent − placed (conservation-exact).
@@ -115,7 +147,24 @@ export function settle({ plan, cursor, minFragment }: SettleInput): Placement[] 
   };
 
   for (const item of plan) {
-    if (isTask(item) && wallOf(item, minFragment)) continue; // walls already placed
+    if (isTask(item) && wallOf(item, minFragment, openExtentCap)) continue; // walls already placed
+
+    // Open (budget-less) UNSCHEDULED task: fills the current free slot up to
+    // the presumed-extent cap (§3.9), clamped by the next wall — like a task
+    // sized to its remaining nominal window. Lower-rank items land after it.
+    if (isTask(item) && isOpen(item)) {
+      skipWalls();
+      const width = Math.min(openExtentCap, slotWidth());
+      const parts: Part[] = width > 0 ? [{ start: ptr, end: ptr + width }] : [];
+      ptr += width;
+      placements.set(item.id, {
+        itemId: item.id,
+        parts,
+        squeezedDeficit: 0,
+        overflowDeficit: 0,
+      });
+      continue;
+    }
 
     if (item.kind === "gap") {
       // Inert spacer: consumes free space up to its budget; shrinks under walls;
@@ -134,7 +183,7 @@ export function settle({ plan, cursor, minFragment }: SettleInput): Placement[] 
     }
 
     const t = item as UnstartedTask;
-    const budget = t.budget ?? minFragment; // unscheduled reserves min extent (§3.9)
+    const budget = t.budget ?? minFragment; // budgeted has a budget; open handled above
     const parts: Part[] = [];
     let deficit = budget;
     let squeezed = 0;

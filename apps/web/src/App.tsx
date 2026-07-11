@@ -219,6 +219,8 @@ export function App(): JSX.Element {
       )}
       {settingsOpen && (
         <SettingsPanel
+          openExtentCap={state.openExtentCap}
+          dispatch={(e) => void dispatch(e)}
           onClose={() => setSettingsOpen(false)}
           onOpenHeadsConfig={() => { setSettingsOpen(false); setView("headsConfig"); }}
         />

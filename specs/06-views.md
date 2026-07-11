@@ -8,6 +8,15 @@ One spine, multiple projections.
    style); the global clock already shows the time. When scrolled away from the seam, a quiet
    icon-only **"back to now"** control floats bottom-center (no label text — see
    `docs/design-tokens.md` "floating icon buttons").
+   **Plan blocks are hued by timing type (2026-07-11)** — the same state-hue palette as the
+   pipeline badges and drawer chips (one hue per type: unscheduled / budgeted / semi / fixed),
+   applied as a soft fill + a colored left bar.
+   **Block edges encode anchoring (2026-07-11):** a block's borders say which coordinates are
+   pinned — **top edge = start, bottom edge = end, left edge = whether the duration is
+   committed**; solid = anchored/committed, dashed = floating/presumed. So: unscheduled = all
+   dashed; budgeted = dashed top/bottom, solid left; fixed = all solid; semi-head = solid top,
+   dashed bottom + left; semi-tail = solid bottom, dashed top + left. (Reads directly off
+   §2.3's {start,end,budget} knowledge.)
    **Running block (2026-07-11): full projected span, never shrinks.** The running task
    renders start → projected end at all times (countdown: `now + remaining`; stopwatch: open
    tail rides `now`), split two-tone by the seam: **spent above (stronger accent fill,
@@ -135,6 +144,9 @@ the now-seam.
 
 **Settings panel:** gear icon in the topbar opens a panel using the same slide-in chrome as
 the task drawer (right-side card, scrim, sticky header, `Done` footer, Escape closes it too).
+Holds the **Open-task cap (hours)** setting (2026-07-11): the `openExtentCap` from §3.9 —
+how far an open/budget-less task fills the day before lower-rank tasks land after it. Number
+field in hours (default 10); dispatches `SET_OPEN_CAP` (minutes) into the event-sourced state.
 Holds a **Dev sandbox** toggle (2026-07-11, persisted `devSandbox`): testing affordances
 only, never a semantics change — when on, the running task's pipeline card gains **⏩ +5m /
 +15m speed-up buttons** (budgeted-hue outline) that fast-forward logical `now` via a batch

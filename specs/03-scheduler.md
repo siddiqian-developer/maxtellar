@@ -80,22 +80,30 @@ or by explicit user drag. **User-creatable** as deliberate buffers. *(The v1 "bu
 adjacent gaps equally" rule is deleted — it was the only backward-motion rule and broke
 termination.)*
 
-### 3.9 Presumed extent (display only) — G22 (grilled & settled 2026-07-11)
-A floating tail / unscheduled task is drawn to the **remaining nominal day**. **Never** a
-runtime clamp; the scheduler never reads it (render-only, R10) — the scheduler reserves only
-MIN_FRAGMENT for a budget-less floating task, and that stays so.
-- **Nominal day ends at the next local midnight** (the literal 24h cycle; revisit when
-  Sleep/day-boundary modeling lands — no setting for now).
-- **Multiple unscheduled floats divide the remainder evenly** (display only), stacked in rank
-  order from the first float's placed start. Example (now = 2:00 PM, two unscheduled tasks):
-  each is drawn ~5h, first 2:00–7:00 PM, second 7:00 PM–12:00 AM.
-- **A budget-less semi-head keeps its anchored start** and extends to the next placement (or
-  day end). Every presumed extent is clamped by the next placed block of any other kind —
-  the presumption never draws over something actually scheduled.
-- **Labeled "open", never a number** — same never-disguise rule as the ML tags: a
-  presumption must not read as data. Blocks render with a dotted border (vs the plan's
-  dashed); pipeline cards show "open" where a budget would sit. The scheduler's 5-minute
-  reservation is never displayed as if it were the task's duration.
+### 3.9 Presumed extent — a real capped reservation — G22 (re-grilled & settled 2026-07-11)
+A budget-less **open** task (unscheduled, or a semi-head/semi-tail with no budget) reserves a
+**real capped extent**, not just MIN_FRAGMENT. *(This supersedes the earlier "display-only,
+scheduler reserves MIN_FRAGMENT" reading — a 5-minute reservation let a later budgeted task
+land right behind an open task and visually crush it to 5 min, which is wrong: the open task
+is the one meant to fill the free time.)*
+- **The reservation = up to `openExtentCap` (default 10 h; user-configurable in Settings,
+  `SET_OPEN_CAP`), clamped by the next wall.** An open unscheduled task fills the current free
+  slot up to the cap; lower-rank tasks are placed **after** it, not on top of it.
+  Example (now = 2:00 PM, one unscheduled "Read", then a budgeted 30-min "Email"): Read fills
+  2:00 PM → 12:00 AM (10 h cap), Email lands after at 12:00–12:30 AM. Read does not shrink.
+- **Rank wins.** Layout is strict priority-rank order; timing type does not reorder. An open
+  task ranked above a budgeted one sits first and pushes the budgeted after its capped extent
+  (that is the meaning of "honor the drag").
+- **Open tasks still yield to real WALLS.** The capped fill stops at the next fixed/semi
+  anchored commitment, so a fixed meeting still shows at its time and the open task fills only
+  up to it. A budget-less semi-head/semi-tail is itself a *soft* wall: its presumed side is
+  clamped to the neighbouring wall so it never overlaps a real commitment.
+- **Still forward-only / terminating (R10 preserved in spirit):** a finite capped reservation
+  consumes space forward like any placement; it never induces backward motion. The cap keeps
+  it bounded.
+- **Labeled "open", never a number** — same never-disguise rule as the ML tags: a presumption
+  must not read as data. Pipeline cards show "open" where a budget would sit; the block shows
+  its capped span but is edge-styled as floating (§6), not as a committed duration.
 
 ### 3.10 Pause — G23/G25
 Pause splits: occupied part → history segment; unspent budget → a **budgeted "remainder"** in
