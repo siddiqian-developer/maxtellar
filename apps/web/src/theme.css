@@ -647,9 +647,9 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .ml-choice-headpill {
   flex: 0 1 auto;
   min-width: 0;
-  color: var(--on-accent); /* white text — needs the solid fill below to stay legible */
+  color: var(--on-accent); /* white text */
   font-weight: 500;
-  background: var(--accent-strong);
+  background: var(--accent-soft);
   padding: 3px 8px;        /* taller pill */
   border-radius: 8px;
   overflow-wrap: anywhere; /* break an over-long single token in place */
@@ -728,7 +728,7 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   width: 5px;
   height: 5px;
   border-radius: 50%;
-  background: var(--ink-faint);
+  background: var(--accent-strong); /* brand — marks a core/system-provided (built-in) item */
   opacity: 0.6;
   cursor: help;
 }

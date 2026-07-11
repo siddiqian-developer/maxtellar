@@ -107,11 +107,16 @@ export async function suggestSubhead(title: string, knownActivities: string[]): 
     }
   }
 
-  // 2) Cold-start fallback: compare against sub-head NAME embeddings.
+  // 2) Cold-start fallback: compare against sub-head NAME embeddings. Iterate only
+  // the CURRENT registry activities, never the whole cache — the name-vector cache
+  // is not pruned on delete, so a deleted sub-head (e.g. "cycling") lingers there and
+  // would otherwise self-match at ~1.0 and be wrongly returned as an existing pick.
   const nameVectors = await ensureNameVectors(knownActivities);
   let bestName: string | null = null;
   let bestSim = 0;
-  for (const [name, v] of Object.entries(nameVectors)) {
+  for (const name of knownActivities) {
+    const v = nameVectors[name];
+    if (!v) continue;
     const sim = cosine(vector, v);
     if (sim > bestSim) { bestSim = sim; bestName = name; }
   }

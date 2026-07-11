@@ -32,6 +32,21 @@ identically with ML off).
     rendered in a provisional style until confirmed/edited.
   - **Below threshold:** do NOT stay silent — offer a **create-new suggestion**, explicitly
     labeled as "suggest creating a new sub-head", never disguised as a registry match.
+  - **Both retrieval paths are scoped to the CURRENT registry** (2026-07-11): the kNN vote
+    **and** the name-fallback filter their candidates to activities still in the registry, so a
+    deleted sub-head never surfaces as an *existing* pick (only ever as "suggested new"). This
+    is the safety net regardless of the pruning below.
+  - **Deleting a sub-head FORGETS its pairings (2026-07-11):** deletion means "these
+    title→sub-head pairings were wrong / no longer wanted" — so `deleteActivity` (and
+    `deleteHead`, for each of its sub-heads) drops that activity's **title-corpus entries** and
+    its **name vector** (`forgetActivity` in `vectorStore.ts`). Without this, the pairings are
+    only *dormant* while the name is absent and would **resurrect** if a sub-head with the same
+    name is re-created — re-fighting the vote against any newer pairing (e.g. an old
+    `Cycling→Cycling` outvoting a deliberate `Cycling→Sports` retag). Forgetting makes a
+    same-name re-create start clean. (The corpus/name cache remain purely derived, rebuilt from
+    future task creations; the event log is the source of truth. **Reassign-on-delete** also
+    forgets, since it deletes the sub-head — the moved *tasks* are preserved, but their ML
+    training pairings are not re-homed.)
 
 **Feature 2 — sub-head → head suggestion (implemented 2026-07-10, revised 2026-07-11):** the
 same duality, wherever a brand-new sub-head needs a head — the Heads & Sub-heads config
@@ -74,9 +89,11 @@ silences the suggester for that session.
     intent). A title edit **never overwrites** a user-sourced sub-head. When the fresh
     suggestion *differs* from it, a **visible keep-mine-vs-use-suggested choice** appears below
     the field: the `suggested`/`suggested new` **tag/pill** followed by the proposed sub-head
-    name in **plain text** and, for an existing sub-head, its **head** — `in` + the head name
-    as a **subtly-filled pill** (a `suggested new` sub-head has no head yet, so none is shown),
-    a **Use this** action (swaps
+    name in **plain text** and its **head** — `in` + the head name as a **brand-tinted pill**.
+    For an existing sub-head that's its assigned head; for a `suggested new` sub-head the
+    head-suggester (Feature 2) is run on it too and a confidently-matched **existing** head is
+    shown as the suggested head (nothing shown when unconfident/"new"). A **Use this** action
+    (swaps
     it in — the swapped-in value is **still user-sourced**, so it too is protected on later
     edits), and **Keep mine**
     (dismisses the prompt for that suggestion). Nothing is applied silently. Clearing a

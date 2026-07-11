@@ -184,9 +184,18 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
     suggestion?.kind === "existing" ? suggestion.activity
     : suggestion?.kind === "new" ? title.trim()
     : null;
-  // The head the suggested sub-head lives under — only an existing sub-head has one
-  // (a "new" suggestion is a brand-new sub-head with no head assigned yet).
-  const suggestedHead = suggestion?.kind === "existing" ? headFor(suggestion.activity) : undefined;
+  // The head to show for the suggested sub-head. Existing sub-head → its assigned head.
+  // Brand-new sub-head → also run the head-suggester on it (§7.0.1 Feature 2) and show a
+  // confidently-matched EXISTING head as the suggestion (nothing when unconfident/"new").
+  const newSubheadHead = useHeadSuggestion(
+    suggestion?.kind === "new" ? (suggestedSubhead ?? "") : "",
+    false,
+    registry,
+  );
+  const suggestedHead =
+    suggestion?.kind === "existing" ? headFor(suggestion.activity)
+    : suggestion?.kind === "new" && newSubheadHead?.kind === "existing" ? newSubheadHead.head
+    : undefined;
   const [dismissedSuggestion, setDismissedSuggestion] = useState<string | null>(null);
   const offerSubheadChoice =
     !autofillSubhead &&
@@ -408,7 +417,12 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
                     {suggestedHead && <span className="ml-choice-in">in</span>}
                   </span>
                   {suggestedHead && (
-                    <strong className="ml-choice-headpill" data-tip="The head this suggested sub-head lives under">
+                    <strong
+                      className="ml-choice-headpill"
+                      data-tip={suggestion?.kind === "new"
+                        ? "Suggested head for this new sub-head"
+                        : "The head this sub-head lives under"}
+                    >
                       {suggestedHead}
                     </strong>
                   )}

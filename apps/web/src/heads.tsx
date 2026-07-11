@@ -7,6 +7,7 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { forgetActivity } from "./ml/vectorStore";
 
 /** head name -> its activity (sub-head) names. */
 export type HeadsRegistry = Record<string, string[]>;
@@ -32,10 +33,12 @@ interface HeadsApi {
   /** Adds the activity under `head`, creating the head if new. */
   addActivity: (head: string, activity: string) => void;
   /** Removes the activity from its head. Existing tasks keep their activityId
-   * string — the registry only stops listing/deriving it. */
+   * string — the registry only stops listing/deriving it. Also forgets the
+   * activity's ML title→sub-head pairings + name vector (§7.0.1). */
   deleteActivity: (head: string, activity: string) => void;
   /** Removes a head and all its sub-heads from the registry. No-op for
-   * BUILT_IN_HEADS. Existing tasks keep their headId/activityId untouched. */
+   * BUILT_IN_HEADS. Existing tasks keep their headId/activityId untouched.
+   * Forgets every removed sub-head's ML pairings (§7.0.1). */
   deleteHead: (head: string) => void;
 }
 
@@ -79,15 +82,20 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
       if (!existing || !existing.includes(activity)) return r;
       return { ...r, [head]: existing.filter((a) => a !== activity) };
     });
+    // Deletion means "forget these title→sub-head pairings" (§7.0.1): drop the
+    // ML corpus entries + name vector so a same-name re-create starts clean.
+    forgetActivity(activity);
   };
 
   const deleteHead = (head: string): void => {
     if (BUILT_IN_HEADS.includes(head)) return;
+    const subs = registry[head] ?? []; // capture before removal, to forget each
     setRegistry((r) => {
       if (!(head in r)) return r;
       const { [head]: _removed, ...rest } = r;
       return rest;
     });
+    subs.forEach(forgetActivity);
   };
 
   const headFor = (activity: string): string | undefined => {

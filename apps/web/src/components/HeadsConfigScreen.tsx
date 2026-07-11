@@ -14,6 +14,8 @@
 import { useEffect, useState } from "react";
 import type { Event, State } from "@maxtellar/core";
 import { useHeads, BUILT_IN_HEADS } from "../heads";
+import { useEscClose } from "../useEscClose";
+import { rehomeActivity } from "../ml/vectorStore";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
 
@@ -124,6 +126,11 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
 
   const cancelReassign = (): void => setReassign(null);
 
+  // Esc navigates one level back — to Settings (the screen this was opened from),
+  // same as the ‹ back button. But if the reassign panel is open, Esc closes THAT
+  // first (one level at a time), matching the general back-navigation pattern.
+  useEscClose(reassign ? cancelReassign : onBack);
+
   const confirmReassign = (): void => {
     if (!reassign || !reassignValue.trim()) return;
     const targetActivity = reassignValue.trim();
@@ -141,6 +148,9 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
         toHeadId: targetHead,
         toActivityId: targetActivity,
       });
+      // This is a MOVE, not a plain delete — carry the ML training to the target
+      // BEFORE deleting (which would otherwise forget it). §7.0.1.
+      rehomeActivity(reassign.activityId, targetActivity);
       deleteActivity(reassign.headId, reassign.activityId);
     } else {
       // Reassigning an entire head: every distinct sub-head actually used
@@ -153,6 +163,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
           toHeadId: targetHead,
           toActivityId: targetActivity,
         });
+        rehomeActivity(fromActivityId, targetActivity); // move the training too
       }
       deleteHead(reassign.headId);
     }

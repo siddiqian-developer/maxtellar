@@ -158,8 +158,17 @@ panel as more settings are added.
 
 **Heads & Sub-heads configuration — a full screen, not a modal:** reached via the Settings
 panel's "Manage heads & sub-heads →" link. Replaces the timeline+pipeline area entirely
-(back arrow returns to the main view — no overlay/scrim, this is real navigation, not a
-dialog). Two forms, **sub-head first** (revised 2026-07-10 — this is the primary flow: a
+(no overlay/scrim, this is real navigation, not a dialog).
+
+**Back-navigation is a stack, not a jump-to-root (rule — applies to every screen/panel, now
+and future):** **Esc and the back (‹) affordance do the same thing — return ONE level, to the
+screen you came from**, never straight to `main`/root and never closing everything. So the
+config screen's Esc/back returns to **Settings** (its opener), since that's where it was
+launched from. **Innermost first:** if a sub-panel is open on a screen (e.g. the config
+screen's reassign panel), Esc closes *that* first; the next Esc goes back a level. Only a
+**top-level** panel's Esc closes it outright (Settings→closed, TaskDrawer→closed). Every new
+nested screen wires this from the start via the shared `useEscClose` hook, pointed at its
+opener. Two forms, **sub-head first** (revised 2026-07-10 — this is the primary flow: a
 sub-head name, a head field (pick existing, type a new one, or leave it to the ML
 suggester), Add), then **"Add a head" second**, explicitly scoped to the one case the
 sub-head form can't cover — a head with no sub-heads yet (adding a sub-head above creates

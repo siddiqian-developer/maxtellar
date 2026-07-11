@@ -187,7 +187,7 @@ export function App(): JSX.Element {
       </div>
 
       {view === "headsConfig" ? (
-        <HeadsConfigScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => setView("main")} />
+        <HeadsConfigScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => { setView("main"); setSettingsOpen(true); }} />
       ) : (
         <>
           <Timeline state={state} />

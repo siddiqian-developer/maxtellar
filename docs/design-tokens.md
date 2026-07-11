@@ -188,7 +188,7 @@ it's read straight from the registry (§2.1 head/activity hierarchy). Uses the s
 (`flex-shrink: 0`); the **head pill** sits **beside** it and takes the remaining width.
 
 The **head** renders as a **subtly brand-filled pill** (`.ml-choice-headpill`: `background:
-accent-soft`, text `accent-strong`, `padding: 3px 8px`, `border-radius: 8px`) that **stays beside
+accent-soft`, text `on-accent` white, `padding: 3px 8px`, `border-radius: 8px`) that **stays beside
 the sub-head and never drops below it**. As a flex cell (`flex: 0 1 auto; min-width: 0`) it takes
 the remaining width and, when the head is long, **wraps its text INSIDE — the pill grows taller**
 rather than moving to the next line (`overflow-wrap: anywhere` breaks a single over-long token in
@@ -207,8 +207,9 @@ needed since it's visited rarely. Head delete (×) sits inline with the head nam
 (`.config-head-title`, flex gap 6px) — same `.chip-delete` quiet-ink-faint-to-danger style
 as sub-head chip deletes; simply absent (not disabled/greyed) for built-in heads.
 
-**Built-in marker** (`.built-in-dot`): a plain 5px circle, `ink-faint` at 60% opacity, no
-text at all — the tooltip ("Built-in — can't be deleted") only appears on hover. Registry
+**Built-in marker** (`.built-in-dot`): a plain 5px circle, **`accent-strong` (brand)** at 60%
+opacity — the brand tint marks it as a core/system-provided item; no text — the tooltip
+("Built-in — can't be deleted") only appears on hover. Registry
 list is sorted built-ins first (stable sort, order preserved within each group). This is
 the quietest possible signal: the missing delete button already communicates
 "protected"; the dot is just a secondary hint for *why*, not a loud "BUILT-IN" badge.
