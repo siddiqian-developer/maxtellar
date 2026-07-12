@@ -119,7 +119,31 @@ task's greed is scaled to its neighbour's *need*, never to who outranks whom.
   cases: vs nothing / vs firm / split among unscheduled). Still TODO: a budget-less **semi-head**
   as *subject* uses the older soft-wall clamp, not yet the 10 h/2 h/split rule; and a **semi-tail**
   *below* is currently treated as firm (2 h) rather than an even split — its anchored-end geometry
-  needs its own pass.
+  needs its own pass. (A **firm task contesting an open semi-tail's claim** is settled — G27.)
+
+### 3.9.1 Semi-tail compression floor & slide-at-floor — G27 (settled 2026-07-12)
+An **open semi-tail's** ballooned claim (start floats, end anchored) is **compressible from its
+floating start side** when a **firm** new task (fixed / budgeted / semi-head) contests the space —
+down to a **floor** (`semiTailFloor`, **1 h default; user-configurable, `SET_TAIL_FLOOR`**). The
+anchored end never moves during compression. Everything else about §3.9 is unchanged — this only
+adds the floor and what happens when it is reached:
+- **Above the floor:** the contesting task takes the freed earlier space; the semi-tail keeps
+  `max(floor, remaining)` ending at its anchor.
+- **At the floor, `isSlideable = true` → the semi-tail SLIDES:** it moves later *as a whole*
+  (anchored end yields, span stays at the floor), giving the contesting task **contiguous**
+  space before it. The new task never wraps around a slideable semi-tail.
+- **At the floor, `isSlideable = false` → firm obstacle, old business:** the pinned floor-span
+  semi-tail is an obstacle and the existing motions apply unchanged — a breakable contester
+  wraps itself around it; an unbreakable one frogleaps (§3.2/§3.3 discipline: the neighbor
+  reshapes itself, never applies force).
+- **A budgeted semi-tail is NOT compressed** — its budget is a definite need (the firm side of
+  G22's firm-vs-open axis); the floor is the open semi-tail's "definite need" equivalent.
+- **Open contesters don't trigger this** — an unscheduled/budget-less peer still goes through
+  G22's fair-share split, not compression.
+- Example (now = 2 PM, open semi-tail anchored to end 8 PM, ballooned 2 PM–8 PM, floor 1 h):
+  budgeted 2 h task → semi-tail 4 PM–8 PM, task 2 PM–4 PM. Budgeted 7 h task → semi-tail
+  compresses to its floor (7 PM–8 PM), 5 h freed is not enough → slideable: semi-tail slides to
+  9 PM–10 PM, task takes 2 PM–9 PM whole; unslideable: task wraps 2 PM–7 PM + 8 PM–10 PM.
 
 ### 3.10 Pause — G23/G25
 Pause splits: occupied part → history segment; unspent budget → a **budgeted "remainder"** in

@@ -11,15 +11,18 @@ import { useEscClose } from "../useEscClose";
 
 interface Props {
   openExtentCap: number;
+  semiTailFloor: number;
   dispatch: (e: Event) => void;
   onClose: () => void;
   onOpenHeadsConfig: () => void;
 }
 
-export function SettingsPanel({ openExtentCap, dispatch, onClose, onOpenHeadsConfig }: Props): JSX.Element {
-  const { timeFormat, setTimeFormat, devSandbox, setDevSandbox } = useSettings();
+export function SettingsPanel({ openExtentCap, semiTailFloor, dispatch, onClose, onOpenHeadsConfig }: Props): JSX.Element {
+  const { timeFormat, setTimeFormat, gridGranularity, setGridGranularity, devSandbox, setDevSandbox } = useSettings();
+  const gridOptions = [0, 5, 10, 15, 30] as const;
   useEscClose(onClose);
   const capHours = Math.round((openExtentCap / 60) * 10) / 10;
+  const floorHours = Math.round((semiTailFloor / 60) * 10) / 10;
 
   return (
     <div className="drawer-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
@@ -51,6 +54,24 @@ export function SettingsPanel({ openExtentCap, dispatch, onClose, onOpenHeadsCon
             </div>
           </div>
           <div className="field">
+            <label data-tip="Ruler graduation marks between the hour labels on the timeline. Off by default.">
+              Timeline grid
+            </label>
+            <div className="type-chips" role="radiogroup" aria-label="Timeline grid">
+              {gridOptions.map((g) => (
+                <button
+                  key={g}
+                  type="button"
+                  className={`type-chip${gridGranularity === g ? " active" : ""}`}
+                  data-status={g === 0 ? "unscheduled" : "semi-head"}
+                  onClick={() => setGridGranularity(g)}
+                >
+                  {g === 0 ? "Off" : `${g} min`}
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="field">
             <label data-tip="How far an open (unscheduled / budget-less) task fills the day before lower-priority tasks are placed after it (§3.9)">
               Open-task cap (hours)
             </label>
@@ -63,6 +84,22 @@ export function SettingsPanel({ openExtentCap, dispatch, onClose, onOpenHeadsCon
               onChange={(e) => {
                 const h = Number(e.target.value);
                 if (Number.isFinite(h) && h > 0) dispatch({ type: "SET_OPEN_CAP", minutes: Math.round(h * 60) });
+              }}
+            />
+          </div>
+          <div className="field">
+            <label data-tip="The minimum span an open end-anchored (semi-tail) task's claim can be compressed to by a new task; at the floor it slides later (if slideable) or stays put as an obstacle (§3.9.1)">
+              Semi-tail floor (hours)
+            </label>
+            <input
+              type="number"
+              min={0.5}
+              max={24}
+              step={0.5}
+              value={floorHours}
+              onChange={(e) => {
+                const h = Number(e.target.value);
+                if (Number.isFinite(h) && h > 0) dispatch({ type: "SET_TAIL_FLOOR", minutes: Math.round(h * 60) });
               }}
             />
           </div>

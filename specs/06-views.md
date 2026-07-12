@@ -17,6 +17,36 @@ One spine, multiple projections.
    dashed; budgeted = dashed top/bottom, solid left; fixed = all solid; semi-head = solid top,
    dashed bottom + left; semi-tail = solid bottom, dashed top + left. (Reads directly off
    §2.3's {start,end,budget} knowledge.)
+   **A pinned start/end (solid top/bottom) is drawn MORE prominently (2026-07-12):** those two
+   edges are thicker (2px) and a stronger ink (`ink-soft`) than the provisional dashed edges, so
+   an anchored coordinate reads at a glance.
+   **Every task box whispers its start/end clock time (2026-07-12):** the start (top) and end
+   (bottom) timestamp is shown aligned to that edge in the time gutter, smaller than an hour tick
+   so it never competes, and joined to the axis by a short **graduation line** (a ruler-style tick
+   from the number out to the axis). It reads in the main `ink` (readable, not dimmed). Its style
+   **follows the edge's border**: an **anchored** edge (solid — a pinned coordinate) reads
+   **upright**; a **floating** edge (dashed — presumed by the scheduler, reflows) reads **italic**
+   with a leading **"~"** ("≈, will move"). So `fixed` → both upright; `semi-head` → upright start,
+   ~italic end; `semi-tail` → ~italic start, upright end; `budgeted`/`unscheduled` → both ~italic;
+   an **open** (budget-less) task's end is a presumed cap, so it is always ~italic regardless of
+   timing. Gaps get no times; a split task labels only its real start (first part) and end (last
+   part), never an internal split boundary. **Coinciding times dedupe (2026-07-12):** where one
+   box's end lands on the next box's start (same minute), only the **later** task's label is kept
+   — a start outranks an end, since the start owns the boundary going forward.
+   **Hour vs task-time collision — offset + leader (2026-07-12):** a task time that would land on
+   top of an hour label is **pushed below the hour** and a **diagonal leader line** points back up
+   to its true edge on the axis (so the label clears the hour but still reads as belonging to that
+   edge). Up to **two** such labels stack under one hour (each a step lower); a rare third stays at
+   its edge without a leader rather than piling up. The offset label drops its own graduation tick
+   (the leader replaces it).
+   **Always-on hour graduation tick (2026-07-12):** every labelled hour also carries a short
+   **solid** tick on the axis, extending right off the axis line (stopping at the block inset so it
+   never touches a box). This is independent of the opt-in sub-hour grid below — hours always show
+   their tick.
+   **Sub-hour ruler graduation is OPT-IN (2026-07-12):** between the labelled hours the timeline
+   can show minor graduation ticks, controlled by **Settings → Timeline grid** with granularity
+   **Off / 5 / 10 / 15 / 30 min** and **defaulting to Off**. When on, ticks are drawn off the axis
+   (half-hour marks longer/stronger than the finer ticks); hours keep their existing label.
    **Running block (2026-07-11): full projected span, never shrinks.** The running task
    renders start → projected end at all times (countdown: `now + remaining`; stopwatch: open
    tail rides `now`), split two-tone by the seam: **spent above (stronger accent fill,
@@ -147,6 +177,13 @@ the task drawer (right-side card, scrim, sticky header, `Done` footer, Escape cl
 Holds the **Open-task cap (hours)** setting (2026-07-11): the `openExtentCap` from §3.9 —
 how far an open/budget-less task fills the day before lower-rank tasks land after it. Number
 field in hours (default 10); dispatches `SET_OPEN_CAP` (minutes) into the event-sourced state.
+Holds the **Semi-tail floor (hours)** setting (2026-07-12): the `semiTailFloor` from §3.9.1 —
+the minimum span an open semi-tail's claim can be compressed to before it slides (slideable) or
+pins as an obstacle. Number field in hours (default 1); dispatches `SET_TAIL_FLOOR` (minutes),
+same chrome and validation as the Open-task cap field.
+Holds the **Timeline grid** setting (2026-07-12, persisted `gridGranularity`): the sub-hour ruler
+graduation granularity — chips **Off / 5 / 10 / 15 / 30 min**, **default Off** — a display-only
+preference (localStorage, not event-sourced, like Clock format).
 Holds a **Dev sandbox** toggle (2026-07-11, persisted `devSandbox`): testing affordances
 only, never a semantics change — when on, the running task's pipeline card gains **⏩ +5m /
 +15m speed-up buttons** (budgeted-hue outline) that fast-forward logical `now` via a batch

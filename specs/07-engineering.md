@@ -23,8 +23,12 @@ identically with ML off).
   mean-pooled short-text/single-word embeddings have a high noise floor — unrelated words
   land at 0.48–0.66 cosine, genuinely related short phrases at 0.72+. One threshold across
   both paths let noise through.
-  - **Title-corpus kNN vote → 0.45 cosine.** Full-sentence embeddings, pooled over multiple
-    past titles — discriminative even at this level, the strong signal.
+  - **Title-corpus kNN vote → 0.65 cosine** (RECALIBRATED 2026-07-12 from 0.45, after the
+    vote force-matched unrelated titles — "Date with shazia" / "Car repair" → "Self Study").
+    Sentence-vs-sentence cosine has the same high noise floor as the short-text paths:
+    measured unrelated-title best matches land at **0.46–0.59**, genuinely related titles at
+    **0.67–0.84** ("Car repair" ~ "Fix the car brakes" = 0.79). 0.65 sits in the gap; the
+    earlier claim that full-sentence embeddings were "discriminative at 0.45" was wrong.
   - **Sub-head-NAME cold-start fallback → 0.60 cosine** (tuned down from an initial 0.68 —
     retune if false positives resurface). Single words/short phrases only, noisier; needs a
     higher bar than the title-corpus path to stay out of the noise floor.
@@ -32,50 +36,36 @@ identically with ML off).
     rendered in a provisional style until confirmed/edited.
   - **Below threshold:** do NOT stay silent — offer a **create-new suggestion**, explicitly
     labeled as "suggest creating a new sub-head", never disguised as a registry match.
-  - **The "new" name is GENERATED, not echoed (ADOPTED 2026-07-11; model TBD):** echoing the
-    whole title as the proposed new sub-head is unusable. Instead, an **on-device generative
-    (text2text) model** proposes a concise sub-head, **few-shot conditioned on the user's
-    existing `title → sub-head` pairings** so new names follow the user's own naming
-    *pattern/abstraction* (empty corpus → three universal SEED demonstrations fill in, since a
-    77M model can't follow the format zero-shot — tuned 2026-07-12 after live degeneration
-    ("- a - a - a"); as real pairings accumulate they replace the seeds and the user's style
-    dominates — e.g. once titles map to short activity nouns, "went for a swim at the pool" →
-    "Swimming", not the sentence). **Prompt is PURE pattern completion** (bare
-    `Task:/Category:` pairs, NO instruction line — a 77M model parrots instructions back,
-    seen live 2026-07-12). Decoding: `max_new_tokens: 8`, greedy, `repetition_penalty: 1.3`.
-    Post-processing (unit-tested against live outputs in `generate.test.ts`): strips a leading
-    `Category:` label; **truncates at a continued `Task:` marker** (the model answers, then
-    keeps completing the pattern — "Socialization Task: How to pay" → "Socialization");
-    extracts a **double**-quoted answer from prose wrappers (incl. an unclosed trailing quote;
-    apostrophes must not count as quotes — `I'm sorry` mangled into "M Sorry"); **truncates at
-    the first function word** ("Shopping for a new dress" → "Shopping"); caps at 2 words; and
-    **rejects** chat refusals ("I'm sorry…"), question-style prose ("What is the best way…"),
-    prompt-echo lines (checked on the full line, pre-slice), outputs with no name before the
-    first function word ("To fix a leak…"), and single-letter degeneration → all rejections
-    fall back to the title echo. This is real **generation**,
-    which the embedding model cannot do — hence a second, separate model. **Never load-bearing:**
-    if the generator is unavailable/slow/fails, it **falls back to the title echo** (current
-    behavior) — the app still works with ML off. On-device only (self-hosted like the embedding
-    model, per the law); no cloud. Output is post-processed (trim, cap length, Capitalize).
-  - **User-selectable model, lazy per-selection load (2026-07-11):** the app offers a **list of
-    generative models** (Settings); the user picks one. All candidate models are *hosted on the
-    server*, but **only the selected model is streamed into the browser**, on first use — never
-    all of them. Switching selection loads the newly-chosen model on demand (and drops the old
-    from memory). The model id lives in one config constant/registry so the list is easy to
-    extend. **Default is "Off" (echo the title)** — generation is opt-in, since it's a
-    multi-tens-to-hundreds-MB download; nothing downloads until the user selects a model.
-  - **Implementation (built 2026-07-11):** `ml/genModels.ts` (registry + `GEN_OFF`),
-    `ml/genWorker.ts` + `ml/genClient.ts` (a `text2text-generation` worker mirroring the
-    embed worker — one model held at a time, self-hosted under `public/models/`), `ml/generate.ts`
-    (`generateNewSubhead`: few-shot prompt from `loadTitleCorpus` pairings → post-process to a
-    1–3 word Capitalized name), `ml/useGeneratedSubhead.ts` (500ms-debounced hook, only fires
-    for a `"new"` suggestion with a model selected). Wired in `TaskDrawer.tsx`:
-    `proposedNew = generatedNew ?? title.trim()` feeds both the autofill and the choice-row
-    display; the autofill effect re-runs when the async name resolves, upgrading the echoed
-    title to the generated name while still app-sourced. Setting is `genModel` in `settings.tsx`,
-    picker in `SettingsPanel.tsx`. **Operational note:** a selected model only works once its
-    files are hosted at `public/models/<id>/` (same as the embedding model); until then it
-    fails closed → title echo.
+  - **The "new" name comes from a TAXONOMY CLASSIFIER, not a generative model (REVISED
+    2026-07-12):** echoing the whole title as the proposed new sub-head is unusable. The fix is
+    **classification, not generation**: the title's embedding (same `bge-small` model, same
+    `mlNameVectors` cache via `ensureNameVectors`) is compared against a **curated universal
+    activity taxonomy** (~50 labels: Socialization, Shopping, Finance, Repair, … — `TAXONOMY`
+    in `suggest.ts`, extendable) and a confident winner is proposed as the new sub-head's name
+    ("Alumni meetup" → "Socialization"). Zero extra download, deterministic (output is always a
+    real label, never hallucinated prose), instant. Labels already registered as sub-heads are
+    excluded from taxonomy candidates (matching them is the existing-match path's job).
+    **History (removed 2026-07-12):** an on-device generative namer (LaMini-Flan-T5-77M +
+    flan-t5-base, user-selectable, lazy-loaded, few-shot on the user's pairings) was built and
+    evaluated live first — at 77–250M parameters it produced coin-flip quality for a 360 MB
+    download (parroted prompts, refused chattily, copied example categories onto unrelated
+    titles), so it was removed wholesale. A **server-hosted LLM tier** (own server, e.g.
+    Ollama; local fallbacks preserved) is the anticipated future quality upgrade, consistent
+    with the cloud law above.
+  - **Precedence — existing sub-heads always outrank the taxonomy:** (1) title-corpus kNN vote
+    → existing; (2) registry-name fallback → existing; (3) taxonomy → NEW name; (4) nameless
+    "new" → title echo. Two bias rules, both settled 2026-07-12:
+    - **Don't force bad pairings:** a passing registry-name match (≥0.60) still yields to a
+      taxonomy label that beats it by `TAXONOMY_MARGIN` (0.05) — prefer existing on ties and
+      small deficits, yield when clearly worse.
+    - **Biased against echoing:** a wrong label costs one keystroke, an echo helps nobody. The
+      taxonomy threshold is split by title length — **multi-word titles 0.45**
+      (`TAXONOMY_THRESHOLD_MULTI`; sentence-vs-word cosines run structurally lower), **single
+      words 0.60** (`TAXONOMY_THRESHOLD_SINGLE`; single-word noise floor is high — "cycling" vs
+      "networking" = 0.577).
+    The `Suggestion` "new" variant carries an optional `name`; `TaskDrawer.tsx` uses
+    `proposedNew = suggestion.name ?? title.trim()`. Precedence + no-resurrection are covered
+    in `suggest.test.ts`.
   - **Dev/preview server must 404 missing `/models/` files, not SPA-fallback (fixed
     2026-07-11):** transformers.js probes *optional* model files (e.g. `added_tokens.json`) that
     many repos don't ship. A real static host 404s them and the library ignores it, but Vite's
@@ -89,8 +79,8 @@ identically with ML off).
     including an `index.html` SPA fallback from attempts made before the files were hosted.
     Poisoned entries are read back forever **without hitting the network**, so server-side
     fixes alone never resolve the load (diagnostic signature: `getModelJSON` JSON-parse error
-    with NO network request). `genWorker.ts`'s `purgePoisonedCache()` deletes any
-    `text/html` entries from that cache before each pipeline load, keeping valid cached
+    with NO network request). `embedWorker.ts`'s `purgePoisonedCache()` deletes any
+    `text/html` entries from that cache before the pipeline load, keeping valid cached
     weights intact.
   - **Both retrieval paths are scoped to the CURRENT registry** (2026-07-11): the kNN vote
     **and** the name-fallback filter their candidates to activities still in the registry, so a

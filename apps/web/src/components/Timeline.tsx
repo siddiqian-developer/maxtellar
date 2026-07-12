@@ -15,7 +15,7 @@ const PAST_WINDOW = 6 * 60;
 const FUTURE_WINDOW = 12 * 60;
 
 export function Timeline({ state }: { state: State }): JSX.Element {
-  const { timeFormat } = useSettings();
+  const { timeFormat, gridGranularity } = useSettings();
   const hhmm = (min: number): string => fmtClock(new Date(min * 60000), timeFormat === "12h");
   const scrollRef = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
@@ -42,6 +42,16 @@ export function Timeline({ state }: { state: State }): JSX.Element {
   const hourMarks: number[] = [];
   for (let m = Math.ceil(windowStart / 60) * 60; m <= windowEnd; m += 60) hourMarks.push(m);
 
+  // ruler graduation marks between the hours — opt-in (Settings → Timeline grid;
+  // 0 = off, the default). Ticks every `gridGranularity` min, the half-hour drawn
+  // longer/stronger; hours are skipped since they already carry a label.
+  const gradMarks: number[] = [];
+  if (gridGranularity > 0) {
+    for (let m = Math.ceil(windowStart / gridGranularity) * gridGranularity; m <= windowEnd; m += gridGranularity) {
+      if (m % 60 !== 0) gradMarks.push(m);
+    }
+  }
+
   const planItems = new Map(state.plan.map((i) => [i.id, i]));
 
   // §3.9 presumed extent is now a REAL capped reservation the scheduler lays
@@ -53,6 +63,51 @@ export function Timeline({ state }: { state: State }): JSX.Element {
     return it?.kind === "task" && it.budget === undefined;
   };
 
+  // Gutter timestamps for every task box: its start (first part) and end (last
+  // part). Deduped by minute — where a box's end coincides with the next box's
+  // start, keep the LATER task's label (a start outranks an end, since the start
+  // belongs to the task that occupies the boundary going forward).
+  const edgeAt = new Map<number, { min: number; anchored: boolean; isStart: boolean }>();
+  const putEdge = (min: number, anchored: boolean, isStart: boolean): void => {
+    const prev = edgeAt.get(min);
+    if (!prev || (isStart && !prev.isStart)) edgeAt.set(min, { min, anchored, isStart });
+  };
+  for (const p of state.placements) {
+    const item = planItems.get(p.itemId);
+    if (!item || item.kind !== "task" || p.parts.length === 0) continue;
+    const open = isOpen(p.itemId);
+    const topAnchored = item.timing === "fixed" || item.timing === "semi-head";
+    // An open task's end is a presumed cap — always floating, regardless of timing.
+    const bottomAnchored = (item.timing === "fixed" || item.timing === "semi-tail") && !open;
+    const first = p.parts[0];
+    const last = p.parts[p.parts.length - 1];
+    if (first) putEdge(first.start, topAnchored, true);
+    if (last) putEdge(last.end, bottomAnchored, false);
+  }
+  const edgeTimes = [...edgeAt.values()];
+
+  // A task edge-time whose y lands within OVERLAP_PX of an hour label would sit
+  // on top of it. Push such labels below the hour and draw a diagonal leader back
+  // to the true edge. Stack up to MAX_STACK per hour; a further one (rare) stays
+  // at its edge without a leader rather than piling up.
+  const OVERLAP_PX = 11;
+  const OFFSET_BASE = 14; // first offset step, clearing the hour label
+  const OFFSET_STEP = 15; // extra drop per stacked label
+  const MAX_STACK = 2;
+  const stackedPerHour = new Map<number, number>();
+  const renderedEdges = edgeTimes
+    .slice()
+    .sort((a, b) => a.min - b.min)
+    .map((e) => {
+      const edgeY = y(e.min);
+      const hourMin = Math.round(e.min / 60) * 60;
+      const collides = Math.abs(edgeY - y(hourMin)) < OVERLAP_PX;
+      const rank = stackedPerHour.get(hourMin) ?? 0;
+      if (!collides || rank >= MAX_STACK) return { ...e, edgeY, tsY: edgeY, offset: false };
+      stackedPerHour.set(hourMin, rank + 1);
+      return { ...e, edgeY, tsY: y(hourMin) + OFFSET_BASE + rank * OFFSET_STEP, offset: true };
+    });
+
   return (
     <div className="timeline-wrap">
       <div className="timeline-scroll" ref={scrollRef} onScroll={onScroll}>
@@ -61,6 +116,11 @@ export function Timeline({ state }: { state: State }): JSX.Element {
             <div key={m} className="tick-label num" style={{ top: y(m) }}>
               {hhmm(m)}
             </div>
+          ))}
+          {/* always-on solid graduation tick on the axis at each labelled hour,
+              independent of the opt-in sub-hour grid */}
+          {hourMarks.map((m) => (
+            <div key={`ht${m}`} className="hour-tick" style={{ top: y(m) }} />
           ))}
 
           {/* record — above now, frozen */}
@@ -104,6 +164,15 @@ export function Timeline({ state }: { state: State }): JSX.Element {
             );
           })()}
 
+          {/* graduation ticks (opt-in) */}
+          {gradMarks.map((m) => (
+            <div
+              key={`g${m}`}
+              className={`grad-mark ${m % 30 === 0 ? "grad-half" : "grad-5"}`}
+              style={{ top: y(m) }}
+            />
+          ))}
+
           {/* plan — below now, provisional, reflowing. Floating tasks render
               at their PRESUMED extent (display only) with an "open" label. */}
           {state.placements.flatMap((p) => {
@@ -130,6 +199,44 @@ export function Timeline({ state }: { state: State }): JSX.Element {
               </div>
             ));
           })}
+
+          {/* Every task box whispers its start (top) and end (bottom) clock time in
+              the gutter, aligned to the edge. Style follows the border: an ANCHORED
+              edge (solid — pinned) reads upright; a FLOATING edge (dashed — presumed,
+              reflows) reads italic with a leading "~". Gaps get none; a split task
+              labels only its real start (first part) and end (last part).
+              Deduped by minute: where two coincide (one box's end == the next box's
+              start) only the LATER task's label is kept — a start outranks an end.
+              Where a label would collide with an hour label it is pushed below and a
+              diagonal leader (drawn in the SVG layer) points back to its true edge. */}
+          <svg
+            className="leader-layer"
+            width={64}
+            height={canvasH}
+            style={{ position: "absolute", left: -64, top: 0, overflow: "visible" }}
+            aria-hidden="true"
+          >
+            {renderedEdges.filter((e) => e.offset).map((e) => (
+              // gutter coords: SVG x=0 is the gutter's left, x=64 is the axis. The
+              // leader runs from the timestamp's right end up to the edge, then a
+              // short horizontal tick into the axis (matching the graduation line).
+              <polyline
+                key={`l${e.min}-${e.isStart ? "s" : "e"}`}
+                className="edge-leader"
+                points={`45,${e.tsY} 56,${e.edgeY} 64,${e.edgeY}`}
+                fill="none"
+              />
+            ))}
+          </svg>
+          {renderedEdges.map((e) => (
+            <span
+              key={`${e.min}-${e.isStart ? "s" : "e"}`}
+              className={`edge-time num ${e.anchored ? "edge-time-anchored" : "edge-time-floating"}${e.offset ? " edge-time-offset" : ""}`}
+              style={{ top: e.offset ? e.tsY : e.edgeY }}
+            >
+              {e.anchored ? "" : "~"}{hhmm(e.min)}
+            </span>
+          ))}
 
           {/* the seam — where uncertain plan crystallizes into certain record.
               No time label (the global clock already shows it) — just a dot

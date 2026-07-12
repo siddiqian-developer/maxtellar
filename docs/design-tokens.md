@@ -150,6 +150,31 @@ emoji cross is full platform saturation with zero theme awareness.
   element's background pairing before changing the shared token further.
 - Seam duality: blocks above `now` solid/settled (past-card, hairline border); below
   `now` provisional (plan-card, dashed ink-faint border; anchored → solid ink-soft border).
+  A **pinned** start/end edge (solid top/bottom on `fixed`/`semi-head`/`semi-tail`) is drawn
+  **2px** wide in `ink-soft` — thicker + stronger than the 1px dashed provisional edges — so the
+  anchored coordinate stands out. **Every task box** also carries a whispered start/end timestamp
+  (`.edge-time`): gutter-aligned to the edge (`left: -64px`, `width: 56px`, right-aligned),
+  `font-size: 10px`, main `ink` (readable), `pointer-events: none` — smaller than the 11px hour
+  tick so it confirms rather than competes. A **graduation line** (`.edge-time::after`: an 8px
+  `ink-faint` top-border tick at `right: -8px`) joins the number to the axis, ruler-style. Its
+  emphasis follows the edge's border by **style, not dimming**: `.edge-time-anchored` (solid/pinned)
+  = upright; `.edge-time-floating` (dashed/presumed) = `italic` with a leading `~` in the markup (≈
+  "will reflow"). Open tasks' end is always floating. Coinciding times dedupe to the later task's
+  (start outranks end).
+- **Hour-collision offset + leader:** a `.edge-time` that lands within ~11px of an hour label is
+  pushed below the hour (`.edge-time-offset`: `width: 44px`, own `::after` graduation `display:
+  none`) and stacked up to 2 per hour (`OFFSET_BASE 14px` + `OFFSET_STEP 15px` in `Timeline.tsx`);
+  a **diagonal leader** back to the true edge is drawn in an SVG gutter overlay (`.leader-layer`,
+  `left: -64px`, gutter coords x=0→64 axis) as a `.edge-leader` polyline (`stroke: ink-faint`,
+  `stroke-width: 1`): from the timestamp's right end up to the edge, then a short horizontal tick
+  into the axis.
+- **Always-on hour graduation tick (`.hour-tick`):** a solid `ink-faint` `border-top` tick at each
+  labelled hour, `left: 0; width: 8px` — extends right off the axis, stopping at the block inset
+  (blocks start at `left: 8px`) so it never touches a box. Independent of the opt-in grid below.
+- **Timeline ruler graduation (opt-in):** minor ticks between the hour labels, off by default.
+  `.grad-mark` sits on the axis (`left: 0`, `border-top: 1px`); `.grad-5` (fine ticks) `width: 4px`
+  `hairline`; `.grad-half` (half-hour) `width: 9px` `ink-faint`. Settings → Timeline grid picks the
+  interval (Off / 5 / 10 / 15 / 30 min); the half-hour is always the stronger tick when visible.
 - No gradients, no glass, no glow.
 
 ## Semantic action-button colors (law — applies to every action button, now and future)

@@ -93,15 +93,26 @@ export function snapTask(
     }
   }
 
-  // --- flags follow the matrix ----------------------------------------------
-  const canon = canonicalFlags(task.timing, task.ommf);
-  if (task.slideable !== canon.slideable) {
-    task.slideable = canon.slideable;
-    notes.push({ field: "slideable", message: `derived from type: ${canon.slideable}` });
+  // --- flags: snap only CONFIRMED-INVALID combinations (§2.5 matrix) --------
+  // Maximal editability: a semi/unscheduled task's slideability and a budgeted
+  // task's unbreakability are legitimate user choices (e.g. an unslideable
+  // semi-tail pins at its floor instead of sliding, §3.9.1) — never derived
+  // away. Only the matrix's four contradictions are snapped.
+  if (task.timing === "fixed" && task.slideable) {
+    task.slideable = false;
+    notes.push({ field: "slideable", message: "fixed is never slideable; snapped" });
   }
-  if (task.breakable !== canon.breakable) {
-    task.breakable = canon.breakable;
-    notes.push({ field: "breakable", message: `derived from type/ommf: ${canon.breakable}` });
+  if (task.timing === "budgeted" && !task.slideable) {
+    task.slideable = true;
+    notes.push({ field: "slideable", message: "budgeted always slides; snapped" });
+  }
+  if (task.timing !== "budgeted" && task.breakable) {
+    task.breakable = false;
+    notes.push({ field: "breakable", message: "only budgeted is breakable; snapped" });
+  }
+  if (task.ommf && task.breakable) {
+    task.breakable = false;
+    notes.push({ field: "breakable", message: "ommf is never breakable; snapped" });
   }
 
   // --- future-only anchors for proposals (G5) -------------------------------

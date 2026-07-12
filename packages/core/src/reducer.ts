@@ -34,12 +34,14 @@ function rankAfterTarget(target: string, next: string | null): string {
 
 export const DEFAULT_MIN_FRAGMENT: Dur = 5;
 export const DEFAULT_OPEN_EXTENT_CAP: Dur = 600; // 10h (§3.9)
+export const DEFAULT_SEMI_TAIL_FLOOR: Dur = 60; // 1h (§3.9.1, G27)
 
 export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT): State {
   return {
     now,
     minFragment,
     openExtentCap: DEFAULT_OPEN_EXTENT_CAP,
+    semiTailFloor: DEFAULT_SEMI_TAIL_FLOOR,
     running: null,
     history: [],
     plan: [],
@@ -92,6 +94,7 @@ function resettle(s: State): State {
       cursor: cursorOf(s),
       minFragment: s.minFragment,
       openExtentCap: s.openExtentCap,
+      semiTailFloor: s.semiTailFloor,
     }),
   };
 }
@@ -403,6 +406,14 @@ export function reduce(state: State, event: Event): State {
       // below it would make open tasks smaller than the fragment floor).
       const cap = Math.max(state.minFragment, Math.round(event.minutes));
       return resettle({ ...state, openExtentCap: cap });
+    }
+
+    case "SET_TAIL_FLOOR": {
+      // §3.9.1 (G27): change the open semi-tail compression floor; re-settle
+      // so contested claims re-lay out. Floored at minFragment for the same
+      // reason as SET_OPEN_CAP.
+      const floor = Math.max(state.minFragment, Math.round(event.minutes));
+      return resettle({ ...state, semiTailFloor: floor });
     }
 
     case "LOG_CHANNEL": {

@@ -220,6 +220,7 @@ export function App(): JSX.Element {
       {settingsOpen && (
         <SettingsPanel
           openExtentCap={state.openExtentCap}
+          semiTailFloor={state.semiTailFloor}
           dispatch={(e) => void dispatch(e)}
           onClose={() => setSettingsOpen(false)}
           onOpenHeadsConfig={() => { setSettingsOpen(false); setView("headsConfig"); }}

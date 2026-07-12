@@ -41,6 +41,7 @@ export class EventStore {
       state = JSON.parse(snap.stateJson) as State;
       // Back-compat: snapshots predating a State field get the default.
       if (state.openExtentCap === undefined) state.openExtentCap = 600;
+      if (state.semiTailFloor === undefined) state.semiTailFloor = 60;
       from = snap.uptoSeq;
     } else {
       // The log must FULLY determine state (event-sourcing): state always

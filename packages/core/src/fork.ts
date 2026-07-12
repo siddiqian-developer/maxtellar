@@ -26,7 +26,14 @@ export function fork(live: State): Sandbox {
   return {
     frozenNow,
     plan,
-    preview: () => settle({ plan, cursor: frozenCursor, minFragment: live.minFragment }),
+    preview: () =>
+      settle({
+        plan,
+        cursor: frozenCursor,
+        minFragment: live.minFragment,
+        openExtentCap: live.openExtentCap,
+        semiTailFloor: live.semiTailFloor,
+      }),
   };
 }
 

@@ -194,6 +194,71 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   transform: translateY(-50%);
 }
 
+/* Always-on solid graduation tick at each labelled hour — a short line extending
+   RIGHT off the axis (stops at the block inset, x=0→8, so it never touches a box).
+   Shown regardless of the opt-in sub-hour grid. */
+.hour-tick {
+  position: absolute;
+  left: 0;
+  width: 8px;
+  border-top: 1px solid var(--ink-faint);
+  pointer-events: none;
+}
+
+/* Ruler graduation marks on the time axis between the labelled hours — short ticks
+   extending right off the axis line. Half-hour marks are longer/stronger than the
+   5-minute marks, hours already carry a label. */
+.grad-mark {
+  position: absolute;
+  left: 0;
+  border-top: 1px solid var(--hairline);
+  pointer-events: none;
+}
+.grad-5 { width: 4px; }
+.grad-half { width: 9px; border-top-color: var(--ink-faint); }
+
+/* Every task box whispers its start/end clock time in the gutter, aligned to the
+   edge. The style mirrors the border language: an ANCHORED edge (solid — pinned)
+   reads upright; a FLOATING edge (dashed — presumed, reflows) reads italic with a
+   leading "~". Both share the same readable ink; a short graduation line (__) ties
+   each time to the axis, ruler-style. Smaller than an hour tick so they don't compete. */
+.edge-time {
+  position: absolute;
+  left: -64px;
+  width: 56px;
+  text-align: right;
+  font-size: 10px;
+  color: var(--ink);
+  transform: translateY(-50%);
+  pointer-events: none;
+}
+/* the graduation line: a short tick from the timestamp out to the time axis */
+.edge-time::after {
+  content: "";
+  position: absolute;
+  right: -8px;
+  top: 50%;
+  width: 8px;
+  border-top: 1px solid var(--ink-faint);
+}
+/* anchored: a pinned coordinate — upright */
+.edge-time-anchored { font-style: normal; }
+/* floating: presumed by the scheduler, shifts on reflow — italic + "~" ≈ marker */
+.edge-time-floating { font-style: italic; }
+
+/* Offset (collision) variant: pushed below the hour label; its own graduation tick
+   is suppressed — the diagonal leader (`.edge-leader`) points back to the true edge
+   instead. Narrower so it ends further from the axis, leaving room for the leader. */
+.edge-time-offset { width: 44px; }
+.edge-time-offset::after { display: none; }
+/* diagonal leader from an offset timestamp up to its edge on the axis */
+.edge-leader {
+  stroke: var(--ink-faint);
+  stroke-width: 1;
+  fill: none;
+}
+.leader-layer { pointer-events: none; }
+
 .block {
   position: absolute;
   left: 8px;
@@ -821,6 +886,13 @@ button.dev-speed:hover { background: color-mix(in srgb, var(--st-budgeted) 10%, 
 .block.plan[data-timing="fixed"]       { border-style: solid; }
 .block.plan[data-timing="semi-head"]   { border-style: dashed; border-top-style: solid; }
 .block.plan[data-timing="semi-tail"]   { border-style: dashed; border-bottom-style: solid; }
+
+/* A pinned (solid) START/END edge is a hard fact — draw it MORE prominently than
+   the provisional dashed edges: thicker (2px) and in a stronger ink so the anchored
+   coordinate reads at a glance. Only the START (top) and END (bottom) edges. */
+.block.plan[data-timing="fixed"]     { border-top-width: 2px; border-bottom-width: 2px; border-top-color: var(--ink-soft); border-bottom-color: var(--ink-soft); }
+.block.plan[data-timing="semi-head"] { border-top-width: 2px; border-top-color: var(--ink-soft); }
+.block.plan[data-timing="semi-tail"] { border-bottom-width: 2px; border-bottom-color: var(--ink-soft); }
 
 /* plan blocks tinted by timing type — same state-hue palette as the pipeline
    badges / drawer chips (one hue per type). Left accent bar + soft fill;

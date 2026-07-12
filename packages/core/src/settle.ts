@@ -21,8 +21,12 @@ interface Wall {
   itemId: string;
   start: Min;
   end: Min;
-  /** semi-tail walls may compress: start may move later, down to end − minFragment. */
+  /** OPEN semi-tail walls may compress under a firm contester (§3.9.1, G27):
+   * start may move later, down to end − semiTailFloor. Unset = incompressible. */
   compressibleTo?: Min;
+  /** §3.9.1: at the floor, a slideable open semi-tail SLIDES later as a whole
+   * (anchored end yields) instead of pinning as an obstacle. */
+  slideable?: boolean;
   /** budget-less anchored wall (presumed extent) — tail/head clamps to a
    * neighbouring wall so the presumption never overlaps a real commitment. */
   soft?: boolean;
@@ -35,6 +39,9 @@ interface SettleInput {
   /** §3.9: budget-less (open) tasks reserve their presumed extent up to this
    * cap. Optional for back-compat; defaults to 10h. */
   openExtentCap?: Dur;
+  /** §3.9.1 (G27): the floor an open semi-tail's claim can be compressed to by
+   * a firm contester. Optional for back-compat; defaults to 1h. */
+  semiTailFloor?: Dur;
 }
 
 const isTask = (i: PlanItem): i is UnstartedTask => i.kind === "task";
@@ -46,7 +53,7 @@ const isOpen = (t: UnstartedTask): boolean => t.budget === undefined;
 /** A task acts as a WALL when it has an anchored coordinate it cannot leave.
  * `soft` walls are budget-less anchored tasks whose (presumed) tail may be
  * clamped by a following wall so it never overlaps a real commitment. */
-function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur): Wall | null {
+function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur, tailFloor: Dur): Wall | null {
   switch (t.timing) {
     case "fixed":
       return { itemId: t.id, start: t.anchorStart!, end: t.anchorEnd! };
@@ -58,11 +65,16 @@ function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur): Wall | null {
     }
     case "semi-tail": {
       const budget = t.budget ?? openCap;
+      // §3.9.1 (G27): only an OPEN semi-tail's ballooned claim is compressible
+      // (down to the floor) — a budgeted semi-tail's budget is a definite need
+      // and is never compressed by a contester.
       return {
         itemId: t.id,
         start: t.anchorEnd! - budget,
         end: t.anchorEnd!,
-        compressibleTo: t.anchorEnd! - minFragment,
+        ...(isOpen(t)
+          ? { compressibleTo: t.anchorEnd! - Math.max(minFragment, tailFloor), slideable: t.slideable }
+          : {}),
         soft: isOpen(t),
       };
     }
@@ -82,7 +94,13 @@ const CROWDED_CAP: Dur = 120;
 const isFirm = (t: UnstartedTask): boolean =>
   t.timing === "fixed" || t.timing === "budgeted" || t.timing === "semi-head";
 
-export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: SettleInput): Placement[] {
+export function settle({
+  plan,
+  cursor,
+  minFragment,
+  openExtentCap = 600,
+  semiTailFloor = 60,
+}: SettleInput): Placement[] {
   const placements = new Map<string, Placement>();
   const squeezeTol = minFragment - 1;
 
@@ -115,7 +133,7 @@ export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: Settl
   const rawWalls: Wall[] = [];
   for (const item of plan) {
     if (!isTask(item)) continue;
-    const w = wallOf(item, minFragment, openExtentCap);
+    const w = wallOf(item, minFragment, openExtentCap, semiTailFloor);
     if (w) rawWalls.push(w);
   }
   rawWalls.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -179,8 +197,56 @@ export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: Settl
     return w ? w.start - ptr : Number.POSITIVE_INFINITY;
   };
 
+  // §3.9.1 (G27): open semi-tails displaced by SLIDE, awaiting re-placement
+  // right after the contester that displaced them.
+  const slidTails: Wall[] = [];
+
+  /** §3.9.1 (G27): a firm contester needing `needed` minutes compresses the
+   * blocking open semi-tail from its floating start, down to the floor. At the
+   * floor: slideable → the semi-tail is unpinned (slides after the contester,
+   * via `slidTails`); unslideable → it stays a firm obstacle (old business:
+   * wrap/frogleap). Loops because unpinning may expose another compressible
+   * wall behind it. */
+  const makeRoom = (needed: Dur): void => {
+    for (;;) {
+      // NOT skipWalls(): a ballooned semi-tail typically starts AT ptr, and
+      // skipWalls would jump past it before it could be compressed. Advance
+      // only over walls fully behind ptr; the first wall overlapping or ahead
+      // of ptr is the candidate obstacle.
+      while (wallIdx < walls.length && walls[wallIdx]!.end <= ptr) wallIdx++;
+      const w = walls[wallIdx];
+      if (!w || w.start - ptr >= needed) return;
+      if (w.compressibleTo === undefined) return; // not an open semi-tail — firm
+      if (w.compressibleTo > w.start) {
+        // Compress just enough for the contester, never past the floor. The
+        // anchored end never moves; the claim's placement shrinks with it.
+        w.start = Math.min(w.compressibleTo, ptr + needed);
+        const p = placements.get(w.itemId)!;
+        p.parts = w.start < w.end ? [{ start: w.start, end: w.end }] : [];
+        if (w.start - ptr >= needed) return;
+      }
+      if (!w.slideable) return; // pinned at the floor — obstacle, old motions apply
+      // SLIDE: unpin the floor-span semi-tail; it re-lands after the contester.
+      walls.splice(wallIdx, 1);
+      slidTails.push(w);
+    }
+  };
+
+  /** Re-place slid semi-tails (floor span, anchored end yielded) contiguously
+   * after the contester, clamped by the next wall like any soft claim. */
+  const flushSlidTails = (): void => {
+    for (const w of slidTails) {
+      const span = w.end - w.start;
+      const width = Math.min(span, slotWidth());
+      const parts: Part[] = width > 0 ? [{ start: ptr, end: ptr + width }] : [];
+      placements.set(w.itemId, { itemId: w.itemId, parts, squeezedDeficit: 0, overflowDeficit: 0 });
+      ptr += width;
+    }
+    slidTails.length = 0;
+  };
+
   for (const item of plan) {
-    if (isTask(item) && wallOf(item, minFragment, openExtentCap)) continue; // walls already placed
+    if (isTask(item) && wallOf(item, minFragment, openExtentCap, semiTailFloor)) continue; // walls already placed
 
     // Open (budget-less) UNSCHEDULED task: fills the current free slot up to
     // its fair-share cap (§3.9 — 10h uncontested / 2h yielding / split among
@@ -228,6 +294,7 @@ export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: Settl
       // squeeze up to tolerance against the first obstacle, else split across slots.
       let firstSlot = true;
       while (deficit > 0) {
+        makeRoom(deficit); // §3.9.1: compress/slide an open semi-tail ahead first
         skipWalls();
         const width = slotWidth();
         if (width >= deficit) {
@@ -263,6 +330,7 @@ export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: Settl
     } else {
       // FROGLEAP (unbreakable): whole body into the first slot that fits.
       for (;;) {
+        makeRoom(deficit); // §3.9.1: compress/slide an open semi-tail ahead first
         skipWalls();
         const width = slotWidth();
         if (width >= deficit) {
@@ -280,6 +348,8 @@ export function settle({ plan, cursor, minFragment, openExtentCap = 600 }: Settl
         wallIdx++;
       }
     }
+
+    flushSlidTails(); // §3.9.1: slid semi-tails land right after their contester
 
     placements.set(t.id, {
       itemId: t.id,

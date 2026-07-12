@@ -11,9 +11,13 @@
 import { embed } from "./embedClient";
 import { loadTitleCorpus, loadNameVectors, saveNameVector, addTitleEntry } from "./vectorStore";
 
-/** Threshold for the title-corpus kNN vote (full-sentence embeddings — the
- * strong signal, discriminative even at this level). */
-export const CONFIDENCE_THRESHOLD = 0.45;
+/** Threshold for the title-corpus kNN vote. Recalibrated 2026-07-12 (from
+ * 0.45, which force-matched unrelated titles to whatever sub-head dominated
+ * the corpus — "Car repair" → "Self Study"): sentence-vs-sentence cosine has
+ * the same high noise floor as the short-text paths — unrelated titles' best
+ * matches measure 0.46–0.59, genuinely related titles 0.67–0.84 ("Car repair"
+ * vs "Fix the car brakes" = 0.79). 0.65 sits in the measured gap. */
+export const CONFIDENCE_THRESHOLD = 0.65;
 /** Threshold for the title→sub-head cold-start NAME fallback (comparing a
  * full title against bare sub-head names). Calibrated 2026-07-10: bge-small
  * mean-pooled short-text/single-word embeddings have a high noise floor —
