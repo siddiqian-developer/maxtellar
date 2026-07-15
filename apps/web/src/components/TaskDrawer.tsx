@@ -21,7 +21,7 @@ import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
 import { recordTitleActivity } from "../ml/suggest";
 import { useDecompositionSuggestion } from "../ml/useDecompositionSuggestion";
-import { recordDecomposition } from "../ml/decompose";
+import { recordDecomposition, suggestDecomposition } from "../ml/decompose";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 
 interface Props {
@@ -314,6 +314,25 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   const useDecomposition = (): void => {
     if (!decompSuggestion) return;
     setSubtasks(decompSuggestion.children.map((c) => ({ title: c.title, budgetStr: fmtDurUnits(c.budget) })));
+  };
+  // Explicit on-demand "Suggest subtasks" — runs the suggester now (semantic
+  // match infers a breakdown from SIMILAR past tasks, so it works for tasks
+  // never composed before). Reports plainly when nothing similar is found.
+  const [decompMsg, setDecompMsg] = useState<string | null>(null);
+  const onSuggestSubtasks = (): void => {
+    const t = title.trim();
+    if (!t) { setDecompMsg("Enter a title first."); return; }
+    setDecompMsg("Looking for a similar past task…");
+    void suggestDecomposition(t, aiLevels.decompose)
+      .then((s) => {
+        if (s) {
+          setSubtasks(s.children.map((c) => ({ title: c.title, budgetStr: fmtDurUnits(c.budget) })));
+          setDecompMsg(`From a ${s.source === "exact" ? "past" : "similar"} task: “${s.fromTitle}”.`);
+        } else {
+          setDecompMsg("No similar past breakdown found yet — add subtasks manually and I'll learn it.");
+        }
+      })
+      .catch(() => setDecompMsg(null));
   };
 
   const timing = useMemo(() => deriveTiming(startMin, endMin, budgetMin), [startMin, endMin, budgetMin]);
@@ -870,13 +889,26 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
               </div>
               </div>
             ))}
-            <button
-              type="button"
-              className="subtask-add"
-              onClick={() => setSubtasks((xs) => [...xs, { title: "", budgetStr: fmtDurUnits(DEFAULT_BUDGET) }])}
-            >
-              + Add subtask
-            </button>
+            <div className="subtask-actions">
+              <button
+                type="button"
+                className="subtask-add"
+                onClick={() => setSubtasks((xs) => [...xs, { title: "", budgetStr: fmtDurUnits(DEFAULT_BUDGET) }])}
+              >
+                + Add subtask
+              </button>
+              {aiLevels.decompose !== "deterministic" && (
+                <button
+                  type="button"
+                  className="subtask-suggest"
+                  onClick={onSuggestSubtasks}
+                  data-tip="Suggest a breakdown from a similar task you've composed before (on-device AI). Works even for a task you've never broken down — it matches by meaning."
+                >
+                  ✨ Suggest subtasks (AI)
+                </button>
+              )}
+            </div>
+            {decompMsg && <div className="meta" style={{ marginTop: 4 }}>{decompMsg}</div>}
           </div>
           {adjustments.length > 0 && (
             <div className="form-warning" role="status">

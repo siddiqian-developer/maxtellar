@@ -89,6 +89,33 @@ describe("start rules (locked from sheet study)", () => {
   });
 });
 
+describe("priority is entry order, not timing type (2026-07-15)", () => {
+  it("a newly-added Fixed task yields to earlier-added work and notifies", () => {
+    let s = initialState(T(9, 0));
+    s = reduceAll(s, [
+      mkTask("B", { timing: "budgeted", budget: 60 }), // occupies 9:00–10:00
+      // Fixed start=now, added AFTER B → lower priority, must land after it.
+      mkTask("F", { timing: "fixed", anchorStart: T(9, 0), anchorEnd: T(9, 30), slideable: false, breakable: false }),
+    ]);
+    const f = s.plan.find((i) => i.id === "F") as UnstartedTask;
+    expect(f.anchorStart).toBe(T(10, 0));
+    expect(f.anchorEnd).toBe(T(10, 30));
+    expect(s.notice?.text).toMatch(/moved later/);
+    expect(checkInvariants(s)).toEqual([]);
+  });
+
+  it("a Fixed task added into free future space keeps its time (no yield, no notice)", () => {
+    let s = initialState(T(9, 0));
+    s = reduceAll(s, [
+      mkTask("B", { timing: "budgeted", budget: 60 }),
+      mkTask("F", { timing: "fixed", anchorStart: T(14, 0), anchorEnd: T(14, 30), slideable: false, breakable: false }),
+    ]);
+    const f = s.plan.find((i) => i.id === "F") as UnstartedTask;
+    expect(f.anchorStart).toBe(T(14, 0));
+    expect(s.notice).toBeUndefined();
+  });
+});
+
 describe("channels & accounting identity", () => {
   it("wall = spent + wasted + managed + breaks; reattribution conserves total", () => {
     let s = initialState(T(9, 0));

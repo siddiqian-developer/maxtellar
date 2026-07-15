@@ -335,15 +335,39 @@ export function reduce(state: State, event: Event): State {
       const rank = event.task.rank ?? rankAfter(state.plan.length ? state.plan[state.plan.length - 1]!.rank : null);
       const draft: UnstartedTask = { kind: "task", ...event.task, id, rank } as UnstartedTask;
       const { task: snapped } = snapTask(draft, state.minFragment, state.now);
-      // G4/G5: an anchored proposal lands at the nearest legal coordinates,
-      // never overlapping an existing wall. (Never says no — relocates.)
-      const walls = s1.plan
+      // G4/G5 + priority (2026-07-15): an anchored proposal lands at the nearest
+      // legal coordinates. PRIORITY IS ENTRY ORDER, not timing type — a newly
+      // added task ranks LAST, so it yields to EVERY existing task regardless of
+      // its own timing (a late-added Fixed task does NOT preempt earlier work).
+      // So the obstacles are the current occupied EXTENTS of all existing plan
+      // tasks (from their placements), plus anchored wall intervals for any not
+      // yet placed. Only anchored proposals actually relocate (placeAnchored
+      // leaves budgeted/unscheduled tasks untouched).
+      const occupied = s1.placements
+        .filter((p) => (s1.plan.find((i) => i.id === p.itemId) as UnstartedTask | undefined)?.kind === "task")
+        .map((p) => (p.parts.length ? { start: p.parts[0]!.start, end: p.parts[p.parts.length - 1]!.end } : null))
+        .filter((iv): iv is { start: Min; end: Min } => iv !== null);
+      const anchoredWalls = s1.plan
         .filter((i): i is UnstartedTask => i.kind === "task")
         .map((t) => wallInterval(t, state.minFragment))
         .filter((w): w is NonNullable<typeof w> => w !== null);
-      const task = placeAnchored(snapped, walls, state.now, state.minFragment);
+      const task = placeAnchored(snapped, [...occupied, ...anchoredWalls], state.now, state.minFragment);
+      // §7.0.2 snap-notify: if the anchored proposal was pushed later than
+      // requested to respect priority, tell the user (once, via `seq`).
+      const req = wallInterval(snapped, state.minFragment);
+      const got = wallInterval(task, state.minFragment);
+      const relocated = req !== null && got !== null && got.start > req.start;
       const plan = [...s1.plan, task].sort(byRank);
-      return resettle({ ...s1, plan });
+      const settled = resettle({ ...s1, plan }); // preserves s1.notice via spread
+      return relocated
+        ? {
+            ...settled,
+            notice: {
+              text: `“${task.title}” was added after your earlier tasks, so its start moved later to avoid overlapping higher-priority work.`,
+              seq: (s1.notice?.seq ?? 0) + 1,
+            },
+          }
+        : settled;
     }
 
     case "CREATE_GAP": {

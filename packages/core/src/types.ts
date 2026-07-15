@@ -182,6 +182,11 @@ export interface State {
   placements: Placement[];
   /** Monotonic counter for deterministic ids. */
   seq: number;
+  /** Transient UI notice (§7.0.2 snap-notify) — set when the scheduler moves a
+   * just-added task to respect priority (e.g. an anchored task placed after
+   * earlier, higher-priority tasks). `seq` lets the UI show each notice once.
+   * Derived/deterministic; ignored by invariants. */
+  notice?: { text: string; seq: number };
 }
 
 /* ------------------------------- Events ---------------------------------- */

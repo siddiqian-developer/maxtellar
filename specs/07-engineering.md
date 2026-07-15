@@ -295,6 +295,13 @@ suggestions, never function.
   existing on-device title-embedding model — no new weight) runs at the AI levels, with a stricter
   cosine bar at Lightweight. Corpus is derived cache (recomputable from the event log), capped,
   never backed up. Fire-and-forget recording on create; never blocks or throws.
+  - **Works for tasks never composed before — NO generative model.** The semantic match infers a
+    breakdown from *similar* past tasks by meaning (not exact string), so an unseen title reuses a
+    related past decomposition. A generative model is explicitly rejected (heavy, poor on-device
+    quality, nothing to ground a cold start — a 360 MB generative namer was already removed here).
+  - Surfaced two ways: a passive offer when a confident match exists, and an explicit
+    **"Suggest subtasks (AI)"** button in the drawer for on-demand matching (reports plainly when
+    nothing similar is found — never invents filler subtasks).
 
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly

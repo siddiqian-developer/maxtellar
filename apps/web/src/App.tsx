@@ -41,6 +41,19 @@ export function App(): JSX.Element {
   const settings = useSettings();
   const { devSandbox } = settings;
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // §7.0.2 snap-notify toast: the reducer sets `state.notice` (with a `seq`)
+  // when it moves a just-added task to respect priority. Show each once, ~5s.
+  const [noticeToast, setNoticeToast] = useState<string | null>(null);
+  const noticeSeq = state?.notice?.seq;
+  useEffect(() => {
+    if (state?.notice) {
+      setNoticeToast(state.notice.text);
+      const t = setTimeout(() => setNoticeToast(null), 5000);
+      return () => clearTimeout(t);
+    }
+    return undefined;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [noticeSeq]);
   // Resizable timeline/pipeline split: pipeline width in px, persisted.
   const [pipelineWidth, setPipelineWidth] = useState<number>(() => {
     const stored = Number(localStorage.getItem("pipelineWidth"));
@@ -328,6 +341,7 @@ export function App(): JSX.Element {
         />
       )}
       {error && <div className="error-toast">{error}</div>}
+      {noticeToast && <div className="notice-toast" role="status">{noticeToast}</div>}
       {splashPhase !== "gone" && <Splash leaving={splashPhase === "leave"} />}
     </div>
   );

@@ -511,6 +511,16 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   background: transparent;
 }
 .subtask-add:hover { background: color-mix(in srgb, var(--st-budgeted) 10%, transparent); }
+.subtask-actions { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.subtask-suggest {
+  margin-top: 8px;
+  font-size: 12.5px;
+  padding: 3px 10px;
+  border: 1px solid var(--accent-strong);
+  color: var(--accent-strong);
+  background: transparent;
+}
+.subtask-suggest:hover { background: color-mix(in srgb, var(--accent-strong) 10%, transparent); }
 
 /* §2.7 timeline parent bracket — a thin left rail spanning the leaves */
 .subtask-bracket {
@@ -888,6 +898,19 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   border-radius: var(--radius);
   font-size: 13px;
   z-index: 30;
+}
+/* snap-notify toast — an auto-adjustment notice (amber), not an error */
+.notice-toast {
+  position: fixed;
+  bottom: 16px; left: 16px;
+  max-width: 360px;
+  background: var(--notice);
+  color: #ffffff;
+  padding: 8px 14px;
+  border-radius: var(--radius);
+  font-size: 13px;
+  z-index: 30;
+  box-shadow: var(--shadow-2);
 }
 
 /* field roles — minimal cues: a quiet accent dot for required, dimmed for unused */

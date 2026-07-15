@@ -32,6 +32,14 @@ The scheduler realizes user intent; it never compresses-to-fit or reorders to op
    obstacle's start: requested-after → push forward; requested-before → push backward (never
    across `now`).
 3. "Start right now" conflicts → user picks **[Override]** or **[See conflicts]**.
+4. **Priority is ENTRY ORDER, not timing type (2026-07-15).** A newly-added task ranks last, so
+   it **yields to every existing task regardless of its own timing** — a late-added Fixed task
+   does NOT preempt earlier work (timing type carries no priority weight; only rank does, §3.11).
+   The obstacles a new anchored proposal relocates around are therefore the current occupied
+   **extents of all existing plan tasks** (not just other anchored walls). When this pushes the
+   proposal's start later than requested, a **snap-notify** announces it (§7.0.2) — the app keeps
+   what was entered but tells the user it was rearranged. (Once *committed*, a Fixed task is
+   immovable per §2.3; this rule governs only where a *new* proposal first lands.)
 
 ### 3.6 Editing & field calculation — E/§3.6
 - **Creation/edit calculation table** (same theme for both):
