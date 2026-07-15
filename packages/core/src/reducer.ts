@@ -28,7 +28,7 @@ import type {
 import { emptyChannels, LOST_HOURS, OFF_PERIOD, SELF_MANAGEMENT } from "./types.js";
 import { CORE_WORK, weekBudgetValidity } from "./budget.js";
 import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
-import { canPlanWeek, injectToday } from "./week.js";
+import { canPlanWeek, injectTodayDetailed, quotaAdjustmentsAtSod } from "./week.js";
 import { settle } from "./settle.js";
 import { snapTask } from "./validate.js";
 import { rankAfter, rankBetween } from "./rank.js";
@@ -926,6 +926,14 @@ export function reduce(state: State, event: Event): State {
       // supplied today's midnight/weekday. Injected anchors keep their TRUE
       // coordinates (no proposal relocation), so a passed moment amputates.
       if (event.inject && s.week.startedAt !== null) {
+        const { midnight, weekday } = event.inject;
+        // §5.1: settle the sealed day's weekly quotas FIRST — shortfall/exact-
+        // overshoot adjusts the remaining days' shares (today included), so the
+        // injection below draws against the redistributed shape.
+        const redis = quotaAdjustmentsAtSod(s, midnight, weekday);
+        if (redis.adjust.length > 0) {
+          s = { ...s, week: { ...s.week, quotaAdjust: [...s.week.quotaAdjust, ...redis.adjust] } };
+        }
         const below = s.plan.length
           ? s.plan.reduce((m, i) => (i.rank > m ? i.rank : m), s.plan[0]!.rank)
           : null;
@@ -940,11 +948,32 @@ export function reduce(state: State, event: Event): State {
           s = ns;
           return id;
         };
-        const injected = injectToday(s, event.inject.midnight, event.inject.weekday, mkId, rankBelow);
+        const { tasks: injected, spilled, notes } = injectTodayDetailed(s, midnight, weekday, mkId, rankBelow);
         if (injected.length > 0) {
           const plan = [...s.plan, ...injected].sort(byRank);
           s = applyAmputations({ ...s, plan });
           s = resettle(s);
+        }
+        // §11.7 spill: push what didn't fit to the NEXT day's dated adds.
+        if (spilled.length > 0) {
+          const nextDate = midnight + 1440;
+          const others = s.dated.filter((e) => e.date !== nextDate);
+          const existing = s.dated.find((e) => e.date === nextDate) ?? { date: nextDate, adds: [], skips: [], overrides: [] };
+          let prev: string | null = existing.adds.length ? existing.adds[existing.adds.length - 1]!.rank : null;
+          const adds = [...existing.adds];
+          for (const spec of spilled) {
+            const [id, ns] = nextId(s, "dtl");
+            s = ns;
+            const rank = rankAfter(prev);
+            prev = rank;
+            adds.push({ ...spec, id, rank });
+          }
+          s = { ...s, dated: [...others, { ...existing, adds }].sort((a, b) => a.date - b.date) };
+        }
+        // Universal snap-NOTIFY: every meaning-change is surfaced.
+        const allNotes = [...redis.notes, ...notes];
+        if (allNotes.length > 0) {
+          s = { ...s, notice: { text: allNotes.join(" "), seq: (s.notice?.seq ?? 0) + 1 } };
         }
       }
       return { ...s, ceremony: { phase: "planning" } };

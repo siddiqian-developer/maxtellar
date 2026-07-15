@@ -102,6 +102,17 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   and at SOD you do **not** have a fresh 24h — Sleep and already-consumed tasks have taken their
   share. Tasks that fall out of the 24h window are **pushed to the next day** (spill), not dropped.
 - Daily edits **never** mutate the weekly template or other days (each day is its own instance).
+- **Mechanics (built 2026-07-16).** At `PRUNING_DONE` injection: (1) **§5.1 redistribution runs
+  first** — the sealed day's weekly-quota shortfall/exact-overshoot appends to the week-instance
+  `quotaAdjust` ledger, so today's injection draws against the redistributed shape; (2) due
+  templates are **ordered by their head's budget rank** (`week.budgets` array order, §11.5),
+  template rank within a head, unbudgeted heads last; (3) each task **draws down its head's
+  resolved day budget** — a *budgeted*-timing task exceeding the remainder is **trimmed to it**
+  (≥ minFragment, the trimmed-off tail spills) or **spilled whole**; **pinned timings
+  (fixed/semi) draw down but are never trimmed** (§11.5 — not jostled); heads without a budget
+  line are uncapped; (4) **spill = the next day's dated adds** (§4.6 layer — reuses the one
+  instantiation path, never dropped); (5) every trim/spill/unredistributable remainder raises
+  the universal snap-NOTIFY notice.
 
 ## 11.8 UI — beside the calendar in weekly planning (built 2026-07-16)
 - **Two-pane**: a **collapsible outliner** (Category ▸ Head; budgets + % badge inline; drag-rank
