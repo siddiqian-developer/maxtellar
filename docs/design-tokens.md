@@ -209,6 +209,19 @@ Outline (not filled) for non-primary actions so they stay present next to a soli
 without competing. Drawer footer order (settled 2026-07-10):
 `Add(primary) · Add & start now ⚡(accent outline) · [flex space] · Cancel(danger outline)`.
 
+## Semantic notice colour (law — applies to every auto-adjustment surface, now and future)
+
+An **auto-adjustment / snap notice** — the app corrected the user's input for them (past-time
+snapped forward, overnight wrap, MIN_FRAGMENT floor, any §7.0.2 meaning-change) — has its own
+semantic colour, **distinct from an error and from the brand**:
+- **Notice / snap / auto-adjustment** → `--notice` (amber) border + `--notice-soft` tint fill +
+  a **caution glyph `⚠`** in `--notice` (via `.form-warning::before`), `ink` body text. It is
+  NOT an error (never `--danger` red) and NOT brand-affirmative (never `--accent` teal). The
+  glyph is mandatory — the notice must read as "we adjusted this" at a glance, never as bare
+  text. Reuse `.form-warning` (or the same tokens + glyph) for any future adjustment notice.
+- Tokens: `--notice` #b7791f light / #f0b445 dark; `--notice-soft` = `color-mix(--notice, transparent)`.
+- Distinct from `--danger` (hard block / destructive) and `--accent` (brand / affirmative).
+
 ## Pipeline task card (spec VI "card anatomy", 2026-07-12)
 
 Class `.card` in the pipeline, column layout, `gap: 8px`, padding `10px 12px`; the

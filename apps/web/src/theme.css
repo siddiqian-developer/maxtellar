@@ -17,6 +17,8 @@
   --plan-card: #ffffff;
   --past-card: #f3f1ea;
   --danger: #b91c1c;
+  --notice: #b7791f; /* amber — an auto-adjustment/snap notice (not an error) */
+  --notice-soft: color-mix(in srgb, #b7791f 12%, transparent);
   --scrim: rgba(12, 11, 9, 0.6);
   --shadow-2: 0 4px 16px rgba(40, 36, 28, 0.08);
   --radius: 6px;
@@ -46,6 +48,8 @@
     --plan-card: #232220;
     --past-card: #2b2a26;
     --danger: #ef4444;
+  --notice: #f0b445; /* amber — an auto-adjustment/snap notice (not an error) */
+  --notice-soft: color-mix(in srgb, #f0b445 16%, transparent);
     --accent-strong: #3e8b84;
     --on-accent: #ffffff;
     --st-unscheduled: #d2701f;
@@ -69,6 +73,8 @@
   --plan-card: #ffffff;
   --past-card: #f3f1ea;
   --danger: #b91c1c;
+  --notice: #b7791f; /* amber — an auto-adjustment/snap notice (not an error) */
+  --notice-soft: color-mix(in srgb, #b7791f 12%, transparent);
   --accent-strong: #2f6d68;
   --on-accent: #ffffff;
   --st-unscheduled: #c05e1a;
@@ -92,6 +98,8 @@
   --plan-card: #232220;
   --past-card: #2b2a26;
   --danger: #ef4444;
+  --notice: #f0b445; /* amber — an auto-adjustment/snap notice (not an error) */
+  --notice-soft: color-mix(in srgb, #f0b445 16%, transparent);
   --accent-strong: #3e8b84;
   --on-accent: #ffffff;
   --st-unscheduled: #d2701f;
@@ -688,15 +696,30 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   border-radius: var(--radius);
   padding: 6px 10px;
 }
-/* §7.0.2 snap-at-entry notice: a value was corrected in place (softer than an
-   error — the app fixed it for you, it isn't a failure). */
+/* §7.0.2 snap/adjustment notice: a value was auto-corrected in place. Semantic
+   colour = --notice (amber): distinct from --danger (red error) and --accent
+   (brand teal). Carries a caution glyph so the meaning ("we adjusted this")
+   reads at a glance. THIS IS THE NOTICE PATTERN — reuse for any auto-adjustment
+   surface (see docs/design-tokens.md "semantic notice colour"). */
 .form-warning {
-  color: var(--ink-soft);
+  color: var(--ink);
   font-size: 12px;
-  border: 1px solid var(--accent);
+  border: 1px solid var(--notice);
+  background: var(--notice-soft);
   border-radius: var(--radius);
-  padding: 6px 10px;
+  padding: 8px 10px 8px 30px;
+  position: relative;
 }
+.form-warning::before {
+  content: "⚠";
+  position: absolute;
+  left: 9px;
+  top: 7px;
+  color: var(--notice);
+  font-size: 13px;
+  line-height: 1.2;
+}
+.form-warning .ml-choice-value { margin-top: 4px; color: var(--notice); }
 /* A field locked by a preset (§2.9): read-only, visibly quiet. */
 .drawer input.locked {
   opacity: 0.7;

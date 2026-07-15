@@ -51,33 +51,33 @@ describe("parseCasualTime — day-aware", () => {
     expect(r.dayOffset).toBe(0);
     expect(r.explicitDay).toBe(false);
     expect(dayOffsetOf(r.value!, NOW)).toBe(0);
-    expect(fmtDayTime(r.value!, NOW, true)).toBe("3:00 PM");
+    expect(fmtDayTime(r.value!, NOW, true)).toBe("03:00 PM");
   });
 
   it("'tom, 15:0' → Tomorrow 03:00PM", () => {
     const r = parseCasualTime("tom, 15:0", NOW);
     expect(r.dayOffset).toBe(1);
     expect(r.explicitDay).toBe(true);
-    expect(fmtDayTime(r.value!, NOW, true)).toBe("Tomorrow, 3:00 PM");
+    expect(fmtDayTime(r.value!, NOW, true)).toBe("Tomorrow, 03:00 PM");
   });
 
   it("misspelled 'tmorow, 03:PM' → Tomorrow 03:00PM", () => {
     const r = parseCasualTime("tmorow, 03:PM", NOW);
     expect(r.dayOffset).toBe(1);
-    expect(fmtDayTime(r.value!, NOW, true)).toBe("Tomorrow, 3:00 PM");
+    expect(fmtDayTime(r.value!, NOW, true)).toBe("Tomorrow, 03:00 PM");
   });
 
   it("'3:00PM tomorrow' → Tomorrow 03:00PM (day word trailing)", () => {
     const r = parseCasualTime("3:00PM tomorrow", NOW);
     expect(r.dayOffset).toBe(1);
-    expect(fmtDayTime(r.value!, NOW, true)).toBe("Tomorrow, 3:00 PM");
+    expect(fmtDayTime(r.value!, NOW, true)).toBe("Tomorrow, 03:00 PM");
   });
 
   it("an explicit far date resolves to that day (offset ≥ 2)", () => {
     const r = parseCasualTime("jul 22, 9am", NOW);
     expect(r.explicitDay).toBe(true);
     expect(r.dayOffset).toBe(7);
-    expect(fmtDayTime(r.value!, NOW, true)).toBe("Wed Jul 22, 9:00 AM");
+    expect(fmtDayTime(r.value!, NOW, true)).toBe("Wed Jul 22, 09:00 AM");
   });
 
   it("value composes onto the right calendar day", () => {

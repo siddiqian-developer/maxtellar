@@ -16,11 +16,11 @@ Type it loosely; it lands exactly right:
 
 | You type | You get |
 |---|---|
-| `3pm` | `3:00 PM` |
-| `1500` | `3:00 PM` |
-| `150` | `1:50 AM` |
-| `tom 7am` | `Tomorrow, 7:00 AM` |
-| `tmorow 3:pm` | `Tomorrow, 3:00 PM` *(misspellings understood)* |
+| `3pm` | `03:00 PM` |
+| `1500` | `03:00 PM` |
+| `150` | `01:50 AM` |
+| `tom 7am` | `Tomorrow, 07:00 AM` |
+| `tmorow 3:pm` | `Tomorrow, 03:00 PM` *(misspellings understood)* |
 | `1days, 2.5hr` | `1d 2h 30m` |
 | `1h30` | `1h 30m` |
 
