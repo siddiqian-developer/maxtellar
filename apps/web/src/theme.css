@@ -1589,3 +1589,29 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .link-btn:hover { color: var(--accent-strong); }
 .off-urgent { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; cursor: pointer; }
+
+/* Week grid — the placed-week preview (§4.4) */
+.wk-grid-scroll { overflow-x: auto; margin-top: 4px; }
+.wk-grid { display: grid; grid-template-columns: 46px repeat(7, minmax(74px, 1fr)); gap: 4px; min-width: 640px; }
+.wk-axis { position: relative; }
+.wk-axis-label { position: absolute; right: 4px; transform: translateY(-50%); font-size: 10px; color: var(--ink-faint); }
+.wk-col { display: flex; flex-direction: column; }
+.wk-col-head { text-align: center; font-size: 11px; font-weight: 600; color: var(--ink-soft); padding: 4px 0; border-bottom: 1px solid var(--hairline); }
+.wk-col-head.off { color: var(--accent); }
+.wk-col-head.today { background: var(--accent-soft); border-radius: 6px 6px 0 0; }
+.wk-col-body { position: relative; background: var(--paper-raised); border-radius: 6px; overflow: hidden; }
+.wk-hourline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--hairline); opacity: 0.5; }
+.wk-col-empty { position: absolute; top: 10px; left: 0; right: 0; text-align: center; color: var(--ink-faint); font-size: 12px; }
+.wk-block {
+  position: absolute; left: 2px; right: 2px;
+  border: none; border-left: 3px solid var(--st-budgeted);
+  background: color-mix(in srgb, var(--st-budgeted) 14%, var(--paper));
+  border-radius: 4px; padding: 2px 5px; cursor: pointer; overflow: hidden;
+  text-align: left; font: inherit; display: flex; flex-direction: column; gap: 1px;
+}
+.wk-block:hover { filter: brightness(1.06); }
+.wk-block[data-timing="unscheduled"] { border-left-color: var(--st-unscheduled); background: color-mix(in srgb, var(--st-unscheduled) 14%, var(--paper)); }
+.wk-block[data-timing="semi-head"], .wk-block[data-timing="semi-tail"] { border-left-color: var(--st-semi); background: color-mix(in srgb, var(--st-semi) 14%, var(--paper)); }
+.wk-block[data-timing="fixed"] { border-left-color: var(--st-fixed); background: color-mix(in srgb, var(--st-fixed) 14%, var(--paper)); }
+.wk-block-title { font-size: 10px; font-weight: 600; color: var(--ink); line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+.wk-block-time { font-size: 9px; color: var(--ink-soft); }

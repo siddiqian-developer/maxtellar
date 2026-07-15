@@ -394,6 +394,14 @@ budgeted state hues + hairline/ink only.
 time-of-day and budget fields are smart-input (§7.0.2). The topbar `.ceremony-controls` gains an
 **Off / End Off** `.eod-btn` next to EOD.
 
+**Placed-week grid** (`.wk-grid`, in `.wk-grid-scroll` for overflow-x): CSS grid, a 46px time
+axis (`.wk-axis` / `.wk-axis-label` 10px `ink-faint`) + 7 day columns (`minmax(74px,1fr)`). Column
+head `.wk-col-head` (11px 600 `ink-soft`; `.off` = accent, `.today` = `accent-soft` tint). Body
+`.wk-col-body` (`paper-raised`, `GRID_H = 460px`) with faint `.wk-hourline` rows. Blocks
+`.wk-block` are absolutely positioned by settle placement (top/height from minutes×scale), 3px
+left border + 14%-tinted fill **by state hue** (`data-timing` → `--st-*`, same mapping as timeline
+`.block.plan`), 10px bold title + 9px time. Clickable → edit. No new hues.
+
 ## Heads & Sub-heads config screen (full page)
 
 Not a modal — replaces the timeline+pipeline grid area entirely (`grid-column: 1/-1;

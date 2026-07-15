@@ -124,9 +124,17 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
   (open-item 5), then settles + amputates. Injected anchored tasks keep their **true** coordinates
   (no proposal relocation), so **G18** holds: partly-past → head amputated at birth; fully-past →
   perish (fixed/ommf) or quota-shortfall (budgeted). No week started → no-op.
-- **Web `WeekView`** (full-page): template list + editor (smart-input on anchor time-of-day and
-  budget, §7.0.2), OFF-day chips, First Weekday, **Start New Week**. Locked mid-week with an urgent
-  override toggle.
+- **Web `WeekView`** (full-page): a **placed week grid** (§4.4 "Google-Calendar-week-inspired") +
+  template editor (smart-input on anchor time-of-day and budget, §7.0.2), OFF-day chips, First
+  Weekday, **Start New Week**. Locked mid-week with an urgent override toggle.
+- **Placed-week grid (feedback 2026-07-15).** Recurring tasks are shown **placed** across the week,
+  not as a flat list. `weekPreview` (pure, web-only) runs the **same core `settle`-pass** per
+  weekday on that day's instantiated templates, so anchored tasks pin at their time and budgeted/
+  unscheduled tasks fill **by rank order** from the day-start cursor — exactly as a daily task lands
+  in the timeline (the user's ask: "order still matters, same as daily tasks in the timeline view";
+  **no separate 'anytime' band**). This is a **visual preview only** — it does NOT instantiate onto
+  the spine; real placement still happens per-day at SOD injection (the sleep-cycle-day law is
+  unchanged). 7 day-columns share one time axis; a block is clickable → edit its template.
 
 ### 4.5 mechanism — off-periods (Stage 5, 2026-07-15)
 - **`START_OFF_PERIOD { title?, knownEnd? }`** begins an **Inviolable running block** on the spine

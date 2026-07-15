@@ -16,7 +16,10 @@ import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
 import { parseTimeOfDay, parseCasualDuration } from "../casualTime";
 import { fmtClock, fmtDurUnits, toDate } from "../time";
+import { weekPreview } from "../weekPreview";
 import { SubheadField } from "./SubheadField";
+
+const GRID_H = 460; // px, the shared column body height
 
 interface Props {
   state: State;
@@ -130,31 +133,63 @@ export function WeekView({ state, dispatch, onBack }: Props): JSX.Element {
 
         <div className="config-section">
           <div className="wk-section-head">
-            <h3>Task templates</h3>
+            <h3>The week, placed</h3>
             <button className="hist-add-btn" disabled={locked} onClick={() => setEditing("new")} data-tip={locked ? "Locked until an OFF day" : "Add a recurring task template"}>
               + Add template
             </button>
           </div>
           {state.week.templates.length === 0 ? (
-            <span className="config-empty">no templates yet — add recurring tasks for the week</span>
-          ) : (
-            <ul className="sod-leftovers">
-              {state.week.templates.map((t) => (
-                <li key={t.id} className="sod-leftover wk-template" role="button" tabIndex={0}
-                  onClick={() => !locked && setEditing(t)}
-                  onKeyDown={(e) => { if (!locked && (e.key === "Enter" || e.key === " ")) { e.preventDefault(); setEditing(t); } }}
-                  data-tip={locked ? undefined : "Edit template"}>
-                  <span className="sl-title">{t.title}</span>
-                  <span className="badge head-badge">{t.headId}{t.activityId && ` · ${t.activityId}`}</span>
-                  <span className="wk-days num">{t.weekdays.slice().sort().map((d) => WD[d]).join(" ")}</span>
-                  <span className="hr-dur num">
-                    {t.timing === "unscheduled" ? "—" : t.budget !== undefined ? fmtDurUnits(t.budget) : ""}
-                    {t.anchorStartTod !== undefined ? ` @${fmtTod(t.anchorStartTod, hour12)}` : ""}
-                  </span>
-                </li>
-              ))}
-            </ul>
-          )}
+            <span className="config-empty">no templates yet — add recurring tasks; they appear placed across the week here</span>
+          ) : (() => {
+            const preview = weekPreview(state.week.templates, state.minFragment, state.openExtentCap, state.semiTailFloor);
+            const span = preview.winEnd - preview.winStart;
+            const scale = GRID_H / span;
+            const step = span > 14 * 60 ? 180 : 120; // hour-label spacing
+            const hours: number[] = [];
+            for (let m = Math.ceil(preview.winStart / step) * step; m <= preview.winEnd; m += step) hours.push(m);
+            const openEdit = (id: string): void => {
+              if (locked) return;
+              const t = state.week.templates.find((x) => x.id === id);
+              if (t) setEditing(t);
+            };
+            return (
+              <div className="wk-grid-scroll">
+                <div className="wk-grid">
+                  <div className="wk-axis" style={{ height: GRID_H }}>
+                    {hours.map((h) => (
+                      <span key={h} className="wk-axis-label num" style={{ top: (h - preview.winStart) * scale }}>{fmtTod(h, hour12)}</span>
+                    ))}
+                  </div>
+                  {preview.days.map((day) => (
+                    <div key={day.weekday} className="wk-col">
+                      <div className={`wk-col-head${state.week.offDays.includes(day.weekday) ? " off" : ""}${day.weekday === todayWeekday ? " today" : ""}`}>
+                        {WD[day.weekday]}
+                      </div>
+                      <div className="wk-col-body" style={{ height: GRID_H }}>
+                        {hours.map((h) => (
+                          <div key={h} className="wk-hourline" style={{ top: (h - preview.winStart) * scale }} />
+                        ))}
+                        {day.blocks.map((b) => (
+                          <button
+                            key={`${day.weekday}-${b.templateId}`}
+                            className="wk-block"
+                            data-timing={b.timing}
+                            style={{ top: (b.start - preview.winStart) * scale, height: Math.max(15, (b.end - b.start) * scale - 2) }}
+                            onClick={() => openEdit(b.templateId)}
+                            data-tip={locked ? undefined : `${b.title} · ${fmtTod(b.start, hour12)}–${fmtTod(b.end, hour12)}`}
+                          >
+                            <span className="wk-block-title">{b.title}</span>
+                            <span className="wk-block-time num">{fmtTod(b.start, hour12)}</span>
+                          </button>
+                        ))}
+                        {day.blocks.length === 0 && <span className="wk-col-empty">—</span>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
         </div>
       </div>
 
