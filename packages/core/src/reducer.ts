@@ -22,9 +22,11 @@ import type {
   RunningView,
   State,
   UnstartedTask,
+  WeekPlan,
   WeekTemplate,
 } from "./types.js";
-import { emptyChannels, LOST_HOURS, OFF_PERIOD } from "./types.js";
+import { emptyChannels, LOST_HOURS, OFF_PERIOD, SELF_MANAGEMENT } from "./types.js";
+import { CORE_WORK, weekBudgetValidity } from "./budget.js";
 import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
 import { canPlanWeek, injectToday } from "./week.js";
 import { settle } from "./settle.js";
@@ -40,6 +42,7 @@ function rankAfterTarget(target: string, next: string | null): string {
 export const DEFAULT_MIN_FRAGMENT: Dur = 5;
 export const DEFAULT_OPEN_EXTENT_CAP: Dur = 600; // 10h (§3.9)
 export const DEFAULT_SEMI_TAIL_FLOOR: Dur = 60; // 1h (§3.9.1, G27)
+export const DEFAULT_SLEEP_MINUTES: Dur = 480; // 8h (§11.4)
 
 export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT): State {
   return {
@@ -53,7 +56,16 @@ export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT):
     placements: [],
     ceremony: null,
     days: [],
-    week: { startedAt: null, firstWeekday: null, offDays: [0], templates: [] },
+    week: {
+      startedAt: null,
+      firstWeekday: null,
+      offDays: [0],
+      templates: [],
+      sleepMinutes: DEFAULT_SLEEP_MINUTES,
+      budgets: [],
+      categoryTargets: {},
+      quotaAdjust: [],
+    },
     dated: [],
     seq: 0,
   };
@@ -1030,6 +1042,10 @@ export function reduce(state: State, event: Event): State {
       // §4.4: explicit week rollover — mark the boundary + First Weekday + OFF
       // days. Daily SOD injection does the instantiating (three realities: with a
       // plan, without a plan yet, or never — all just start).
+      // §11.2 gate: WITH head budgets, every planned weekday must balance to
+      // exactly 24h (a week with no budgets is exempt — reality 3).
+      const probe: WeekPlan = { ...state.week, offDays: event.offDays ?? state.week.offDays };
+      if (!weekBudgetValidity(probe).ok) return state;
       return {
         ...state,
         week: {
@@ -1037,8 +1053,40 @@ export function reduce(state: State, event: Event): State {
           startedAt: event.startedAt ?? state.now,
           firstWeekday: event.firstWeekday ?? state.week.firstWeekday,
           offDays: event.offDays ?? state.week.offDays,
+          quotaAdjust: [], // §5.1 ledger is per week instance
         },
       };
+    }
+
+    case "SET_BUDGETS": {
+      // §11: replace the head-budget set + explicit Category targets. Same
+      // structural lock as SET_WEEK_PLAN. Percent is only legal on Core Work
+      // heads and never Self-Management (§11.3) — invalid entries coerce to
+      // absolute with their resolved minutes... there are none yet mid-edit, so
+      // coerce to absolute 0 and let the planner's gate surface it.
+      if (!canPlanWeek(state, event.weekday ?? null, event.urgent)) return state;
+      const clampMin = (n: number): number => Math.max(0, Math.round(n));
+      const budgets = event.budgets.map((b) => {
+        const base = { ...b, weekdays: [...new Set(b.weekdays)].sort((x, y) => x - y) };
+        if (b.kind === "percent" && (b.categoryId !== CORE_WORK || b.headId === SELF_MANAGEMENT)) {
+          const { pct: _pct, ...rest } = base;
+          return { ...rest, kind: "absolute" as const, minutes: clampMin(base.minutes ?? 0) };
+        }
+        if (b.kind === "percent") return { ...base, pct: Math.min(100, Math.max(0, b.pct ?? 0)) };
+        if (b.kind === "weekly") return { ...base, quotaMinutes: clampMin(b.quotaMinutes ?? 0) };
+        return { ...base, minutes: clampMin(b.minutes ?? 0) };
+      });
+      const categoryTargets = Object.fromEntries(
+        Object.entries(event.categoryTargets ?? state.week.categoryTargets).map(([k, v]) => [k, clampMin(v)]),
+      );
+      return { ...state, week: { ...state.week, budgets, categoryTargets } };
+    }
+
+    case "SET_SLEEP_BUDGET": {
+      // §11.4: one global Sleep value, Settings-grade (always allowed — edits
+      // from Weekly Planning and Settings both land here; synced by construction).
+      const minutes = Math.max(0, Math.min(1440, Math.round(event.minutes)));
+      return { ...state, week: { ...state.week, sleepMinutes: minutes } };
     }
 
     case "START_OFF_PERIOD": {

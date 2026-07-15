@@ -258,6 +258,18 @@ export interface WeekPlan {
   firstWeekday: number | null;
   offDays: number[];
   templates: WeekTemplate[];
+  /** §11.4: Sleep — the head of the day. One global absolute value, part of
+   * every day's 24h sum, edited from Weekly Planning AND Settings (synced —
+   * this field is the single source of truth). */
+  sleepMinutes: Dur;
+  /** §11 head budgets (the reusable weekly shape). Array order IS the fill
+   * rank (§11.5) — reorder = reorder the array. */
+  budgets: import("./budget.js").HeadBudget[];
+  /** §11.6 explicit per-Category targets (hard fits). Absent key = roll-up only. */
+  categoryTargets: Record<string, Dur>;
+  /** §5.1 redistribution ledger for THIS week instance (never mutates
+   * `budgets`); reset at START_WEEK. */
+  quotaAdjust: import("./budget.js").QuotaAdjustment[];
 }
 
 export interface State {
@@ -372,7 +384,14 @@ export type Event =
   // perish/carry is a UI choice via CANCEL_TASK). Books to the Off-Periods head.
   | { type: "START_OFF_PERIOD"; title?: string; knownEnd?: Min }
   // §4.5 END_OFF_PERIOD — complete the running off-period (no-op otherwise).
-  | { type: "END_OFF_PERIOD" };
+  | { type: "END_OFF_PERIOD" }
+  // §11 SET_BUDGETS — replace the head-budget set (+ explicit Category targets).
+  // Same mid-week lock as SET_WEEK_PLAN (structural planning). Invalid percent
+  // entries (non-Core-Work or Self-Management) are coerced to absolute.
+  | { type: "SET_BUDGETS"; budgets: import("./budget.js").HeadBudget[]; categoryTargets?: Record<string, Dur>; weekday?: number; urgent?: boolean }
+  // §11.4 SET_SLEEP_BUDGET — the one global Sleep value (Settings-grade: always
+  // allowed, from either surface). Clamped to [0, 1440].
+  | { type: "SET_SLEEP_BUDGET"; minutes: Dur };
 
 export interface RunningView {
   mode: TimerMode;

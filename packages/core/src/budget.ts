@@ -15,7 +15,7 @@
  *    (netCore − existing share), then original shape; the %-residual absorbs it.
  */
 
-import { SELF_MANAGEMENT, type Dur } from "./types.js";
+import { SELF_MANAGEMENT, type Dur, type WeekPlan } from "./types.js";
 
 export const MIN_PER_DAY = 1440;
 
@@ -25,6 +25,12 @@ export const MAINTENANCE = "Maintenance";
 export const NOT_WORK = "Not Work";
 export const TIME_WASTED = "Time Wasted";
 export const CATEGORIES = [CORE_WORK, MAINTENANCE, NOT_WORK, TIME_WASTED] as const;
+
+/** §11.4 Sleep — the head of the day. A first-class budget line (stored as
+ * `week.sleepMinutes`, synced with Settings) rendered under its own pseudo-
+ * category so Category roll-ups stay honest (it is not a Maintenance head). */
+export const SLEEP_HEAD = "Sleep";
+export const SLEEP_CATEGORY = "Sleep";
 
 export type QuotaType = "atLeast" | "atMost" | "exact"; // §5.1 (exact was "neutral")
 export type BudgetKind = "absolute" | "percent" | "weekly";
@@ -43,8 +49,20 @@ export interface HeadBudget {
   quotaType?: QuotaType;
   /** weekly: per-weekday share override; missing weekdays use the even split. */
   shares?: Record<number, Dur>;
+  /** absolute: per-weekday minutes override (§11.2 "each weekday may carry a
+   * different shape"); missing weekdays use `minutes`. */
+  perDay?: Record<number, Dur>;
   /** Weekdays (0=Sun…6=Sat) this head participates in. */
   weekdays: number[];
+}
+
+/** §5.1 redistribution ledger — a week-instance share adjustment for a weekly-
+ * quota head. Lives OUTSIDE the head budget (the reusable template is never
+ * mutated, §11.7); reset at START_WEEK. */
+export interface QuotaAdjustment {
+  headId: string;
+  weekday: number;
+  delta: Dur;
 }
 
 const EPS = 1e-6;
@@ -75,7 +93,7 @@ export function weeklyShare(b: HeadBudget, weekday: number): Dur {
  * return 0 here — their minutes come out of the resolved day shape. */
 export function fixedShare(b: HeadBudget, weekday: number): Dur {
   if (!b.weekdays.includes(weekday)) return 0;
-  if (b.kind === "absolute") return b.minutes ?? 0;
+  if (b.kind === "absolute") return b.perDay?.[weekday] ?? b.minutes ?? 0;
   if (b.kind === "weekly") return weeklyShare(b, weekday);
   return 0;
 }
@@ -362,4 +380,63 @@ export function redistributeOvershoot(overshoot: Dur, days: RemainingDay[]): Red
     deltas: days.map((d, i) => ({ weekday: d.weekday, delta: -(ints[i] ?? 0) })).filter((d) => d.delta !== 0),
     unplaced: overshoot - ints.reduce((a, b) => a + b, 0),
   };
+}
+
+/* --------------------------- week-plan selectors ---------------------------- */
+/* Pure views over WeekPlan — the reducer and the web both read through these. */
+
+/** The Sleep budget as an ordinary absolute line (§11.4). */
+export function sleepEntry(minutes: Dur): HeadBudget {
+  return {
+    headId: SLEEP_HEAD,
+    categoryId: SLEEP_CATEGORY,
+    kind: "absolute",
+    minutes,
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+  };
+}
+
+/** The full budget-entry list for a week: Sleep + head budgets, with the §5.1
+ * redistribution ledger folded into weekly heads' effective shares (the stored
+ * budgets — the reusable template — stay untouched, §11.7). */
+export function budgetEntries(week: WeekPlan): HeadBudget[] {
+  const adjusted = week.budgets.map((b) => {
+    if (b.kind !== "weekly") return b;
+    const deltas = week.quotaAdjust.filter((q) => q.headId === b.headId);
+    if (deltas.length === 0) return b;
+    const shares: Record<number, Dur> = {};
+    for (const wd of b.weekdays) {
+      const base = weeklyShare(b, wd);
+      const delta = deltas.filter((q) => q.weekday === wd).reduce((a, q) => a + q.delta, 0);
+      shares[wd] = Math.max(0, base + delta);
+    }
+    return { ...b, shares };
+  });
+  return [sleepEntry(week.sleepMinutes), ...adjusted];
+}
+
+/** One weekday's resolved shape for a week plan (targets = §11.6 hard fits). */
+export function weekDayShape(week: WeekPlan, weekday: number): DayShape {
+  return resolveDay(budgetEntries(week), weekday, week.categoryTargets);
+}
+
+export interface WeekBudgetValidity {
+  ok: boolean;
+  /** Shapes for every planned (non-OFF, budget-bearing) weekday, in weekday order. */
+  days: DayShape[];
+  /** The first failing weekday, when !ok (drives the gate indicator). */
+  firstBad?: DayShape;
+}
+
+/** §11.2 planning gate: every planned weekday must resolve to exactly 24h with
+ * the core fit and every explicit Category target holding. A week with NO head
+ * budgets is exempt (the §4.4 "three realities" — planning may not happen). */
+export function weekBudgetValidity(week: WeekPlan): WeekBudgetValidity {
+  if (week.budgets.length === 0) return { ok: true, days: [] };
+  const planned = [...new Set(week.budgets.flatMap((b) => b.weekdays))]
+    .filter((wd) => !week.offDays.includes(wd))
+    .sort((a, b) => a - b);
+  const days = planned.map((wd) => weekDayShape(week, wd));
+  const bad = days.find((d) => !d.ok || !d.coreFit.ok || d.categories.some((c) => !c.ok));
+  return { ok: !bad, days, ...(bad ? { firstBad: bad } : {}) };
 }

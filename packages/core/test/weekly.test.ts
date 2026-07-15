@@ -46,14 +46,14 @@ function pruningState(now: number, templates: WeekTemplate[], plan: State["plan"
   return {
     ...initialState(now),
     ceremony: { phase: "pruning" },
-    week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates },
+    week: { ...initialState(DAY0).week, startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates },
     plan,
   };
 }
 
 describe("injectToday helper", () => {
   it("instantiates only matching weekdays, converting time-of-day to absolute", () => {
-    const s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: [
+    const s = { ...initialState(DAY0), week: { ...initialState(DAY0).week, startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: [
       tpl({ title: "Standup", timing: "fixed", anchorStartTod: 9 * H, anchorEndTod: 9 * H + 30, budget: 30, weekdays: [MON, TUE], rank: "a" }),
       tpl({ title: "Gym", budget: 60, weekdays: [TUE], rank: "b" }),
     ] } };
@@ -209,7 +209,7 @@ describe("§4.6 dated override layer", () => {
   });
 
   it("injection ADDS a dated one-off below the day's templates", () => {
-    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
+    let s: State = { ...initialState(DAY0), week: { ...initialState(DAY0).week, startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
     s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [], adds: [
       { title: "Dentist", headId: "Health", activityId: "Dentist", timing: "budgeted", tier: "normal", ommf: false, slideable: true, breakable: true, budget: 60 },
     ] });
@@ -220,7 +220,7 @@ describe("§4.6 dated override layer", () => {
   });
 
   it("injection SKIPS a suppressed template for that date only", () => {
-    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
+    let s: State = { ...initialState(DAY0), week: { ...initialState(DAY0).week, startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
     s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [base[1]!.id], overrides: [], adds: [] });
     let n = 0;
     expect(injectToday(s, DAY0, MON, () => `s-${++n}`, (prev) => rankAfter(prev)).map((t) => t.title)).toEqual(["Standup"]);
@@ -229,7 +229,7 @@ describe("§4.6 dated override layer", () => {
   });
 
   it("injection applies a per-date anchor OVERRIDE", () => {
-    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
+    let s: State = { ...initialState(DAY0), week: { ...initialState(DAY0).week, startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
     s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [{ templateId: base[0]!.id, anchorStartTod: 11 * H, anchorEndTod: 11 * H + 30 }], adds: [] });
     let n = 0;
     const out = injectToday(s, DAY0, MON, () => `o-${++n}`, (prev) => rankAfter(prev));
@@ -238,7 +238,7 @@ describe("§4.6 dated override layer", () => {
   });
 
   it("an OFF day skips templates but STILL injects dated adds", () => {
-    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: [tpl({ title: "Rest-day chore", budget: 30, weekdays: [SUN], rank: "a" })] } };
+    let s: State = { ...initialState(DAY0), week: { ...initialState(DAY0).week, startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: [tpl({ title: "Rest-day chore", budget: 30, weekdays: [SUN], rank: "a" })] } };
     s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [], adds: [
       { title: "Wedding", headId: "Social", activityId: "Wedding", timing: "budgeted", tier: "normal", ommf: false, slideable: true, breakable: true, budget: 120 },
     ] });

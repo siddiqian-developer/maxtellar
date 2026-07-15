@@ -7,7 +7,17 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { SELF_MANAGEMENT, RECHARGE, FOOD, WASTED_TIME, LOST_HOURS, OFF_PERIOD } from "@maxtellar/core";
+import {
+  SELF_MANAGEMENT,
+  RECHARGE,
+  FOOD,
+  WASTED_TIME,
+  LOST_HOURS,
+  OFF_PERIOD,
+  CORE_WORK,
+  MAINTENANCE,
+  TIME_WASTED,
+} from "@maxtellar/core";
 import { forgetActivity } from "./ml/vectorStore";
 
 /** head name -> its activity (sub-head) names. */
@@ -41,6 +51,20 @@ const BUILT_IN_SUBHEADS: Record<string, string[]> = {
 export function isBuiltInActivity(head: string, activity: string): boolean {
   return (BUILT_IN_SUBHEADS[head] ?? []).includes(activity);
 }
+
+/** §11.1 Category defaults per built-in head. Identity is the PATH — the same
+ * activity name may live under two Categories with different meaning; the map
+ * is per HEAD (budgets attach at head level, §11.6). Unknown user heads default
+ * to Core Work (the user's tree keeps most heads there; settable in config). */
+const DEFAULT_HEAD_CATEGORIES: Record<string, string> = {
+  "Main Work": CORE_WORK,
+  [SELF_MANAGEMENT]: CORE_WORK,
+  [RECHARGE]: MAINTENANCE,
+  [FOOD]: MAINTENANCE,
+  [WASTED_TIME]: TIME_WASTED,
+  [LOST_HOURS]: TIME_WASTED,
+  [OFF_PERIOD]: MAINTENANCE,
+};
 
 const DEFAULT_REGISTRY: HeadsRegistry = {
   "Main Work": [],
@@ -87,6 +111,10 @@ interface HeadsApi {
    * BUILT_IN_HEADS. Existing tasks keep their headId/activityId untouched.
    * Forgets every removed sub-head's ML pairings (§7.0.1). */
   deleteHead: (head: string) => void;
+  /** §11.1: the head's Category (Core Work default for unknowns). */
+  categoryFor: (head: string) => string;
+  /** §11.1: assign a head to a Category (persisted). */
+  setHeadCategory: (head: string, category: string) => void;
 }
 
 const HeadsContext = createContext<HeadsApi | null>(null);
@@ -105,6 +133,26 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
   useEffect(() => {
     localStorage.setItem("headsRegistry", JSON.stringify(registry));
   }, [registry]);
+
+  // §11.1: head → Category (persisted separately; merged over defaults).
+  const [headCategories, setHeadCategories] = useState<Record<string, string>>(() => {
+    try {
+      const stored = localStorage.getItem("headCategories");
+      if (stored) return { ...DEFAULT_HEAD_CATEGORIES, ...(JSON.parse(stored) as Record<string, string>) };
+    } catch {
+      // fall through to defaults
+    }
+    return DEFAULT_HEAD_CATEGORIES;
+  });
+
+  useEffect(() => {
+    localStorage.setItem("headCategories", JSON.stringify(headCategories));
+  }, [headCategories]);
+
+  const categoryFor = (head: string): string => headCategories[head] ?? CORE_WORK;
+  const setHeadCategory = (head: string, category: string): void => {
+    setHeadCategories((m) => ({ ...m, [head]: category }));
+  };
 
   const addHead = (head: string): void => {
     const h = head.trim();
@@ -157,7 +205,7 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
   const plannableActivities = plannableHeads.flatMap((h) => registry[h] ?? []);
 
   return (
-    <HeadsContext.Provider value={{ registry, heads, plannableHeads, plannableActivities, headFor, addHead, addActivity, deleteActivity, deleteHead }}>
+    <HeadsContext.Provider value={{ registry, heads, plannableHeads, plannableActivities, headFor, addHead, addActivity, deleteActivity, deleteHead, categoryFor, setHeadCategory }}>
       {children}
     </HeadsContext.Provider>
   );
