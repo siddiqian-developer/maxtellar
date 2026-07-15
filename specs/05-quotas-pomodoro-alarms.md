@@ -1,21 +1,28 @@
 # PART V — QUOTAS, POMODORO, ALARMS
 
-### 5.1 Head budgets (per-day zero-sum) — G17, REVISED by §11 (2026-07-16)
-> The original §5.1 framed quotas as **weekly totals** with at-least/at-most types and automatic
-> availability-weighted redistribution. **§11 (time budgeting) replaces that model.** What changed:
-- **Per-day, not per-week.** A head's budget is part of a weekday's **24h zero-sum day-shape**
-  (§11.2); there is no weekly-total entry. Weekly hours are an *analytics roll-up* (budget × planned
-  days), never an input.
-- **No at-least / at-most / neutral types.** A budget is an exact envelope claim in a hard-balanced
-  24h day. Overrun/underrun vs budget is **tracked and reported** (runtime accounting §2.6,
-  analytics §11 Stage 5) — the old "track, warn, never block" spirit survives at runtime; planning
-  is gated to exactly 24h.
-- **Automatic weighted redistribution is REMOVED.** Days are independent instances (§11.7); hours
-  never reflow across days by formula. Its replacement is **task spill**: concrete tasks that fall
-  out of a day's 24h window push to the next day.
-- **Survives unchanged:** the hard week boundary — nothing carries beyond the week; unfulfilled
-  budget dies at week's end, reported as shortfall. Pruning trims monster accumulations and **the
-  deficit stays visible on every trimmed item**.
+### 5.1 Weekly quotas (budgeted recurring) — G17, reconciled with §11 (2026-07-16)
+> Weekly quotas **COEXIST** with §11's per-day budgets — §11 did not replace them (user ruling
+> 2026-07-16). The two are alternative **budgeting modes**; the mechanics below are locked.
+- **Per-head mode, exclusive.** Each budgeted head is EITHER **daily** (absolute hours; or **%** of
+  netCore if Core Work, §11.3) OR **weekly** (quota hours + type). One head never carries both.
+- **Types:** **at-least** (floor; more is better) · **at-most** (ceiling; *track, warn, report —
+  never block*) · **exact-match** (aim for exactly this; was "neutral").
+- **Weekly quotas enter the 24h gate via distributed shares.** At planning, the quota is
+  distributed across the head's planned weekdays — user-editable shares, **default even split**
+  (this is the "original shape"). Each day's share is an ordinary absolute line in that day's
+  **24h zero-sum** (§11.2): the gate stays universal, `Σ(daily heads + weekly shares + Sleep) === 24h`.
+- **Shortfall redistributes over remaining days of the same week** — weighted by availability
+  first (a day with a smaller existing share / larger netCore takes more), then original shape as
+  tiebreak. **The Core-%-residual is the shock absorber:** a redistributed hour raises the quota
+  head's absolute claim on that future day → netCore shrinks → %-Core heads reflow automatically →
+  the day **still balances to 24h by construction**. No head is silently deleted.
+- **Type asymmetry:** *at-least* — shortfall redistributes forward; overshoot leaves future shares
+  unchanged. *at-most* — never redistributes; overrun warns, never blocks. *exact-match* —
+  symmetric: shortfall redistributes forward AND overshoot reduces remaining days' shares.
+- Monster accumulations trimmed by the user during Pruning; **after trim, the deficit stays
+  visible on every such item**.
+- **Hard boundary: nothing carries beyond the week.** Unfulfilled quota dies at week's end
+  (reported as shortfall; at-most overrun reported as overrun).
 
 ### 5.2 Pomodoro (per running task) — G-pomo
 - **Modal-driven, zero automation (G11-pure).** Work interval ends → modal **[Take break] /

@@ -1,9 +1,11 @@
 # PART XI — TIME BUDGETING & THE CATEGORY TIER (design, 2026-07-15)
 
 > **Status: fully designed, not yet built.** Locked via two grill rounds (2026-07-15); the six
-> §11.10 micro-items resolved by grilling 2026-07-16. This part **REVISES §5.1** (which framed
-> quotas as *weekly totals* with at-least/at-most + redistribution) — §5.1 has been rewritten to
-> defer to this model with a **per-day, zero-sum, hard-balanced day-shape**.
+> §11.10 micro-items resolved by grilling 2026-07-16. **Weekly quotas (§5.1) COEXIST with this
+> model** (user ruling 2026-07-16): each budgeted head is EITHER daily-budgeted (absolute / %) OR
+> weekly-quota'd (hours + at-least / at-most / exact-match) — weekly quotas project **distributed
+> per-day shares** into the 24h zero-sum day-shape, and shortfall redistribution is absorbed by
+> the Core-%-residual. Mechanics in §5.1.
 
 ## 11.0 Philosophy — zero-based budgeting for time
 A day is a fixed 24-hour envelope that cannot be expanded. As money is envelope-budgeted (every
@@ -33,6 +35,8 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
 ## 11.2 The 24h zero-sum day-shape (per-day, hard-balanced)
 - Budgets are **per-day**, set on **HEADS** (§11.6 for sub-head depth), rolling up to Categories,
   and the shape repeats across the planned weekdays. **Each weekday may carry a different shape.**
+- **Weekly-quota heads (§5.1) participate via their distributed per-day share**, which counts in
+  the day's sum like any absolute line: `Σ(daily heads + weekly shares + Sleep) === 24h`.
 - **Planning is GATED to exactly 24h.** You cannot finish / Start-Week until `Σ(all head budgets,
   incl. Sleep) === 24h`. Over → snap the entry that breached back to the value that restores 24h,
   **notify + highlight the head AND its Category**. Under → **also blocked**, with a live indicator
@@ -59,6 +63,10 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 - The **%-value is live-elastic**: hours reflow automatically as overhead (sleep, obligations,
   Self-Management) changes; **the % text always stays shown** (never replaced/hidden by the hours).
 - A Core Work head *may* still be absolute; % is simply the option only Core Work gets.
+- **A weekly-quota head's daily share behaves as an ABSOLUTE entry in this chain** — non-core
+  shares subtract into R1; a Core Work weekly share claims from netCore like an absolute core
+  head. Redistribution (§5.1) changes a future day's share → netCore reflows → % heads absorb it,
+  so the day re-balances by construction.
 - Self-Management is **never** a percentage (it is overhead, subtracted before the residual).
 
 ## 11.4 Sleep — the head of the day
@@ -104,9 +112,11 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 
 ## 11.9 Data-model deltas (sketch, for the build chat)
 - `Category` tier (id, name, order) above `WeekTemplate.headId`; head registry gains a category.
-- `WeekTemplate`/head budget entry gains: `budgetKind: "absolute" | "percent"` (percent only if
-  the head's Category is Core Work), `pct?` (0–100), `rank` (already exists), pinned derives from
-  timing/identity. `Sleep` absolute synced to Settings.
+- `WeekTemplate`/head budget entry gains: `budgetKind: "absolute" | "percent" | "weekly"`
+  (percent only if the head's Category is Core Work), `pct?` (0–100), for weekly:
+  `quotaHours`, `quotaType: "atLeast" | "atMost" | "exact"`, `shares?` (per-weekday, default even
+  split), `rank` (already exists), pinned derives from timing/identity. `Sleep` absolute synced
+  to Settings.
 - A weekly-plan validity selector: `Σ === 24h` (gate), per-Category explicit-target fits, live
   netCore + %→hours projection. All pure/event-sourced; the 24h + % math belongs in `packages/core`.
 
