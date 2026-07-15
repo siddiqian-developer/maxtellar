@@ -335,6 +335,7 @@ export function reduce(state: State, event: Event): State {
         timing: target.timing,
         startedAt: s.now,
         ...(budget !== undefined ? { budget } : {}),
+        ...(target.sleepKind !== undefined ? { sleepKind: target.sleepKind } : {}),
         channels: emptyChannels(),
       };
       return resettle({ ...s, plan, history, running });
@@ -355,6 +356,7 @@ export function reduce(state: State, event: Event): State {
         end: state.now,
         outcome: "soft-ended",
         channels: r.channels,
+        ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
       };
       let s: State = { ...state, running: null, history: [...state.history, entry], seq: state.seq + 1 };
 
@@ -376,6 +378,7 @@ export function reduce(state: State, event: Event): State {
           breakable: !r.ommf && remBudget !== undefined,
           ...(r.ommf ? { anchorStart: s.now } : {}), // ommf remainder holds its coords (G25)
           ...(remBudget !== undefined ? { budget: remBudget } : {}),
+          ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
           remainderOf: r.id,
         };
         const { task: snapped } = snapTask(remainder, s.minFragment, s.now);
@@ -405,6 +408,7 @@ export function reduce(state: State, event: Event): State {
         end: state.now,
         outcome: "completed",
         channels: r.channels,
+        ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
       };
       return resettle({
         ...state,
@@ -436,6 +440,24 @@ export function reduce(state: State, event: Event): State {
         plan: state.plan.filter((i) => i.id !== t.id),
         history: [...state.history, entry],
       });
+    }
+
+    case "SET_MIN_FRAGMENT": {
+      // §3.7/7.1: the fragment floor is settable in Settings. Every stored
+      // budget must respect the new floor (no budget below it, ever), so each
+      // plan task re-snaps; the dependent floors (open cap, semi-tail floor)
+      // are themselves floored at minFragment, so they rise with it.
+      const minFragment = Math.max(1, Math.round(event.minutes));
+      const s: State = {
+        ...state,
+        minFragment,
+        openExtentCap: Math.max(minFragment, state.openExtentCap),
+        semiTailFloor: Math.max(minFragment, state.semiTailFloor),
+      };
+      const plan = s.plan
+        .map((i) => (i.kind === "task" ? snapTask(i, minFragment, s.now).task : i))
+        .sort(byRank);
+      return resettle({ ...s, plan });
     }
 
     case "SET_OPEN_CAP": {

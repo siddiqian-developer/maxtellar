@@ -4,7 +4,11 @@
       "Skill(run)",
       "Skill(run:*)",
       "Bash(git -C /mnt/d/maxtellar ls-files -ci --exclude-standard)",
-      "Bash(xargs -0 -r git rm -r --cached -q --ignore-unmatch)"
+      "Bash(xargs -0 -r git rm -r --cached -q --ignore-unmatch)",
+      "Bash(pnpm test *)",
+      "Bash(pnpm typecheck *)",
+      "Bash(npx vitest *)",
+      "Bash(curl -s -o /dev/null -w \"%{http_code}\" http://localhost:5173)"
     ]
   }
 }

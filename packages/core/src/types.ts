@@ -6,6 +6,16 @@
 export type Min = number; // absolute minutes since epoch (integer)
 export type Dur = number; // duration in minutes (integer)
 
+/** Built-in heads (§2.10) — real heads, undeletable. Shared by core (Lost
+ * Hours booking at SOD) and the web registry so the names have one source. */
+export const SELF_MANAGEMENT = "Self-Management";
+export const WASTED_TIME = "Wasted Time";
+export const LOST_HOURS = "Lost Hours";
+
+/** §2.9 (G14): Sleep = main day-defining sleep; Nap = any other. Explicit at
+ * logging, never inferred. Both are ordinary tasks. */
+export type SleepKind = "sleep" | "nap";
+
 /** Task-level accounting identity (§2.6, locked):
  *  wall = spent + wasted + managed + breaks */
 export interface Channels {
@@ -49,6 +59,15 @@ export interface UnstartedTask {
   budget?: Dur;
   /** Set when this is a paused remainder of a started task (§3.10). */
   remainderOf?: string;
+  /** §2.9: marks a Sleep/Nap task. Explicit at logging, never inferred. */
+  sleepKind?: SleepKind;
+  /** §2.8 rider provision (G9) — schema only in MVP, no behavior. A rider is
+   * softly bound to its primary; placement derives from the primary. */
+  riderOf?: string;
+  /** What happens to a rider's tail when the primary ends (§2.8). */
+  spillPolicy?: "dismount" | "re-anchor";
+  /** Rider lane; lane 2 exists but is hidden in MVP (§2.2). */
+  lane?: number;
 }
 
 /** A deliberate user buffer on the plan (inert; shrinks under pressure; vanishes at 0). */
@@ -95,6 +114,9 @@ export interface HistoryEntry {
   end: Min;
   outcome: HistoryOutcome;
   channels: Channels;
+  /** §2.9: carried from the task (or set directly on back-log). A Finished
+   * Sleep occupancy entry is what the SOD precondition counts (§4.2). */
+  sleepKind?: SleepKind;
 }
 
 export type TimerMode = "countdown" | "stopwatch"; // §9.2 (from the 8-yr AppScript)
@@ -113,6 +135,8 @@ export interface RunningTask {
   /** countdown when budget set; stopwatch otherwise. */
   budget?: Dur;
   channels: Channels;
+  /** §2.9: carried from the unstarted task so completion writes it to history. */
+  sleepKind?: SleepKind;
 }
 
 export interface State {
@@ -147,6 +171,7 @@ export type Event =
   | { type: "PAUSE_RUNNING" }
   | { type: "COMPLETE_RUNNING" }
   | { type: "CANCEL_TASK"; taskId: string }
+  | { type: "SET_MIN_FRAGMENT"; minutes: Dur } // §3.7/7.1 fragment floor (settable in Settings)
   | { type: "SET_OPEN_CAP"; minutes: Dur } // §3.9 open-task presumed-extent cap
   | { type: "SET_TAIL_FLOOR"; minutes: Dur } // §3.9.1 open semi-tail compression floor
   | { type: "LOG_CHANNEL"; channel: keyof Channels; minutes: Dur } // reattribute on running

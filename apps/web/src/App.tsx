@@ -264,6 +264,7 @@ export function App(): JSX.Element {
       )}
       {settingsOpen && (
         <SettingsPanel
+          minFragment={state.minFragment}
           openExtentCap={state.openExtentCap}
           semiTailFloor={state.semiTailFloor}
           dispatch={(e) => void dispatch(e)}

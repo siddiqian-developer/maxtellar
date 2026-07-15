@@ -95,7 +95,9 @@ The scheduler realizes user intent; it never compresses-to-fit or reorders to op
 - **MIN_FRAGMENT:** global setting, default **5 min**, **settable in Settings**. **No task's
   budget — nor any fragment — may ever be below MIN_FRAGMENT.** All checks, validations, and
   physics-snaps enforce this floor at creation, edit, split, and compression. (Per-task
-  override lives in the schema; no MVP UI.)
+  override lives in the schema; no MVP UI.) Changing it re-snaps every stored budget up to
+  the new floor and re-settles; the dependent settings (open-task cap §3.9, semi-tail floor
+  §3.9.1) can never sit below MIN_FRAGMENT, so they rise with it when it overtakes them.
 - **Frogleap:** unbreakable + can't wrap → jump whole to the far side.
 
 ### 3.8 Gaps — §5.7 (corrected, R1)

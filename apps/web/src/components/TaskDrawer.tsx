@@ -9,7 +9,7 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import type { Event, TimingType } from "@maxtellar/core";
+import type { Event, SleepKind, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
@@ -148,6 +148,8 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   const [endStr, setEndStr] = useState("");
   const [budgetStr, setBudgetStr] = useState(fmtBudget(DEFAULT_BUDGET));
   const [ommf, setOmmf] = useState(false);
+  // §2.9: Sleep/Nap is an EXPLICIT declaration at logging, never inferred.
+  const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(undefined);
   const [flags, setFlags] = useState<{ slideable?: boolean; breakable?: boolean }>({});
   const [error, setError] = useState<string | null>(null);
 
@@ -311,6 +313,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
         ...(anchorStart !== undefined ? { anchorStart } : {}),
         ...(anchorEnd !== undefined ? { anchorEnd } : {}),
         ...(bud !== undefined ? { budget: bud } : {}),
+        ...(sleepKind !== undefined ? { sleepKind } : {}),
       } as never,
     };
   };
@@ -501,6 +504,24 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
               </label>
               </div>
               <span className="hint-glyph" tabIndex={0} aria-label="Flags help" data-tip="Flags derive from the timing type; editable within the validity rules">ⓘ</span>
+            </div>
+          </div>
+          <div className="field">
+            <div className="hint-row">
+              <div className="type-chips" role="radiogroup" aria-label="Sleep kind">
+                {([undefined, "sleep", "nap"] as const).map((k) => (
+                  <button
+                    key={k ?? "none"}
+                    type="button"
+                    className={`type-chip${k === sleepKind ? " active" : ""}`}
+                    data-status={k === undefined ? "unscheduled" : "semi-tail"}
+                    onClick={() => setSleepKind(k)}
+                  >
+                    {k === undefined ? "ordinary" : k}
+                  </button>
+                ))}
+              </div>
+              <span className="hint-glyph" tabIndex={0} aria-label="Sleep kind help" data-tip="Sleep = your main day-defining sleep; Nap = any other sleep. Both are ordinary tasks otherwise — declared here, never inferred (§2.9)">ⓘ</span>
             </div>
           </div>
           {error && <div className="form-error" role="alert">{error}</div>}

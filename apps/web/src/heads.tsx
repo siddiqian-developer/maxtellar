@@ -7,6 +7,7 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
+import { SELF_MANAGEMENT } from "@maxtellar/core";
 import { forgetActivity } from "./ml/vectorStore";
 
 /** head name -> its activity (sub-head) names. */
@@ -14,7 +15,7 @@ export type HeadsRegistry = Record<string, string[]>;
 
 const DEFAULT_REGISTRY: HeadsRegistry = {
   "Main Work": [],
-  "Self-Management": [],
+  [SELF_MANAGEMENT]: [],
 };
 
 /** Spec §2.10: Self-Management is the one true built-in among the heads this
@@ -22,7 +23,7 @@ const DEFAULT_REGISTRY: HeadsRegistry = {
  * enter this registry at all) — undeletable. "Main Work" is only a
  * convenience default seed, not a spec-protected built-in, so it CAN be
  * deleted. */
-export const BUILT_IN_HEADS: readonly string[] = ["Self-Management"];
+export const BUILT_IN_HEADS: readonly string[] = [SELF_MANAGEMENT];
 
 interface HeadsApi {
   registry: HeadsRegistry;

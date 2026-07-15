@@ -10,6 +10,7 @@ import { useSettings } from "../settings";
 import { useEscClose } from "../useEscClose";
 
 interface Props {
+  minFragment: number;
   openExtentCap: number;
   semiTailFloor: number;
   dispatch: (e: Event) => void;
@@ -17,7 +18,7 @@ interface Props {
   onOpenHeadsConfig: () => void;
 }
 
-export function SettingsPanel({ openExtentCap, semiTailFloor, dispatch, onClose, onOpenHeadsConfig }: Props): JSX.Element {
+export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispatch, onClose, onOpenHeadsConfig }: Props): JSX.Element {
   const { timeFormat, setTimeFormat, gridGranularity, setGridGranularity, devSandbox, setDevSandbox } = useSettings();
   const gridOptions = [0, 5, 10, 15, 30] as const;
   useEscClose(onClose);
@@ -70,6 +71,22 @@ export function SettingsPanel({ openExtentCap, semiTailFloor, dispatch, onClose,
                 </button>
               ))}
             </div>
+          </div>
+          <div className="field">
+            <label data-tip="The smallest schedulable piece of a task, in minutes — no budget or split ever goes below it (§3.7). Raising it re-snaps existing budgets up to the new floor.">
+              Minimum fragment (minutes)
+            </label>
+            <input
+              type="number"
+              min={1}
+              max={60}
+              step={1}
+              value={minFragment}
+              onChange={(e) => {
+                const m = Number(e.target.value);
+                if (Number.isFinite(m) && m >= 1) dispatch({ type: "SET_MIN_FRAGMENT", minutes: Math.round(m) });
+              }}
+            />
           </div>
           <div className="field">
             <label data-tip="How far an open (unscheduled / budget-less) task fills the day before lower-priority tasks are placed after it (§3.9)">

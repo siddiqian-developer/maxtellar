@@ -163,6 +163,89 @@ describe("backlog — history laws", () => {
   });
 });
 
+describe("sleep model (§2.9) — sleepKind rides the whole lifecycle", () => {
+  it("round-trips through start → pause (entry + remainder) → complete", () => {
+    let s = initialState(T(22, 0));
+    s = reduceAll(s, [
+      mkTask("Z", { timing: "budgeted", budget: 480, sleepKind: "sleep" }),
+      { type: "START_TASK", taskId: "Z" },
+      { type: "TICK", to: T(23, 0) },
+    ]);
+    expect(s.running?.sleepKind).toBe("sleep");
+    s = reduce(s, { type: "PAUSE_RUNNING" });
+    const occ = s.history.find((h) => h.taskId === "Z" && h.kind === "occupancy")!;
+    expect(occ.sleepKind).toBe("sleep");
+    const rem = s.plan.find((i) => i.id === "Z-rem") as UnstartedTask;
+    expect(rem.sleepKind).toBe("sleep");
+    s = reduceAll(s, [
+      { type: "START_TASK", taskId: "Z-rem" },
+      { type: "TICK", to: T(23, 30) },
+      { type: "COMPLETE_RUNNING" },
+    ]);
+    const done = s.history.find((h) => h.taskId === "Z-rem")!;
+    expect(done.sleepKind).toBe("sleep");
+    expect(checkInvariants(s)).toEqual([]);
+  });
+
+  it("back-logged sleep carries its explicit kind (never inferred)", () => {
+    let s = initialState(T(9, 0));
+    s = reduce(s, {
+      type: "BACKLOG",
+      entry: {
+        taskId: null,
+        title: "night sleep",
+        headId: "otw",
+        activityId: "sleep",
+        kind: "occupancy",
+        start: T(0, 0),
+        end: T(7, 0),
+        outcome: "completed",
+        channels: { spent: 420, wasted: 0, managed: 0, breaks: 0 },
+        sleepKind: "sleep",
+      },
+    });
+    expect(s.history[0]!.sleepKind).toBe("sleep");
+    // an ordinary backlog has no sleepKind at all
+    s = reduce(s, {
+      type: "BACKLOG",
+      entry: {
+        taskId: null,
+        title: "breakfast",
+        headId: "otw",
+        activityId: "meals",
+        kind: "occupancy",
+        start: T(7, 0),
+        end: T(7, 30),
+        outcome: "completed",
+        channels: { spent: 30, wasted: 0, managed: 0, breaks: 0 },
+      },
+    });
+    expect(s.history[1]!.sleepKind).toBeUndefined();
+  });
+});
+
+describe("SET_MIN_FRAGMENT (§3.7/7.1 — the floor is settable)", () => {
+  it("re-snaps existing budgets up to the new floor and re-settles", () => {
+    let s = initialState(T(9, 0));
+    s = reduceAll(s, [
+      mkTask("A", { timing: "budgeted", budget: 5 }),
+      mkTask("B", { timing: "budgeted", budget: 30 }),
+      { type: "SET_MIN_FRAGMENT", minutes: 15 },
+    ]);
+    expect(s.minFragment).toBe(15);
+    expect((s.plan.find((i) => i.id === "A") as UnstartedTask).budget).toBe(15);
+    expect((s.plan.find((i) => i.id === "B") as UnstartedTask).budget).toBe(30); // untouched
+    expect(checkInvariants(s)).toEqual([]);
+  });
+
+  it("dependent floors rise with it (they can never sit below minFragment)", () => {
+    let s = initialState(T(9, 0));
+    s = reduce(s, { type: "SET_MIN_FRAGMENT", minutes: 90 });
+    expect(s.semiTailFloor).toBe(90); // default 60 lifted
+    expect(s.openExtentCap).toBe(600); // already above; untouched
+  });
+});
+
 describe("the fork (§3.12)", () => {
   it("sandbox edits never touch live; commit re-settles at REAL now (live wins)", () => {
     let live = initialState(T(9, 0));
