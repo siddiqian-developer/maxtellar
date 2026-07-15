@@ -44,8 +44,12 @@ export class EventStore {
       if (state.semiTailFloor === undefined) state.semiTailFloor = 60;
       if (state.ceremony === undefined) state.ceremony = null;
       if (state.days === undefined) state.days = [];
-      if (state.week === undefined)
-        state.week = { startedAt: null, firstWeekday: null, offDays: [0], templates: [] };
+      if (state.week === undefined) state.week = initialState(0).week;
+      // §11 fields added to WeekPlan (Stage 2) — default older snapshots.
+      if (state.week.sleepMinutes === undefined) state.week.sleepMinutes = 480;
+      if (state.week.budgets === undefined) state.week.budgets = [];
+      if (state.week.categoryTargets === undefined) state.week.categoryTargets = {};
+      if (state.week.quotaAdjust === undefined) state.week.quotaAdjust = [];
       if (state.dated === undefined) state.dated = [];
       from = snap.uptoSeq;
     } else {

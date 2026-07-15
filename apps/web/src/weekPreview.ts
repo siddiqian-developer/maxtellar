@@ -73,7 +73,7 @@ export function weekPreview(
   // A minimal State the pure injector reads (templates + offDays + dated layer).
   const base = {
     ...initialState(0),
-    week: { startedAt: 0, firstWeekday: null, offDays, templates },
+    week: { ...initialState(0).week, startedAt: 0, offDays, templates },
     dated,
   };
 
