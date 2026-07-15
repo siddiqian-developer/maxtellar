@@ -1569,3 +1569,23 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .sod-leftover.discarded .sl-title { text-decoration: line-through; }
 .sl-title { flex: 1; font-size: 13px; }
 .eod-modal { max-width: 420px; }
+
+/* ── §4.4/§4.5 Week plan + off-periods ─────────────────────────────────── */
+.wk-section-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 10px; }
+.wk-section-head h3 { margin: 0; }
+.wk-template { cursor: pointer; }
+.wk-template:hover { border-color: var(--accent); }
+.wk-days { font-size: 11px; color: var(--ink-soft); letter-spacing: 0.02em; }
+.wk-shortcuts { display: flex; gap: 12px; margin-top: 8px; }
+.link-btn {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 12px;
+  color: var(--accent);
+  cursor: pointer;
+  text-decoration: underline;
+}
+.link-btn:hover { color: var(--accent-strong); }
+.off-urgent { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; cursor: pointer; }

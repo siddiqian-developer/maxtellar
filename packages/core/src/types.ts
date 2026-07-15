@@ -15,6 +15,9 @@ export const RECHARGE = "Recharge";
 export const FOOD = "Food";
 export const WASTED_TIME = "Wasted Time";
 export const LOST_HOURS = "Lost Hours";
+/** §4.5: off-periods (illness, travel, abrupt breaks) book their Inviolable-tier
+ * time here — a built-in head, undeletable, never a planning-picker option. */
+export const OFF_PERIOD = "Off-Periods";
 
 /** §2.9 (G14): Sleep = main day-defining sleep; Nap = any other. Explicit at
  * logging, never inferred. Both are ordinary tasks. */
@@ -179,6 +182,47 @@ export interface RunningTask {
   /** §2.7 (G24): carried from the started leaf so completing the last leaf can
    * complete its ancestors, and a paused remainder stays bound to its parent. */
   parentId?: string;
+  /** §4.5: this running block is an off-period (Inviolable tier) — lets
+   * END_OFF_PERIOD and the UI distinguish it from an ordinary running task. */
+  isOff?: boolean;
+}
+
+/** §4.4 weekly planning (G19). A reusable task template that SOD injection
+ * instantiates onto matching weekdays. Anchored coordinates are stored as
+ * MINUTES-INTO-THE-DAY [0,1440) (a "9am meeting"), converted to an absolute
+ * epoch for today at injection. Recurrence = the weekday set it fires on. */
+export interface WeekTemplate {
+  id: string;
+  title: string;
+  headId: string;
+  activityId: string;
+  timing: TimingType;
+  tier: Tier;
+  ommf: boolean;
+  slideable: boolean;
+  breakable: boolean;
+  /** Planned duration (fixed/budgeted/semi with budget). */
+  budget?: Dur;
+  /** Anchored time-of-day [0,1440) for fixed/semi-head start, fixed/semi-tail end. */
+  anchorStartTod?: number;
+  anchorEndTod?: number;
+  sleepKind?: SleepKind;
+  /** Recurrence: weekdays it instantiates on (0=Sun … 6=Sat). daily = all 7,
+   * weekend = [0,6]. One-time/ranged is a future extension (§4.4). */
+  weekdays: number[];
+  /** LexoRank among templates — injection preserves this relative order. */
+  rank: string;
+}
+
+/** §4.4: the week commitment. `templates` is the structural plan; `startedAt`
+ * marks the current week's rollover (START_WEEK); `firstWeekday` is the declared
+ * First Weekday; `offDays` are the planning/OFF weekdays (default Sunday) that
+ * also open the mid-week planning lock (§4.4). */
+export interface WeekPlan {
+  startedAt: Min | null;
+  firstWeekday: number | null;
+  offDays: number[];
+  templates: WeekTemplate[];
 }
 
 export interface State {
@@ -207,6 +251,8 @@ export interface State {
   /** §4.2: sealed sleep-cycle days, appended one per SOD. NOT re-derived each
    * render (open-item 7) — stored via the SOD event, reproduced by replay. */
   days: DayRecord[];
+  /** §4.4: the weekly plan (templates + week boundary). Event-sourced. */
+  week: WeekPlan;
   /** Monotonic counter for deterministic ids. */
   seq: number;
   /** Transient UI notice (§7.0.2 snap-notify) — set when the scheduler moves a
@@ -261,11 +307,28 @@ export type Event =
   // `reportDate` (local-midnight Min) defaults to `now`.
   | { type: "SOD"; reportDate?: Min }
   // §4.2 step 2 → 3: discard dead leftovers (auto-dead ∪ user-chosen `discardIds`),
-  // trim quotas (no quotas until Stage 6 → no-op), auto-run today's weekly-plan
-  // injection (no week plan until Stage 5 → no-op), then enter phase "planning".
-  | { type: "PRUNING_DONE"; discardIds?: string[] }
+  // trim quotas (no quotas until Stage 6 → no-op), then auto-run today's
+  // weekly-plan injection (§4.4) — `inject` carries today's local-midnight +
+  // weekday from the web; instantiate today's templates below the leftovers and
+  // settle (partly-past → amputate at birth). No week started → no-op. → "planning".
+  | { type: "PRUNING_DONE"; discardIds?: string[]; inject?: { midnight: Min; weekday: number } }
   // §4.2 step 4 → 5: Planning Done → ceremony = null (Live).
-  | { type: "PLANNING_DONE" };
+  | { type: "PLANNING_DONE" }
+  // §4.4 SET_WEEK_PLAN — replace the structural template set. LOCKED mid-week
+  // (the week is a commitment): accepted only before the first week starts, on
+  // an OFF day, or with the `urgent` bypass; otherwise a no-op.
+  | { type: "SET_WEEK_PLAN"; templates: (Omit<WeekTemplate, "id" | "rank"> & { id?: string; rank?: string })[]; weekday?: number; urgent?: boolean }
+  // §4.4 START_WEEK — explicit week rollover; marks the boundary + First Weekday
+  // + OFF days. Daily SOD injection does the instantiating (three realities:
+  // planned / no-plan-yet / no-plan-ever all just start).
+  | { type: "START_WEEK"; firstWeekday?: number; offDays?: number[]; startedAt?: Min }
+  // §4.5 START_OFF_PERIOD — begin an Inviolable running block on the spine.
+  // Known end → countdown [now, knownEnd]; unknown → open stopwatch. Pauses any
+  // current runner (remainder survives); plan tasks push below (displaced-tasks
+  // perish/carry is a UI choice via CANCEL_TASK). Books to the Off-Periods head.
+  | { type: "START_OFF_PERIOD"; title?: string; knownEnd?: Min }
+  // §4.5 END_OFF_PERIOD — complete the running off-period (no-op otherwise).
+  | { type: "END_OFF_PERIOD" };
 
 export interface RunningView {
   mode: TimerMode;

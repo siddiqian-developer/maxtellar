@@ -10,4 +10,8 @@
   derived, not cached); SOD sleep-count scoping is 0/1 → GapFill, 2 → sweep, 3+ → sweep first two;
   pruning discards auto-dead ∪ user-chosen (per-item + Discard-all/Carry-all). See §4.2.
 - Default pomodoro preset shipped.
-- Injected-leftover relative priority default (assumed: injected ranks below leftovers).
+- ~~Injected-leftover relative priority default (assumed: injected ranks below leftovers).~~
+  **RESOLVED (Stage 5):** injected weekly tasks rank strictly below surviving leftovers (§4.4);
+  user drags to re-rank. Recurrence is a weekday set (one-time/ranged deferred); mid-week planning
+  is locked (open on OFF days / pre-week / urgent); off-periods book to a new built-in Off-Periods
+  head. See §4.4/§4.5.

@@ -379,6 +379,21 @@ Durations via `fmtDur`; times via `fmtDayTime`.
 [Complete (primary)] · [Pause] · spacer · [Keep working]. A no-op EOD (nothing running) shows
 the shared `.notice-toast`.
 
+## Week plan + off-periods (§4.4/§4.5, 2026-07-15)
+
+**WeekView** (full-page config-screen): header carries a `.sod-btn.ready` **Start New Week**
+button. Sections: "This week" (status + OFF-day `.type-chip` toggles, semi-tail hue = selected),
+and "Task templates" — a `.wk-section-head` (h3 + `.hist-add-btn`) over a `.sod-leftovers` list
+of `.wk-template` rows (title, head badge, `.wk-days` = 11px `ink-soft` weekday letters, budget/
+`@time`). Rows hover to `accent`. When mid-week-locked, a `.form-warning` banner shows with an
+`.off-urgent` checkbox (Urgent override); Add/rows disable. **No new hues** — accent / semi-tail /
+budgeted state hues + hairline/ink only.
+
+**TemplateEditor** + **OffDialog** reuse drawer chrome. Timing/weekday pickers are `.type-chips`;
+`.wk-shortcuts` = `.link-btn` (underlined 12px accent text) for Daily/Weekdays/Weekend. Anchor
+time-of-day and budget fields are smart-input (§7.0.2). The topbar `.ceremony-controls` gains an
+**Off / End Off** `.eod-btn` next to EOD.
+
 ## Heads & Sub-heads config screen (full page)
 
 Not a modal — replaces the timeline+pipeline grid area entirely (`grid-column: 1/-1;

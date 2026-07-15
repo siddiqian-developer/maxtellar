@@ -7,7 +7,7 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { SELF_MANAGEMENT, RECHARGE, FOOD, WASTED_TIME, LOST_HOURS } from "@maxtellar/core";
+import { SELF_MANAGEMENT, RECHARGE, FOOD, WASTED_TIME, LOST_HOURS, OFF_PERIOD } from "@maxtellar/core";
 import { forgetActivity } from "./ml/vectorStore";
 
 /** head name -> its activity (sub-head) names. */
@@ -16,9 +16,10 @@ export type HeadsRegistry = Record<string, string[]>;
 /** §2.10 plannable built-ins — schedulable like any head, no config note.
  * Recharge/Food are "inevitable-necessity" heads: undeletable AND plannable. */
 export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [SELF_MANAGEMENT, RECHARGE, FOOD];
-/** §2.10 system built-ins — accounting-owned, never planned; shown in config
- * (with a note) but hidden from the drawer's planning pickers. */
-export const SYSTEM_BUILT_IN_HEADS: readonly string[] = [WASTED_TIME, LOST_HOURS];
+/** §2.10/§4.5 system built-ins — accounting-owned, never planned as ordinary
+ * tasks; shown in config (with a note) but hidden from the drawer's planning
+ * pickers. Off-Periods is booked by the §4.5 off-period mechanism, not planned. */
+export const SYSTEM_BUILT_IN_HEADS: readonly string[] = [WASTED_TIME, LOST_HOURS, OFF_PERIOD];
 /** All undeletable built-ins (plannable + system). */
 export const BUILT_IN_HEADS: readonly string[] = [...PLANNABLE_BUILT_IN_HEADS, ...SYSTEM_BUILT_IN_HEADS];
 
@@ -27,6 +28,7 @@ export const BUILT_IN_HEADS: readonly string[] = [...PLANNABLE_BUILT_IN_HEADS, .
 export const BUILT_IN_HEAD_NOTES: Record<string, string> = {
   [WASTED_TIME]: "system head — logged, never planned",
   [LOST_HOURS]: "system head — auto-booked at day close",
+  [OFF_PERIOD]: "system head — booked by off-periods, never planned",
 };
 
 /** Built-in sub-heads seeded under their head (the §2.9 presets live here). */
@@ -47,6 +49,7 @@ const DEFAULT_REGISTRY: HeadsRegistry = {
   [FOOD]: [...(BUILT_IN_SUBHEADS[FOOD] ?? [])],
   [WASTED_TIME]: [],
   [LOST_HOURS]: [],
+  [OFF_PERIOD]: [],
 };
 
 /** Merge a persisted registry over the defaults so every built-in head — and

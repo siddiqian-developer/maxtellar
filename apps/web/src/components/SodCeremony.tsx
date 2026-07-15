@@ -22,7 +22,7 @@ import { LOST_HOURS, deadLeftovers, sodPrecondition, unaccountedGaps } from "@ma
 import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
 import { dayStartMin } from "../casualTime";
-import { fmtDayTime, fmtDur } from "../time";
+import { fmtDayTime, fmtDur, toDate } from "../time";
 
 interface Props {
   state: State;
@@ -121,7 +121,18 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
               </>
             )}
             <div className="drawer-footer">
-              <button className="primary" onClick={() => dispatch({ type: "PRUNING_DONE", discardIds: [...discard] })}>
+              <button
+                className="primary"
+                onClick={() =>
+                  dispatch({
+                    type: "PRUNING_DONE",
+                    discardIds: [...discard],
+                    // §4.4 injection: today's local-midnight + weekday for the
+                    // weekly-plan instantiation (no-op if no week started).
+                    inject: { midnight: dayStartMin(now), weekday: toDate(now).getDay() },
+                  })
+                }
+              >
                 Done pruning
               </button>
               <span style={{ flex: 1 }} />
@@ -132,14 +143,9 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
           <div className="config-section">
             <h3>Plan today</h3>
             <p className="field-desc">
-              Your weekly-plan tasks are injected here automatically (arrives in a later stage — none
-              yet). Carried-over leftovers are already on today's list; add anything ad-hoc, then go
-              live.
+              Today's weekly-plan tasks have been injected below your carried-over leftovers. Add
+              anything ad-hoc, then go live.
             </p>
-            <div className="config-subsection">
-              <h4>Injected from the week plan</h4>
-              <span className="config-empty">no weekly plan yet</span>
-            </div>
             <div className="config-subsection">
               <h4>On today's list</h4>
               {leftovers.length === 0 ? (

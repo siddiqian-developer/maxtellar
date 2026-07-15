@@ -21,9 +21,11 @@ import type {
   RunningView,
   State,
   UnstartedTask,
+  WeekTemplate,
 } from "./types.js";
-import { emptyChannels, LOST_HOURS } from "./types.js";
+import { emptyChannels, LOST_HOURS, OFF_PERIOD } from "./types.js";
 import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
+import { canPlanWeek, injectToday } from "./week.js";
 import { settle } from "./settle.js";
 import { snapTask } from "./validate.js";
 import { rankAfter, rankBetween } from "./rank.js";
@@ -50,6 +52,7 @@ export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT):
     placements: [],
     ceremony: null,
     days: [],
+    week: { startedAt: null, firstWeekday: null, offDays: [0], templates: [] },
     seq: 0,
   };
 }
@@ -894,14 +897,41 @@ export function reduce(state: State, event: Event): State {
     case "PRUNING_DONE": {
       // §4.2 step 2 → 3. Discard dead leftovers (auto-dead ∪ user-chosen) via the
       // existing CANCEL_TASK path (records a cancelled entry, cleans up parent
-      // brackets, resettles). Quota trim + weekly-plan injection are no-ops until
-      // Stages 6/5 (shipped as no-ops). → phase "planning".
+      // brackets, resettles). Quota trim is a no-op until Stage 6. Then §4.4
+      // weekly-plan injection. → phase "planning".
       if (!state.ceremony || state.ceremony.phase !== "pruning") return state;
       const dead = deadLeftovers(state).map((t) => t.id);
       const discard = new Set<string>([...dead, ...(event.discardIds ?? [])]);
       let s: State = state;
       for (const taskId of discard) {
         if (s.plan.some((i) => i.id === taskId)) s = reduce(s, { type: "CANCEL_TASK", taskId });
+      }
+      // §4.4/§3.13 injection: instantiate today's templates BELOW the surviving
+      // leftovers, then settle+amputate (partly-past anchored → amputate head at
+      // birth, G18; fully-past → perish). Only when a week is started and the web
+      // supplied today's midnight/weekday. Injected anchors keep their TRUE
+      // coordinates (no proposal relocation), so a passed moment amputates.
+      if (event.inject && s.week.startedAt !== null) {
+        const below = s.plan.length
+          ? s.plan.reduce((m, i) => (i.rank > m ? i.rank : m), s.plan[0]!.rank)
+          : null;
+        let lo = below;
+        const rankBelow = (prev: string | null): string => {
+          const r = rankAfter(prev ?? lo);
+          lo = r;
+          return r;
+        };
+        const mkId = (): string => {
+          const [id, ns] = nextId(s, "task");
+          s = ns;
+          return id;
+        };
+        const injected = injectToday(s, event.inject.midnight, event.inject.weekday, mkId, rankBelow);
+        if (injected.length > 0) {
+          const plan = [...s.plan, ...injected].sort(byRank);
+          s = applyAmputations({ ...s, plan });
+          s = resettle(s);
+        }
       }
       return { ...s, ceremony: { phase: "planning" } };
     }
@@ -910,6 +940,94 @@ export function reduce(state: State, event: Event): State {
       // §4.2 step 4 → 5: Planning Done → Live.
       if (!state.ceremony) return state;
       return { ...state, ceremony: null };
+    }
+
+    case "SET_WEEK_PLAN": {
+      // §4.4: replace the structural template set. LOCKED mid-week (canPlanWeek);
+      // the web gates the affordance and passes today's weekday for the OFF-day
+      // window check (reducer stays Date-free).
+      if (!canPlanWeek(state, event.weekday ?? null, event.urgent)) return state;
+      let s = state;
+      let prev: string | null = null;
+      const templates: WeekTemplate[] = event.templates.map((t) => {
+        let id = t.id;
+        if (!id) {
+          const [nid, ns] = nextId(s, "tpl");
+          id = nid;
+          s = ns;
+        }
+        const rank = t.rank ?? rankAfter(prev);
+        prev = rank;
+        return {
+          id,
+          rank,
+          title: t.title,
+          headId: t.headId,
+          activityId: t.activityId,
+          timing: t.timing,
+          tier: t.tier,
+          ommf: t.ommf,
+          slideable: t.slideable,
+          breakable: t.breakable,
+          weekdays: [...t.weekdays],
+          ...(t.budget !== undefined ? { budget: t.budget } : {}),
+          ...(t.anchorStartTod !== undefined ? { anchorStartTod: t.anchorStartTod } : {}),
+          ...(t.anchorEndTod !== undefined ? { anchorEndTod: t.anchorEndTod } : {}),
+          ...(t.sleepKind !== undefined ? { sleepKind: t.sleepKind } : {}),
+        };
+      });
+      return { ...s, week: { ...s.week, templates } };
+    }
+
+    case "START_WEEK": {
+      // §4.4: explicit week rollover — mark the boundary + First Weekday + OFF
+      // days. Daily SOD injection does the instantiating (three realities: with a
+      // plan, without a plan yet, or never — all just start).
+      return {
+        ...state,
+        week: {
+          ...state.week,
+          startedAt: event.startedAt ?? state.now,
+          firstWeekday: event.firstWeekday ?? state.week.firstWeekday,
+          offDays: event.offDays ?? state.week.offDays,
+        },
+      };
+    }
+
+    case "START_OFF_PERIOD": {
+      // §4.5: begin an Inviolable running block. Pause any current runner (its
+      // remainder survives); plan tasks push below (cursorOf uses the block's
+      // projected end). Known end → countdown; unknown → open stopwatch. Books
+      // to the Off-Periods head. Displaced-tasks perish/carry is a UI choice.
+      let s = state;
+      if (s.running) s = reduce(s, { type: "PAUSE_RUNNING" });
+      const [id, s1] = nextId(s, "off");
+      s = s1;
+      const title = event.title?.trim() || "Off";
+      const budget =
+        event.knownEnd !== undefined ? Math.max(s.minFragment, event.knownEnd - s.now) : undefined;
+      const running = {
+        id,
+        title,
+        headId: OFF_PERIOD,
+        activityId: title,
+        rank: rankAfter(s.plan.length ? s.plan[s.plan.length - 1]!.rank : null),
+        tier: "inviolable" as const,
+        ommf: false,
+        timing: (budget !== undefined ? "fixed" : "unscheduled") as UnstartedTask["timing"],
+        startedAt: s.now,
+        ...(budget !== undefined ? { budget } : {}),
+        channels: emptyChannels(),
+        isOff: true,
+      };
+      return resettle({ ...s, running });
+    }
+
+    case "END_OFF_PERIOD": {
+      // §4.5: complete the running off-period (no-op if none). COMPLETE_RUNNING
+      // writes its Off-Periods occupancy and resettles the plan.
+      if (!state.running || !state.running.isOff) return state;
+      return reduce(state, { type: "COMPLETE_RUNNING" });
     }
   }
 }

@@ -13,13 +13,15 @@ import { HistoryScreen } from "./components/HistoryScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
 import { SodCeremony } from "./components/SodCeremony";
 import { EodButton } from "./components/EodButton";
+import { OffPeriodControl } from "./components/OffPeriodControl";
+import { WeekView } from "./components/WeekView";
 import { GapFillModal } from "./components/GapFillModal";
 import { LOST_HOURS, formingDayStart, sodPrecondition } from "@maxtellar/core";
 import { fmtDur } from "./time";
 import { useSettings, type TimeFormat, type GridGranularity, type PresetDefaults } from "./settings";
 
 type Theme = "light" | "dark" | "system";
-type View = "main" | "headsConfig" | "history" | "analytics" | "aiStudio";
+type View = "main" | "headsConfig" | "history" | "analytics" | "aiStudio" | "week";
 
 /** Splash screen (SPEC VI): serif wordmark + the now-seam motif (hairline with
  * a sweeping accent dot) + tagline. Held for a minimum of 3s from first paint
@@ -289,6 +291,17 @@ export function App(): JSX.Element {
               <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
             </svg>
           </button>
+          <button
+            className={`nav-btn${view === "week" ? " active" : ""}`}
+            onClick={() => setView("week")}
+            data-tip="Week plan"
+            aria-label="Week plan"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="17" rx="2" />
+              <path d="M3 9h18M8 2v4M16 2v4M8 13h2M14 13h2M8 17h2M14 17h2" />
+            </svg>
+          </button>
         </nav>
         <span className="meta num" title="Time Accounted vs Unaccounted — the hero metric (this forming day)">
           accounted {fmtDur(accounted)} · lost {fmtDur(lost)}
@@ -308,6 +321,7 @@ export function App(): JSX.Element {
             {state.ceremony ? "Resume day setup" : "Start Day"}
           </button>
           <EodButton state={state} dispatch={(e) => void dispatch(e)} />
+          <OffPeriodControl state={state} dispatch={(e) => void dispatch(e)} />
         </div>
         <span className="spacer" />
         <GlobalClock />
@@ -343,6 +357,8 @@ export function App(): JSX.Element {
         <HistoryScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => setView("main")} />
       ) : view === "analytics" ? (
         <AnalyticsScreen state={state} onBack={() => setView("main")} />
+      ) : view === "week" ? (
+        <WeekView state={state} dispatch={(e) => void dispatch(e)} onBack={() => setView("main")} />
       ) : (
         <>
           <Timeline state={state} />

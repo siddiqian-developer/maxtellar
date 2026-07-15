@@ -217,6 +217,11 @@ into two kinds by whether the user may *plan* a task under them:
   wall = accounted + lost is explicit history. Analytics **excludes** Lost Hours from "accounted"
   and reports it as the Lost figure.
 
+- **Off-Periods** — where §4.5 off-period time books (illness, travel, abrupt breaks). An
+  off-period is a real Inviolable running block on the spine; its occupancy accrues here. **Never
+  plannable** as an ordinary task (started only via the off-period mechanism). Note: *"system head
+  — booked by off-periods, never planned."* (Stage 5.)
+
 (**Lost ≠ Wasted:** Lost = unlogged gutter; Wasted = user-declared waste.)
 
 **Pattern — inevitable-necessity heads (binding for the future).** Sleep, Nap, Food and their

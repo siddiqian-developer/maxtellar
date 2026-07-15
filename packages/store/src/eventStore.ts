@@ -44,6 +44,8 @@ export class EventStore {
       if (state.semiTailFloor === undefined) state.semiTailFloor = 60;
       if (state.ceremony === undefined) state.ceremony = null;
       if (state.days === undefined) state.days = [];
+      if (state.week === undefined)
+        state.week = { startedAt: null, firstWeekday: null, offDays: [0], templates: [] };
       from = snap.uptoSeq;
     } else {
       // The log must FULLY determine state (event-sourcing): state always

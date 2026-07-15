@@ -104,6 +104,41 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
      quota structure, ad-hoc daily tasks only, analytics still track achieved hours against
      whatever quotas persist from prior weeks (or none). Degrade gracefully, never block.
 
+**Mechanism (Stage 5, 2026-07-15) — event-sourced weekly plan + injection.**
+- **State `week: WeekPlan` = `{ startedAt, firstWeekday, offDays, templates }`** (event-sourced).
+  A **`WeekTemplate`** is a reusable task spec: title, head/activity, timing, tier, ommf,
+  slideable, breakable, budget?, **anchor time-of-day** `anchorStartTod`/`anchorEndTod` (0..1439 —
+  a "9am meeting", NOT an absolute epoch), sleepKind?, `weekdays: number[]` (0=Sun…6=Sat), and a
+  LexoRank. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged is a
+  future extension** (grilled 2026-07-15 — weekday-set for the MVP).
+- **`SET_WEEK_PLAN { templates, weekday?, urgent? }`** replaces the template set. **LOCKED
+  mid-week** (`canPlanWeek`): accepted only before the first week starts, when today's weekday is an
+  **OFF day** (default Sunday; ≥1 required), or with the **urgent bypass**; otherwise a no-op. The
+  reducer stays Date-free — the web passes today's `weekday`.
+- **`START_WEEK { firstWeekday?, offDays?, startedAt? }`** marks the boundary + First Weekday + OFF
+  days. It does **not** instantiate anything — daily SOD injection does (the three realities above
+  all just start).
+- **Injection at `PRUNING_DONE { inject: { midnight, weekday } }`** (§3.13). `injectToday`
+  instantiates every template whose `weekdays` includes today's weekday, resolving time-of-day
+  anchors to absolute epoch for `midnight`, ranked **strictly below the surviving leftovers**
+  (open-item 5), then settles + amputates. Injected anchored tasks keep their **true** coordinates
+  (no proposal relocation), so **G18** holds: partly-past → head amputated at birth; fully-past →
+  perish (fixed/ommf) or quota-shortfall (budgeted). No week started → no-op.
+- **Web `WeekView`** (full-page): template list + editor (smart-input on anchor time-of-day and
+  budget, §7.0.2), OFF-day chips, First Weekday, **Start New Week**. Locked mid-week with an urgent
+  override toggle.
+
+### 4.5 mechanism — off-periods (Stage 5, 2026-07-15)
+- **`START_OFF_PERIOD { title?, knownEnd? }`** begins an **Inviolable running block** on the spine
+  (`RunningTask.isOff`, tier `inviolable`, head **Off-Periods**, §2.10). Known end → a countdown
+  block `[now, knownEnd]`; unknown → an **open stopwatch**. Any current runner is paused (its
+  remainder survives); **plan tasks push below** the block (default "push") — the perish/carry
+  disposition is a UI choice via `CANCEL_TASK` (reuses the pruning-style list). Off-Periods is a new
+  **built-in head** (undeletable, system-owned, never a planning-picker option, §2.10).
+- **`END_OFF_PERIOD`** completes the running off-period (books its Off-Periods occupancy), no-op
+  otherwise. Pause/resume works via the ordinary PAUSE/START; ceremony suspension stays **emergent**
+  (no SOD pressed = suspended).
+
 ### 4.5 Off-periods (abrupt, mid-week) — G-off
 - **Real tasks on the spine** (Inviolable tier), UX-distinct from ordinary tasks. Known end →
   fixed block; unknown end → head-anchored running block.
