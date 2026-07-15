@@ -3,7 +3,7 @@
  * the property suite. A violation is a scheduler bug, never user error.
  */
 
-import type { Part, State } from "./types.js";
+import type { Dur, Part, State, UnstartedTask } from "./types.js";
 import { cursorOf } from "./reducer.js";
 
 export interface Violation {
@@ -11,9 +11,30 @@ export interface Violation {
   detail: string;
 }
 
+/** §2.7 (G24): a decomposed task's committed size is Σ of its children. */
+function childBudget(t: UnstartedTask): Dur {
+  if (t.budget !== undefined) return t.budget;
+  if (t.timing === "fixed" && t.anchorStart !== undefined && t.anchorEnd !== undefined)
+    return t.anchorEnd - t.anchorStart;
+  return 0;
+}
+
 export function checkInvariants(s: State): Violation[] {
   const v: Violation[] = [];
   const cursor = cursorOf(s);
+
+  // §2.7 (G24): a task named by another's parentId is a PARENT — a derived
+  // bracket that overlaps its own leaves by design and holds no budget of its
+  // own. Excluded from the spine physics below; checked instead by the
+  // zero-sum rule at the end.
+  const parentIds = new Set<string>();
+  for (const i of s.plan) if (i.kind === "task" && i.parentId) parentIds.add(i.parentId);
+  // A running leaf's ancestors stay brackets even without a plan child (§2.7).
+  let rpid = s.running?.parentId;
+  while (rpid) {
+    parentIds.add(rpid);
+    rpid = (s.plan.find((i) => i.id === rpid) as UnstartedTask | undefined)?.parentId;
+  }
 
   // 1. Occupancy history: non-overlapping, end ≤ now, start ≤ end.
   const occ = s.history
@@ -33,6 +54,7 @@ export function checkInvariants(s: State): Violation[] {
   const allParts: (Part & { id: string })[] = [];
   for (const p of s.placements) {
     const item = s.plan.find((i) => i.id === p.itemId);
+    if (item?.kind === "task" && parentIds.has(item.id)) continue; // parent bracket: derived span
     for (const part of p.parts) {
       if (part.end <= part.start)
         v.push({ rule: "part-order", detail: `${p.itemId} part ${part.start}-${part.end}` });
@@ -69,6 +91,26 @@ export function checkInvariants(s: State): Violation[] {
       v.push({
         rule: "no-overlap-plan",
         detail: `${allParts[i - 1]!.id} overlaps ${allParts[i]!.id} at ${allParts[i]!.start}`,
+      });
+  }
+
+  // 3b. §2.7 (G24) zero-sum budget: at decomposition a parent's budget is set
+  //     to the sum of its children's committed sizes. As leaves run/complete
+  //     they leave the plan (their time migrates to history) and a paused
+  //     remainder shrinks, so the *remaining* children can only sum to LESS
+  //     than the parent's fixed original total. The always-true invariant is
+  //     therefore `parent.budget ≥ Σ remaining children` — a parent that is
+  //     smaller than its own live parts is the real corruption this guards.
+  for (const item of s.plan) {
+    if (item.kind !== "task" || !parentIds.has(item.id)) continue;
+    const kids = s.plan.filter(
+      (i): i is UnstartedTask => i.kind === "task" && i.parentId === item.id,
+    );
+    const sum = kids.reduce((acc, c) => acc + childBudget(c), 0);
+    if ((item.budget ?? 0) < sum)
+      v.push({
+        rule: "zero-sum-budget",
+        detail: `parent ${item.id} budget ${item.budget} < Σ children ${sum}`,
       });
   }
 

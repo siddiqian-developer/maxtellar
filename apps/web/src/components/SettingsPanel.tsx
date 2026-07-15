@@ -19,6 +19,7 @@ interface Props {
   /** Commit-and-close (Done). */
   onDone: () => void;
   onOpenHeadsConfig: () => void;
+  onOpenAiStudio: () => void;
 }
 
 const PRESET_TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
@@ -28,8 +29,8 @@ const PRESET_ROWS: { id: PresetId; label: string }[] = [
   { id: "food", label: "Food" },
 ];
 
-export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispatch, onCancel, onDone, onOpenHeadsConfig }: Props): JSX.Element {
-  const { timeFormat, setTimeFormat, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault } = useSettings();
+export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
+  const { timeFormat, setTimeFormat, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode } = useSettings();
   const gridOptions = [0, 5, 10, 15, 30] as const;
   useEscClose(onCancel);
   const capHours = Math.round((openExtentCap / 60) * 10) / 10;
@@ -63,6 +64,30 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispa
                 24h
               </button>
             </div>
+          </div>
+          <div className="field">
+            <label data-tip="AI intensity. Maximum runs the on-device AI (smart suggestions for sub-heads, decompositions, and casual-time parsing). Lightweight runs the deterministic paths only — for low-end machines. AI is never load-bearing; the app works fully either way. Open AI Studio to tune each feature individually.">
+              AI features {mlMode === "custom" && <span className="badge" data-timing="semi-head">custom</span>}
+            </label>
+            <div className="type-chips" role="radiogroup" aria-label="AI features">
+              <button
+                type="button"
+                className={`type-chip${mlMode === "maximum" ? " active" : ""}`}
+                data-status="fixed"
+                onClick={() => setMlMode("maximum")}
+              >
+                Maximum AI
+              </button>
+              <button
+                type="button"
+                className={`type-chip${mlMode === "lightweight" ? " active" : ""}`}
+                data-status="unscheduled"
+                onClick={() => setMlMode("lightweight")}
+              >
+                Lightweight
+              </button>
+            </div>
+            <button style={{ marginTop: 8 }} onClick={onOpenAiStudio}>AI Studio — tune each feature →</button>
           </div>
           <div className="field">
             <label data-tip="Ruler graduation marks between the hour labels on the timeline. Off by default.">

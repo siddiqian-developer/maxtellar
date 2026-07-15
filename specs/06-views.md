@@ -232,13 +232,16 @@ Drawer behavior (see also `docs/drawer-reference.md`):
   trimmed, always ≥ minutes (`90m`→`1h 30m`, `30m`→`30m`). ±5-min stepper chevrons on all
   time fields (steppers skipped by tab order). Parser is deterministic-grammar-first with an
   ML fallback seam (§7.0.2); never load-bearing.
-- **Preset pill row (directly under the timing-type chips).** `Sleep · Nap · Food` — each a
+- **Preset pill row (directly under the timing-type chips).** Headed by a **`Presets` label** in
+  the main view; the ⓘ glyph carries only the auto-select footnote. `Sleep · Nap · Food` — each a
   §2.9 preset that pre-fills a bundle (locked Title/Sub-head/Head + `breakable` off + the
   pill's `sleepKind`; editable timing type, `slideable`, `ommf`). Selecting a pill fills and
   locks those fields (locked inputs render read-only/disabled); tapping the active pill again
   deselects and **restores the pre-activate snapshot**. A title matching a preset auto-selects
   its pill (ML-tagged, undoable), unless the user has already toggled a pill this session
-  (intent wins, §7.0.1). There is **no "ordinary" pill** — no pill selected *is* ordinary.
+  (intent wins, §7.0.1). The **`auto` tag rides on the active pill's saturated fill** — rendered
+  **pure white on dark**, and a white chip with dark text on light, so it reads on either theme.
+  There is **no "ordinary" pill** — no pill selected *is* ordinary.
 - **Snap-at-entry + universal snap-notify (binding pattern, all input fields — see §7.0.2).**
   A value that violates a floor/physics rule is **corrected the instant it is committed to the
   field**, and **every meaning-changing adjustment is announced** in the inline notice list —

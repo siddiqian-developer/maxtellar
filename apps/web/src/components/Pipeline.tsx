@@ -44,6 +44,13 @@ function LockIcon(): JSX.Element {
   );
 }
 
+/** English ordinal with suffix: 2 → "2nd", 3 → "3rd", 11 → "11th". */
+function ordinalWord(k: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = k % 100;
+  return `${k}${s[(v - 20) % 10] ?? s[v] ?? s[0]}`;
+}
+
 /** Substate label + hue key for an unstarted task's timing type. */
 const TIMING_LABEL: Record<TimingType, string> = {
   fixed: "Fixed",
@@ -87,18 +94,13 @@ function lineageTotals(state: State, remainderOf: string): { spent: Dur; pausedA
   return { spent, pausedAt };
 }
 
-/** Lifecycle-only capsule: `Started • Running/Overrun/Paused`, or single-segment
- * `Unstarted` (no substate — the timing type has its own pill on every card). */
-function Capsule({ category, substate, hue }: { category: string; substate?: string | undefined; hue: string }): JSX.Element {
+/** Single-word lifecycle state (no category/substate split): one of
+ * Planned / Running / Overrun / Paused. A composed parent shows its active
+ * leaf's state, not a state of its own. */
+function Capsule({ label, hue }: { label: string; hue: string }): JSX.Element {
   return (
     <span className="state-capsule" data-hue={hue}>
-      <span className="cap-cat">{category}</span>
-      {substate !== undefined && (
-        <>
-          <span className="cap-dot">•</span>
-          <span className="cap-sub">{substate}</span>
-        </>
-      )}
+      <span className="cap-cat">{label}</span>
     </span>
   );
 }
@@ -125,9 +127,213 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
   const hour12 = timeFormat === "12h";
   const abs = (m: Min): string => fmtAbs(m, { now: state.now, hour12 });
 
-  // Pipeline index: the running card is #1; unstarted cards continue from
-  // there in display (time) order. Gaps don't consume a number.
+  // §2.7 (G24): a parent (a task named by another's parentId) is a derived
+  // bracket — it groups its leaves rather than occupying the spine itself. A
+  // running leaf's ancestors stay brackets even with no plan child (so a
+  // decomposed task never shows as a plain startable card while its leaf runs).
+  const parentIds = new Set<string>();
+  for (const i of state.plan) if (i.kind === "task" && i.parentId) parentIds.add(i.parentId);
+  const runningAncestors = new Set<string>();
+  let rpid = state.running?.parentId;
+  while (rpid) {
+    parentIds.add(rpid);
+    runningAncestors.add(rpid);
+    rpid = (state.plan.find((i) => i.id === rpid) as UnstartedTask | undefined)?.parentId;
+  }
+  const isParentId = (id: string): boolean => parentIds.has(id);
+  const childrenOf = (id: string): UnstartedTask[] =>
+    state.plan
+      .filter((i): i is UnstartedTask => i.kind === "task" && i.parentId === id)
+      .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+  const startOf = (id: string): number | undefined =>
+    state.placements.find((p) => p.itemId === id)?.parts[0]?.start;
+
+  // The running task's subtask identity (if it's a leaf): its live ordinal is
+  // subtaskCount − remaining-plan-leaves, and the parent's title.
+  const runParent = state.running?.parentId
+    ? (state.plan.find((i) => i.id === state.running!.parentId) as UnstartedTask | undefined)
+    : undefined;
+  const runSub = runParent
+    ? { ordinal: Math.max(1, (runParent.subtaskCount ?? 1) - childrenOf(runParent.id).length), parentTitle: runParent.title }
+    : undefined;
+
+  // Top-level entries (no parent) in TIME order — mirrors the timeline. Each
+  // parent expands into its leaves (rank order) nested one level deeper, and
+  // each leaf carries its 1-based subtask ordinal within the parent.
+  const topLevel = state.plan.filter((i) => !(i.kind === "task" && i.parentId));
+  type Node =
+    | { kind: "card"; item: UnstartedTask; depth: number; idx: number; ordinal?: number; parentTitle?: string }
+    | { kind: "bracket"; item: UnstartedTask; depth: number }
+    | { kind: "gap"; item: { id: string; budget: number }; depth: number };
+  const nodes: Node[] = [];
+  // Pipeline index: the running card is #1; EVERY unstarted card — standalone OR
+  // subtask leaf — consumes the next number (so a task after a 2-subtask
+  // composition is #3, not #1). Gaps and bracket headers take no number. A leaf
+  // ALSO carries its live subtask ordinal + parent title for the "Subtask # N
+  // of <Parent>" label.
   let idx = state.running ? 1 : 0;
+  const walk = (item: (typeof topLevel)[number], depth: number, ordinal?: number, parentTitle?: string): void => {
+    if (item.kind === "gap") {
+      nodes.push({ kind: "gap", item, depth });
+      return;
+    }
+    if (isParentId(item.id)) {
+      const kids = childrenOf(item.id);
+      // While the sole leaf runs the parent has no plan child — the running
+      // card in "Now" stands in for it, so show nothing here. It reappears
+      // (composed) the moment a leaf returns to the plan (e.g. on pause).
+      if (kids.length === 0) return;
+      nodes.push({ kind: "bracket", item, depth });
+      // Live ordinals renumber contiguously (subtaskCount shrinks on cancel).
+      const base = (item.subtaskCount ?? kids.length) - kids.length + 1;
+      kids.forEach((c, kk) => walk(c, depth + 1, base + kk, item.title));
+      return;
+    }
+    idx += 1;
+    if (ordinal !== undefined) nodes.push({ kind: "card", item, depth, idx, ordinal, parentTitle: parentTitle ?? "" });
+    else nodes.push({ kind: "card", item, depth, idx });
+  };
+  for (const item of [...topLevel].sort((a, b) => {
+    const sa = startOf(a.id);
+    const sb = startOf(b.id);
+    if (sa === undefined && sb === undefined) return 0;
+    if (sa === undefined) return 1;
+    if (sb === undefined) return -1;
+    return sa - sb;
+  })) {
+    walk(item, 0);
+  }
+
+  /** One unstarted-task card (leaf or standalone). Indented by `depth`. EVERY
+   * card shows the pipeline #idx; a leaf ALSO shows a "Subtask # N of <Parent>"
+   * label after its title. */
+  const renderCard = (t: UnstartedTask, depth: number, badgeIdx: number, ordinal?: number, parentTitle?: string): JSX.Element => {
+    const placement = state.placements.find((p) => p.itemId === t.id);
+    const parts = placement?.parts ?? [];
+    const first = parts[0];
+    const last = parts[parts.length - 1];
+    const isRemainder = t.remainderOf !== undefined;
+    const start = t.anchorStart ?? first?.start;
+    const end = t.anchorEnd ?? last?.end;
+    const totals = isRemainder ? lineageTotals(state, t.remainderOf as string) : null;
+    const spent = totals ? totals.spent : 0;
+    const originalBudget = t.budget !== undefined ? t.budget + spent : undefined;
+    return (
+      <div
+        key={t.id}
+        className={`card${depth > 0 ? " subtask-leaf" : ""}`}
+        data-state={TIMING_HUE[t.timing]}
+        style={depth > 0 ? { marginLeft: depth * 18 } : undefined}
+      >
+        <div className="row">
+          <span className="pipe-idx num">#{badgeIdx}</span>
+          <span className="title">
+            {t.title}
+            {ordinal !== undefined && (
+              <span className="subtask-suffix"> — Subtask # {ordinal} of {parentTitle}</span>
+            )}
+          </span>
+          {!t.slideable && <LockIcon />}
+          <span className="badge head-badge">
+            {t.activityId ? `${t.activityId} · ${t.headId}` : t.headId}
+          </span>
+          {t.ommf && <span className="badge">ommf</span>}
+          <span className="badge" data-timing={t.timing}>{TIMING_LABEL[t.timing]}</span>
+          <Capsule
+            label={isRemainder ? "Paused" : "Planned"}
+            hue={isRemainder ? "paused" : TIMING_HUE[t.timing]}
+          />
+        </div>
+        <div className="card-fields">
+          <Field
+            label={isRemainder ? "Restart" : "Start"}
+            value={start !== undefined ? abs(start) : null}
+            floating={start !== undefined && t.anchorStart === undefined}
+          />
+          <Field
+            label="End"
+            value={end !== undefined ? abs(end) : null}
+            floating={end !== undefined && t.anchorEnd === undefined}
+          />
+          <Field label="Budget" value={originalBudget !== undefined ? fmtDur(originalBudget) : "open"} />
+          <Field label="Spent" value={fmtDur(spent)} />
+          <Field label="Remaining" value={t.budget !== undefined ? fmtDur(t.budget) : null} />
+          {totals && totals.pausedAt > 0 && (
+            <Field label="Paused" value={fmtDur(Math.max(0, state.now - totals.pausedAt))} />
+          )}
+        </div>
+        {(first === undefined || parts.length > 1 || (placement && placement.squeezedDeficit > 0)) && (
+          <div className="meta num">
+            {first === undefined && "unplaced"}
+            {parts.length > 1 && `${parts.length} parts`}
+            {placement && placement.squeezedDeficit > 0 &&
+              `${parts.length > 1 ? " · " : ""}squeezed ${placement.squeezedDeficit}m`}
+          </div>
+        )}
+        <div className="actions">
+          <button className="primary" onClick={() => dispatch({ type: "START_TASK", taskId: t.id })}>
+            Start
+          </button>
+          <button className="cancel-accent" onClick={() => dispatch({ type: "CANCEL_TASK", taskId: t.id })}>Cancel</button>
+        </div>
+      </div>
+    );
+  };
+
+  /** A parent bracket header: title, head, the spanned window, the zero-sum
+   * budget (Σ leaves) and a Start (→ first leaf) / Cancel (whole tree). */
+  const renderBracket = (t: UnstartedTask, depth: number): JSX.Element => {
+    const placement = state.placements.find((p) => p.itemId === t.id);
+    const span = placement?.parts[0];
+    const kids = childrenOf(t.id);
+    // Start-button label names the exact leaf it will start (§2.7 feedback):
+    // "first", "2nd", "3rd", … "2nd last", "last". Remaining leaves are always
+    // a suffix, so the next leaf's front ordinal k = subtaskCount − remaining+1.
+    const n = t.subtaskCount ?? kids.length;
+    const k = n - kids.length + 1;
+    const startLabel =
+      n <= 1 ? "Start"
+      : k >= n ? "Start last"
+      : k === 1 ? "Start first"
+      : k === n - 1 ? "Start 2nd last"
+      : `Start ${ordinalWord(k)}`;
+    // A composed parent has no state of its own — it shows the state of its
+    // active leaf: a running descendant → Running/Overrun; else a paused
+    // remainder among the leaves → Paused; else Planned.
+    const composed: { label: string; hue: string } = runningAncestors.has(t.id)
+      ? rv?.overrun
+        ? { label: "Overrun", hue: "overrun" }
+        : { label: "Running", hue: "running" }
+      : kids.some((c) => c.remainderOf !== undefined)
+        ? { label: "Paused", hue: "paused" }
+        : { label: "Planned", hue: "budgeted" };
+    return (
+      <div
+        key={t.id}
+        className="subtask-bracket-head"
+        style={depth > 0 ? { marginLeft: depth * 18 } : undefined}
+      >
+        <div className="row">
+          <span className="title">{t.title}</span>
+          <span className="badge head-badge">{t.activityId ? `${t.activityId} · ${t.headId}` : t.headId}</span>
+          <span className="badge composed-badge">Composed</span>
+          <span className="badge" data-timing="budgeted">{kids.length} subtask{kids.length === 1 ? "" : "s"}</span>
+          <Capsule label={composed.label} hue={composed.hue} />
+        </div>
+        <div className="card-fields">
+          <Field label="Start" value={span ? abs(span.start) : null} />
+          <Field label="End" value={span ? abs(span.end) : null} />
+          <Field label="Budget" value={t.budget !== undefined ? fmtDur(t.budget) : "open"} />
+        </div>
+        <div className="actions">
+          <button className="primary" onClick={() => dispatch({ type: "START_TASK", taskId: t.id })}>
+            {startLabel}
+          </button>
+          <button className="cancel-accent" onClick={() => dispatch({ type: "CANCEL_TASK", taskId: t.id })}>Cancel</button>
+        </div>
+      </div>
+    );
+  };
 
   return (
     <div className="pipeline">
@@ -139,18 +345,21 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
               <span className={`live-dot${rv.overrun ? " overrun" : ""}`} aria-label="Task is live" />
               #1
             </span>
-            <span className="title">{state.running.title}</span>
+            <span className="title">
+              {state.running.title}
+              {runSub && (
+                <span className="subtask-suffix"> — Subtask # {runSub.ordinal} of {runSub.parentTitle}</span>
+              )}
+            </span>
             <span className="badge head-badge">
-              {state.running.headId}
-              {state.running.activityId && ` · ${state.running.activityId}`}
+              {state.running.activityId ? `${state.running.activityId} · ${state.running.headId}` : state.running.headId}
             </span>
             {state.running.ommf && <span className="badge">ommf</span>}
             <span className="badge" data-timing={state.running.timing}>
               {TIMING_LABEL[state.running.timing]}
             </span>
             <Capsule
-              category="Started"
-              substate={rv.overrun ? "Overrun" : "Running"}
+              label={rv.overrun ? "Overrun" : "Running"}
               hue={rv.overrun ? "overrun" : "running"}
             />
           </div>
@@ -202,101 +411,18 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
       )}
 
       <h2>Up next</h2>
-      {/* Cards follow TIME order (first placed part), mirroring the timeline —
-          not raw rank order: anchored tasks can be placed earlier in time than
-          higher-priority floats. Unplaced items sink to the end in rank order. */}
-      {[...state.plan]
-        .sort((a, b) => {
-          const sa = state.placements.find((p) => p.itemId === a.id)?.parts[0]?.start;
-          const sb = state.placements.find((p) => p.itemId === b.id)?.parts[0]?.start;
-          if (sa === undefined && sb === undefined) return 0; // keep rank order
-          if (sa === undefined) return 1;
-          if (sb === undefined) return -1;
-          return sa - sb;
-        })
-        .map((item) => {
-          if (item.kind === "gap") return <div key={item.id} className="gap-spacer" title={`buffer ${item.budget}m`} />;
-          const t = item as UnstartedTask;
-          const placement = state.placements.find((p) => p.itemId === t.id);
-          const parts = placement?.parts ?? [];
-          const first = parts[0];
-          const last = parts[parts.length - 1];
-          const isRemainder = t.remainderOf !== undefined;
-          idx += 1;
-
-          // Edge language mirrors the timeline: an anchored coordinate reads
-          // upright; a scheduler-placed (presumed, will-reflow) one ~italic.
-          // A riding (slid) task needs no special case: slide MOVES the anchor
-          // (G28), so anchorEnd is always the live, exact value.
-          const start = t.anchorStart ?? first?.start;
-          const end = t.anchorEnd ?? last?.end;
-
-          // Spent/Remaining on every card: a fresh task has spent 00:00 and its
-          // whole budget remaining; a remainder's spent sums its prior segments,
-          // and its Budget reads as the ORIGINAL total (spent + remaining) so
-          // `remaining = budget − spent` holds on every card alike.
-          const totals = isRemainder ? lineageTotals(state, t.remainderOf as string) : null;
-          const spent = totals ? totals.spent : 0;
-          const originalBudget =
-            t.budget !== undefined ? t.budget + spent : undefined;
-
-          return (
-            <div key={t.id} className="card" data-state={TIMING_HUE[t.timing]}>
-              <div className="row">
-                <span className="pipe-idx num">#{idx}</span>
-                <span className="title">{t.title}</span>
-                {!t.slideable && <LockIcon />}
-                <span className="badge head-badge">
-                  {t.headId}
-                  {t.activityId && ` · ${t.activityId}`}
-                </span>
-                {t.ommf && <span className="badge">ommf</span>}
-                <span className="badge" data-timing={t.timing}>{TIMING_LABEL[t.timing]}</span>
-                {/* Paused is never Unstarted — the remainder continues begun work */}
-                <Capsule
-                  category={isRemainder ? "Started" : "Unstarted"}
-                  substate={isRemainder ? "Paused" : undefined}
-                  hue={isRemainder ? "paused" : TIMING_HUE[t.timing]}
-                />
-              </div>
-              <div className="card-fields">
-                {/* A paused remainder has no "start" — its first field is the
-                    RESTART moment (scheduler-placed resume; ~italic unless
-                    anchored). The old "Resumes at" pill was redundant with it. */}
-                <Field
-                  label={isRemainder ? "Restart" : "Start"}
-                  value={start !== undefined ? abs(start) : null}
-                  floating={start !== undefined && t.anchorStart === undefined}
-                />
-                <Field
-                  label="End"
-                  value={end !== undefined ? abs(end) : null}
-                  floating={end !== undefined && t.anchorEnd === undefined}
-                />
-                <Field label="Budget" value={originalBudget !== undefined ? fmtDur(originalBudget) : "open"} />
-                <Field label="Spent" value={fmtDur(spent)} />
-                <Field label="Remaining" value={t.budget !== undefined ? fmtDur(t.budget) : null} />
-                {totals && totals.pausedAt > 0 && (
-                  <Field label="Paused" value={fmtDur(Math.max(0, state.now - totals.pausedAt))} />
-                )}
-              </div>
-              {(first === undefined || parts.length > 1 || (placement && placement.squeezedDeficit > 0)) && (
-                <div className="meta num">
-                  {first === undefined && "unplaced"}
-                  {parts.length > 1 && `${parts.length} parts`}
-                  {placement && placement.squeezedDeficit > 0 &&
-                    `${parts.length > 1 ? " · " : ""}squeezed ${placement.squeezedDeficit}m`}
-                </div>
-              )}
-              <div className="actions">
-                <button className="primary" onClick={() => dispatch({ type: "START_TASK", taskId: t.id })}>
-                  Start
-                </button>
-                <button className="cancel-accent" onClick={() => dispatch({ type: "CANCEL_TASK", taskId: t.id })}>Cancel</button>
-              </div>
-            </div>
-          );
-        })}
+      {/* Cards follow TIME order (first placed part), mirroring the timeline.
+          §2.7 (G24): a parent renders as a bracket header with its leaves
+          nested one level deeper; only leaves/standalones carry an index. */}
+      {nodes.map((n) =>
+        n.kind === "gap" ? (
+          <div key={n.item.id} className="gap-spacer" title={`buffer ${n.item.budget}m`} />
+        ) : n.kind === "bracket" ? (
+          renderBracket(n.item, n.depth)
+        ) : (
+          renderCard(n.item, n.depth, n.idx, n.ordinal, n.parentTitle)
+        ),
+      )}
     </div>
   );
 }

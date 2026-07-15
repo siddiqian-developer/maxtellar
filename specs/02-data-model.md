@@ -98,6 +98,65 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
   leaf's time to the leaf's own head** — one composed task can split across heads. Default:
   inherit the parent's head.
 
+**Build model (Stage 2, settled 2026-07-15):**
+- **Flat representation.** Composition is a single `parentId?` on a task; the plan stays one
+  flat rank list. A task named by another's `parentId` is a **parent** — never placed on the
+  spine; the settle-pass lays out only leaves, then derives the parent's placement as the
+  **bracket `[min(leaf start), max(leaf end)]`**. Children rank contiguously just below their
+  parent so the bracket is a contiguous group.
+- **One atomic decomposition event: `SET_SUBTASKS { parentId, children }`.** Re-issuing
+  replaces the whole prior decomposition (one direction, R5); empty `children` recomposes the
+  parent into an ordinary leaf. Children need only a title — head/activity inherit the parent's,
+  timing defaults to budgeted. A leaf's committed size is its budget (a Fixed leaf's is its
+  anchor span).
+- **Zero-sum is recursive.** A parent's budget is recomputed as Σ of its children bottom-up to
+  a fixpoint (a child's own decomposition ripples up to the grandparent). During *execution* a
+  started/completed leaf leaves the plan and a paused remainder shrinks, so the always-true
+  invariant is `parent.budget ≥ Σ remaining children` (equality holds only for a pristine, un-run
+  decomposition).
+- **Running lifecycle.** START on a parent resolves to its first unstarted leaf; the leaf's
+  ancestors are exempt from the mid-queue cancel-above sweep (§3.10) so the composition survives
+  while the leaf runs. A running leaf carries its `parentId`; a paused remainder keeps it (stays a
+  child). While a leaf runs, its ancestors remain **brackets even with no plan child** — a
+  decomposed task never reverts to a schedulable task mid-execution. Completing the last leaf
+  removes the parent bracket (and any now-childless ancestor); the parent writes **no history of
+  its own** — each leaf's occupancy is the sole record (analytics split for free).
+- **Views.** The pipeline renders a parent as a **bracket header** (↳, title, head, N subtasks,
+  spanned window, Σ budget, Start-<pos> / Cancel-tree) with its leaves nested one level deeper;
+  the timeline draws the bracket as a thin left-rail spanning the leaves and each leaf block
+  shows its parent title + ordinal. The task drawer's **Subtasks** section lets a task be
+  decomposed at creation (title + casual budget per leaf).
+- **At least two subtasks.** Composition requires ≥2 leaves — one "subtask" is just the task
+  itself. The drawer blocks Add on a single subtask (with a message) before creating anything.
+- **Leaf ordinals & Start label (feedback 2026-07-15).** A parent stores `subtaskCount` at
+  decomposition (display only). Because starting *or cancelling* a leaf keeps the remaining set a
+  **suffix** of the numbering (starting cancels earlier siblings; cancelling decrements the count
+  so survivors renumber contiguously), the next leaf's front ordinal `k = subtaskCount −
+  remaining + 1`. Leaves are numbered by plain ordinal (**1, 2 …**); the parent's Start button
+  names the exact leaf: **"first", "2nd", "3rd", … , "2nd last", "last"**.
+- **Explicit "Composed" marker.** The parent card carries a **Composed** badge (distinct from the
+  leaf-derived state pill) so composition is legible independent of state.
+- **Lifecycle state pill (feedback 2026-07-15).** The card's state capsule is a **single word**,
+  no category/substate split: **Planned** (was "Unstarted"), **Running**, **Overrun**, **Paused**.
+  A **composed parent has no state of its own** — it shows the state of its **active leaf**: a
+  running descendant → Running/Overrun; else a paused remainder among the leaves → Paused; else
+  Planned. "Composed" is conveyed by the ↳ glyph + "N subtasks" badge, not a state.
+- **Composed persists in the pipeline while running.** A running leaf's ancestors are classified
+  as brackets in the pipeline too (not just the settle/invariants layer). While the *sole* leaf
+  runs, the empty bracket is hidden (the running card in "Now" represents it); the instant a leaf
+  returns to the plan — e.g. **pausing** the last running leaf — the parent reappears **composed**
+  with the paused remainder nested under it.
+- **Composition survives into the record (timeline rail).** Each leaf's history entry carries the
+  composition link (`parentId` + `parentTitle` on `HistoryEntry`), so the timeline draws one
+  **left-rail per parent spanning all its leaves across time** — completed/paused leaves in the
+  record (above the seam), the running one, and still-planned ones below — persisting after the
+  parent task object is gone. Past leaf blocks are tagged with their parent title. The rail is a
+  *historical record* that those tasks were one composed task.
+- **Subtask budget is a smart-input field (§1.6/§7.0.2 parity).** Every field that accepts a
+  time/date/duration — including each subtask's budget — runs the same casual-parse → snap →
+  reformat pipeline with universal snap-notify. This is a **law, not a per-field choice**: a new
+  time/duration input inherits smart-input by default, never a raw parse.
+
 ### 2.8 Riders (provision only in MVP) — G9
 - A rider is a full task softly bound to a primary; placement derived from the primary; moves/
   deletes with it; own budget allowed.

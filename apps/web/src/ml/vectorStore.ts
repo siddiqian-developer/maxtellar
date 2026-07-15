@@ -12,9 +12,39 @@ export interface TitleEntry {
   vector: number[];
 }
 
+/** §2.7 (G24): a past decomposition — a parent title and the subtasks it was
+ * broken into — cached so a similar future task can be pre-broken-down. Purely
+ * derived (recomputable from the event log); a cache, never a source of truth. */
+export interface DecompEntry {
+  title: string;
+  vector: number[];
+  children: { title: string; budget: number }[];
+}
+
 const TITLE_KEY = "mlTitleCorpus";
 const NAME_KEY = "mlNameVectors";
+const DECOMP_KEY = "mlDecompCorpus";
 const MAX_ENTRIES = 1000;
+
+export function loadDecompCorpus(): DecompEntry[] {
+  try {
+    const raw = localStorage.getItem(DECOMP_KEY);
+    return raw ? (JSON.parse(raw) as DecompEntry[]) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function addDecompEntry(entry: DecompEntry): void {
+  const corpus = loadDecompCorpus();
+  // De-dup by (case-insensitive) title — a later breakdown of the same title
+  // replaces the earlier one (most recent intent wins).
+  const key = entry.title.trim().toLowerCase();
+  const filtered = corpus.filter((e) => e.title.trim().toLowerCase() !== key);
+  filtered.push(entry);
+  const trimmed = filtered.length > MAX_ENTRIES ? filtered.slice(filtered.length - MAX_ENTRIES) : filtered;
+  localStorage.setItem(DECOMP_KEY, JSON.stringify(trimmed));
+}
 
 export function loadTitleCorpus(): TitleEntry[] {
   try {

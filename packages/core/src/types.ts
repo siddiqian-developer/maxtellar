@@ -63,6 +63,17 @@ export interface UnstartedTask {
   budget?: Dur;
   /** Set when this is a paused remainder of a started task (§3.10). */
   remainderOf?: string;
+  /** §2.7 (G24) composition: the task this is a subtask of. A task that is
+   * itself named by some other task's `parentId` is a PARENT (a derived
+   * bracket) — it never occupies the spine; only its descendant leaves do,
+   * and its budget is the zero-sum Σ of its children (enforced, §2.7). */
+  parentId?: string;
+  /** §2.7: on a PARENT, the count of children at decomposition (display only —
+   * views name each leaf by its original 1-based ordinal and label the parent's
+   * Start button "first … 2nd last, last"). Remaining leaves are always a
+   * suffix (starting a leaf cancels earlier siblings), so the front ordinal of
+   * the next leaf = subtaskCount − remaining + 1. */
+  subtaskCount?: number;
   /** §2.9: marks a Sleep/Nap task. Explicit at logging, never inferred. */
   sleepKind?: SleepKind;
   /** §2.8 rider provision (G9) — schema only in MVP, no behavior. A rider is
@@ -121,6 +132,11 @@ export interface HistoryEntry {
   /** §2.9: carried from the task (or set directly on back-log). A Finished
    * Sleep occupancy entry is what the SOD precondition counts (§4.2). */
   sleepKind?: SleepKind;
+  /** §2.7 (G24): if this entry was a subtask leaf, the composition it belonged
+   * to — persisted so the timeline can still bracket completed/running/paused
+   * leaves as a composed group after the parent task object is gone. */
+  parentId?: string;
+  parentTitle?: string;
 }
 
 export type TimerMode = "countdown" | "stopwatch"; // §9.2 (from the 8-yr AppScript)
@@ -141,6 +157,9 @@ export interface RunningTask {
   channels: Channels;
   /** §2.9: carried from the unstarted task so completion writes it to history. */
   sleepKind?: SleepKind;
+  /** §2.7 (G24): carried from the started leaf so completing the last leaf can
+   * complete its ancestors, and a paused remainder stays bound to its parent. */
+  parentId?: string;
 }
 
 export interface State {
@@ -179,6 +198,17 @@ export type Event =
   | { type: "SET_OPEN_CAP"; minutes: Dur } // §3.9 open-task presumed-extent cap
   | { type: "SET_TAIL_FLOOR"; minutes: Dur } // §3.9.1 open semi-tail compression floor
   | { type: "LOG_CHANNEL"; channel: keyof Channels; minutes: Dur } // reattribute on running
+  // §2.7 (G24): decompose `parentId` into leaves in one atomic rebalance.
+  // Children default to the parent's head; the parent budget becomes Σ(children)
+  // and the parent turns into a derived bracket (leaves only occupy the spine).
+  // Re-issuing replaces the whole decomposition. Empty children = recompose.
+  | {
+      type: "SET_SUBTASKS";
+      parentId: string;
+      // Each child needs only a title; head/activity default to the parent's,
+      // timing defaults to budgeted. id/rank are assigned if omitted.
+      children: (Partial<Omit<UnstartedTask, "kind" | "parentId">> & { title: string })[];
+    }
   | { type: "BACKLOG"; entry: Omit<HistoryEntry, "id"> }
   | { type: "EDIT_COMMIT"; batch: PlanItem[] } // fork commit: replacement plan (re-settled at real now)
   // Bulk-reassigns every plan/running/history reference from one (head,activity)

@@ -42,6 +42,11 @@ interface SettleInput {
   /** §3.9.1 (G27): the floor an open semi-tail's claim can be compressed to by
    * a firm contester. Optional for back-compat; defaults to 1h. */
   semiTailFloor?: Dur;
+  /** §2.7 (G24): extra ids to treat as parent brackets even without a child in
+   * `plan` — the ancestors of a currently-running leaf. Keeps a decomposed
+   * task a bracket (never re-placed as a schedulable task) while its sole leaf
+   * runs; the bracket simply shows no span until a leaf returns to the plan. */
+  bracketIds?: Set<string>;
 }
 
 const isTask = (i: PlanItem): i is UnstartedTask => i.kind === "task";
@@ -107,9 +112,19 @@ export function settle({
   minFragment,
   openExtentCap = 600,
   semiTailFloor = 60,
+  bracketIds,
 }: SettleInput): Placement[] {
   const placements = new Map<string, Placement>();
   const squeezeTol = minFragment - 1;
+
+  // §2.7 (G24): a task named by some other task's `parentId` is a PARENT — a
+  // derived bracket. It never occupies the spine: only its descendant leaves
+  // are placed by the normal physics below; the parent's placement is computed
+  // afterwards as the span of its leaves. Recognise parents up front so the
+  // wall/fill passes skip them.
+  const parentIds = new Set<string>(bracketIds ?? []);
+  for (const i of plan) if (isTask(i) && i.parentId) parentIds.add(i.parentId);
+  const isParent = (id: string): boolean => parentIds.has(id);
 
   // §3.9 fair-share sizing (2026-07-11): an open unscheduled task's reserved
   // extent depends on what sits immediately BELOW it (next in time), NOT on
@@ -117,7 +132,7 @@ export function settle({
   // → yield to CROWDED_CAP (2h). A run of open peers → they SPLIT one cap
   // evenly. Precomputed here over the rank-ordered task subsequence; walls
   // still clamp the actual fill below.
-  const taskSeq = plan.filter(isTask);
+  const taskSeq = plan.filter(isTask).filter((t) => !isParent(t.id));
   const openCapById = new Map<string, Dur>();
   for (let i = 0; i < taskSeq.length; ) {
     if (taskSeq[i]!.timing !== "unscheduled") { i++; continue; }
@@ -139,7 +154,7 @@ export function settle({
   // commitment (§3.9) — only then build placements.
   const rawWalls: Wall[] = [];
   for (const item of plan) {
-    if (!isTask(item)) continue;
+    if (!isTask(item) || isParent(item.id)) continue; // parents are brackets, not walls
     const w = wallOf(item, minFragment, openExtentCap, semiTailFloor);
     if (w) rawWalls.push(w);
   }
@@ -288,6 +303,7 @@ export function settle({
   };
 
   for (const item of plan) {
+    if (isTask(item) && isParent(item.id)) continue; // parent bracket — derived after the fill
     if (isTask(item) && wallOf(item, minFragment, openExtentCap, semiTailFloor)) continue; // walls already placed
 
     // Open (budget-less) UNSCHEDULED task: fills the current free slot up to
@@ -399,6 +415,25 @@ export function settle({
       squeezedDeficit: squeezed,
       overflowDeficit: deficit,
     });
+  }
+
+  // §2.7 (G24): derive each parent's bracket from its descendant leaves. The
+  // bracket spans [min leaf start, max leaf end]; it carries no deficits of its
+  // own (conservation lives on the leaves). A parent whose leaves are all
+  // unplaced gets an empty bracket. Computed over all parents (a parent may
+  // itself be a child — its leaves resolve recursively past nested parents).
+  const leavesOf = (id: string): string[] => {
+    const kids = plan.filter((i): i is UnstartedTask => isTask(i) && i.parentId === id);
+    return kids.flatMap((k) => (isParent(k.id) ? leavesOf(k.id) : [k.id]));
+  };
+  for (const item of plan) {
+    if (!isTask(item) || !isParent(item.id)) continue;
+    const parts: Part[] = leavesOf(item.id).flatMap((lid) => placements.get(lid)?.parts ?? []);
+    const bracket: Part[] =
+      parts.length > 0
+        ? [{ start: Math.min(...parts.map((p) => p.start)), end: Math.max(...parts.map((p) => p.end)) }]
+        : [];
+    placements.set(item.id, { itemId: item.id, parts: bracket, squeezedDeficit: 0, overflowDeficit: 0 });
   }
 
   // Return in plan order for stable downstream consumption.

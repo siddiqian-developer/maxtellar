@@ -405,6 +405,130 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 /* compact footer actions — the card's tallest row was the buttons */
 .card .actions button { padding: 2px 10px; font-size: 12.5px; }
 
+/* §2.7 (G24) composition — the parent bracket header + nested leaves. The
+   header is a lighter card variant (dashed left rail = "derived, not on the
+   spine"); leaves are ordinary cards indented under it with a connector. */
+/* match the normal .card box exactly (padding/gap) so a composed header sits at
+   the same height as an ordinary task card */
+.subtask-bracket-head {
+  background: color-mix(in srgb, var(--st-budgeted) 6%, var(--paper-raised));
+  border: 1px dashed var(--hairline);
+  border-left: 3px dashed var(--st-budgeted);
+  border-radius: var(--radius);
+  padding: 10px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.subtask-bracket-head .row { display: flex; align-items: center; gap: 6px; }
+.subtask-bracket-head .title { font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.subtask-bracket-head .row .state-capsule { margin-left: auto; }
+/* actions row: mirror .card .actions — the buttons need the gap the plain
+   container doesn't inherit (they were sitting flush before) */
+.subtask-bracket-head .actions { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin-top: 2px; }
+.subtask-bracket-head .actions button { padding: 2px 10px; font-size: 12.5px; }
+.subtask-glyph { color: var(--st-budgeted); font-size: 13px; }
+/* "Subtask # N of <Parent>" — a muted, display-only label after a leaf's title
+   (not part of the stored title); renumbers live as subtasks are cancelled */
+.subtask-suffix { color: var(--ink-faint); font-weight: 400; font-size: 12px; }
+/* explicit "Composed" marker on the parent card — a filled badge in the
+   composition hue, distinct from the (leaf-derived) state pill */
+.composed-badge {
+  background: color-mix(in srgb, var(--st-budgeted) 18%, transparent);
+  border: 1px solid color-mix(in srgb, var(--st-budgeted) 45%, transparent);
+  color: var(--st-budgeted);
+  font-size: 9px;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  flex-shrink: 0;
+}
+/* nested leaf: a connector notch on the left so it reads as "under" the parent */
+.card.subtask-leaf { border-left-style: solid; position: relative; }
+.card.subtask-leaf::before {
+  content: "";
+  position: absolute;
+  left: -10px;
+  top: 50%;
+  width: 8px;
+  height: 1px;
+  background: var(--hairline);
+}
+
+/* AI Studio — per-feature level rows */
+.ai-feature-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--hairline);
+}
+.ai-feature-row:last-child { border-bottom: none; }
+.ai-feature-meta { min-width: 200px; flex: 1; }
+.ai-feature-name { font-weight: 600; }
+.ai-feature-desc { font-size: 12px; }
+
+/* AI decomposition offer — reuse a past breakdown */
+.decomp-offer {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 8px;
+  padding: 6px 8px;
+  border: 1px dashed color-mix(in srgb, var(--st-budgeted) 45%, transparent);
+  border-radius: var(--radius);
+  background: color-mix(in srgb, var(--st-budgeted) 7%, transparent);
+}
+.decomp-offer-text { color: var(--ink-soft); font-size: 12px; flex: 1; min-width: 0; }
+
+/* drawer subtask editor rows */
+.subtask-entry { margin-top: 6px; }
+.subtask-preview { font-size: 11px; color: var(--ink-faint); padding: 2px 2px 0; }
+.subtask-row { display: flex; align-items: center; gap: 6px; }
+.subtask-row input { flex: 1; }
+.subtask-row .subtask-budget { flex: 0 0 96px; }
+/* the remove button sits at the END of the row (static — the shared .clear-btn
+   is absolutely positioned for .clearable-field, which floated it wrongly here) */
+.subtask-remove {
+  flex: 0 0 auto;
+  background: transparent;
+  border: none;
+  padding: 0 6px;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--ink-faint);
+  opacity: 0.6;
+}
+.subtask-remove:hover { opacity: 1; color: var(--danger); border-color: transparent; }
+.subtask-add {
+  margin-top: 8px;
+  font-size: 12.5px;
+  padding: 3px 10px;
+  border: 1px dashed var(--st-budgeted);
+  color: var(--st-budgeted);
+  background: transparent;
+}
+.subtask-add:hover { background: color-mix(in srgb, var(--st-budgeted) 10%, transparent); }
+
+/* §2.7 timeline parent bracket — a thin left rail spanning the leaves */
+.subtask-bracket {
+  position: absolute;
+  left: -6px;
+  width: 3px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--st-budgeted) 55%, transparent);
+}
+.subtask-bracket-label {
+  position: absolute;
+  left: 6px;
+  top: 0;
+  font-size: 9px;
+  color: var(--ink-soft);
+  white-space: nowrap;
+}
+
 /* pipeline index badge */
 .pipe-idx {
   display: inline-flex;
@@ -727,6 +851,7 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   background: var(--accent-soft);
 }
 .drawer label { font-size: 12px; color: var(--ink-soft); display: block; margin-bottom: 2px; }
+.drawer .field-desc { margin: 0 0 6px; font-size: 12px; line-height: 1.4; color: var(--ink-faint); }
 .drawer .field { display: flex; flex-direction: column; }
 .drawer .chip {
   align-self: flex-start;
@@ -1052,6 +1177,14 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .ml-tag-existing { color: var(--accent-strong); border: 1px solid var(--accent-strong); }
 .ml-tag-new { color: var(--st-budgeted); border: 1px dashed var(--st-budgeted); }
+/* "auto" tag rides on an active preset pill (saturated indigo bg in both themes).
+   Pure white on dark; a white fill with dark text on light so it stays legible. */
+.ml-tag-auto { color: var(--ink); background: rgba(255, 255, 255, 0.92); border: 1px solid rgba(255, 255, 255, 0.92); }
+@media (prefers-color-scheme: dark) {
+  .ml-tag-auto { color: #ffffff; background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.55); }
+}
+:root[data-theme="light"] .ml-tag-auto { color: var(--ink); background: rgba(255, 255, 255, 0.92); border-color: rgba(255, 255, 255, 0.92); }
+:root[data-theme="dark"] .ml-tag-auto { color: #ffffff; background: rgba(255, 255, 255, 0.18); border-color: rgba(255, 255, 255, 0.55); }
 
 /* Keep-mine vs use-suggested choice, shown only when the user has hand-typed a
    sub-head and a fresh title-driven suggestion differs from it (SPEC §7.0.1). */

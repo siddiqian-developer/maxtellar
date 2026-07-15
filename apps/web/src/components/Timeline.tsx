@@ -54,6 +54,68 @@ export function Timeline({ state }: { state: State }): JSX.Element {
 
   const planItems = new Map(state.plan.map((i) => [i.id, i]));
 
+  // §2.7 (G24): a parent (a task named by another's parentId) is a derived
+  // bracket spanning its leaves — never a filled block (it would overlap them).
+  // It is drawn instead as a thin left-rail marker; skipped everywhere below.
+  const parentIds = new Set<string>();
+  for (const i of state.plan) if (i.kind === "task" && i.parentId) parentIds.add(i.parentId);
+  const isParentId = (id: string): boolean => parentIds.has(id);
+
+  // §2.7 (G24): each leaf's original subtask ordinal + its parent's title, so a
+  // leaf block on the timeline reads e.g. "Outline · Write essay ↳1". Remaining
+  // leaves are a suffix, so ordinals start at subtaskCount − remaining + 1.
+  const leafInfo = new Map<string, { parentTitle: string; ordinal: number }>();
+  for (const pid of parentIds) {
+    const parent = planItems.get(pid);
+    if (!parent || parent.kind !== "task") continue;
+    const kids = state.plan
+      .filter((i) => i.kind === "task" && i.parentId === pid)
+      .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+    const base = (parent.subtaskCount ?? kids.length) - kids.length + 1;
+    kids.forEach((c, j) => leafInfo.set(c.id, { parentTitle: parent.title, ordinal: base + j }));
+  }
+
+  // §2.7 (G24): the composition RAIL — a left-rail that spans ALL of a parent's
+  // leaves across time: completed/paused ones in the record (above the seam),
+  // the running one, and the still-planned ones below. It persists after the
+  // parent task object is gone (history entries carry the composition link), so
+  // the timeline reads the past as "these were subtasks of one composed task".
+  const railById = new Map<string, { title: string; start: number; end: number }>();
+  const extendRail = (pid: string, title: string | undefined, s: number, e: number): void => {
+    const cur = railById.get(pid);
+    if (!cur) railById.set(pid, { title: title ?? "", start: s, end: e });
+    else railById.set(pid, { title: cur.title || (title ?? ""), start: Math.min(cur.start, s), end: Math.max(cur.end, e) });
+  };
+  const titleOf = (id: string): string | undefined => {
+    const it = planItems.get(id);
+    return it && it.kind === "task" ? it.title : undefined;
+  };
+  for (const h of state.history) {
+    if (h.parentId) extendRail(h.parentId, h.parentTitle ?? titleOf(h.parentId), h.start, h.end);
+  }
+  if (state.running?.parentId) {
+    const rvR = runningView(state);
+    const rEnd = rvR ? Math.max(rvR.projectedEnd, state.now) : state.now;
+    extendRail(state.running.parentId, titleOf(state.running.parentId), state.running.startedAt, rEnd);
+  }
+  for (const p of state.placements) {
+    const item = planItems.get(p.itemId);
+    if (item?.kind === "task" && item.parentId && p.parts.length > 0) {
+      extendRail(item.parentId, titleOf(item.parentId), p.parts[0]!.start, p.parts[p.parts.length - 1]!.end);
+    }
+  }
+  const rails = [...railById.values()].filter((r) => r.end > windowStart && r.start < windowEnd);
+
+  // The running task's subtask identity (if it's a leaf) — for the running label.
+  const runParent = state.running?.parentId ? planItems.get(state.running.parentId) : undefined;
+  const runSub =
+    runParent && runParent.kind === "task"
+      ? {
+          ordinal: Math.max(1, (runParent.subtaskCount ?? 1) - state.plan.filter((i) => i.kind === "task" && i.parentId === runParent.id).length),
+          parentTitle: runParent.title,
+        }
+      : undefined;
+
   // §3.9 presumed extent is now a REAL capped reservation the scheduler lays
   // out (grilled 2026-07-11) — placements already carry the open task's full
   // extent, so the timeline just draws them. A budget-less task is flagged
@@ -74,7 +136,7 @@ export function Timeline({ state }: { state: State }): JSX.Element {
   };
   for (const p of state.placements) {
     const item = planItems.get(p.itemId);
-    if (!item || item.kind !== "task" || p.parts.length === 0) continue;
+    if (!item || item.kind !== "task" || p.parts.length === 0 || isParentId(p.itemId)) continue;
     const open = isOpen(p.itemId);
     const first = p.parts[0];
     const last = p.parts[p.parts.length - 1];
@@ -139,6 +201,7 @@ export function Timeline({ state }: { state: State }): JSX.Element {
                 title={`${h.title} · ${hhmm(h.start)}–${hhmm(h.end)} · ${h.outcome}`}
               >
                 {h.title}
+                {h.parentTitle && <span className="sub"> — Subtask of {h.parentTitle}</span>}
                 <span className="sub"> {h.kind === "skipped" ? "skipped" : hhmm(h.start)}</span>
               </div>
             ))}
@@ -157,6 +220,7 @@ export function Timeline({ state }: { state: State }): JSX.Element {
                 <div className="running-spent" style={{ height: spentH }} aria-hidden="true" />
                 <div className="running-label">
                   ▶ {r.title}
+                  {runSub && <span className="sub"> — Subtask # {runSub.ordinal} of {runSub.parentTitle}</span>}
                   <span className="sub num"> {fmtDur(state.now - r.startedAt)}</span>
                   {rv && rv.mode === "countdown" && (
                     <span className="sub num"> · {fmtDur(rv.remaining)} left</span>
@@ -177,9 +241,28 @@ export function Timeline({ state }: { state: State }): JSX.Element {
 
           {/* plan — below now, provisional, reflowing. Floating tasks render
               at their PRESUMED extent (display only) with an "open" label. */}
+          {/* §2.7 (G24): composition rails — one thin left-rail per parent,
+              spanning its leaves across record + running + plan (a historical
+              record that these were one composed task). */}
+          {rails.map((r) => {
+            const top = y(Math.max(r.start, windowStart));
+            const bottom = y(Math.min(r.end, windowEnd));
+            return (
+              <div
+                key={`rail-${r.title}-${r.start}`}
+                className="subtask-bracket"
+                style={{ top, height: Math.max(8, bottom - top - 2) }}
+                title={`${r.title} · ${hhmm(r.start)}–${hhmm(r.end)} · subtasks`}
+              >
+                <span className="subtask-bracket-label">{r.title}</span>
+              </div>
+            );
+          })}
+
           {state.placements.flatMap((p) => {
             const item = planItems.get(p.itemId);
             if (!item) return [];
+            if (item.kind === "task" && isParentId(item.id)) return []; // bracket drawn above
             const anchored =
               item.kind === "task" &&
               (item.timing === "fixed" ||
@@ -195,6 +278,9 @@ export function Timeline({ state }: { state: State }): JSX.Element {
                 title={open ? `${hhmm(part.start)} · open (presumed extent, capped)` : `${hhmm(part.start)}–${hhmm(part.end)}`}
               >
                 {item.kind === "task" ? item.title : "· gap ·"}
+                {leafInfo.has(p.itemId) && (
+                  <span className="sub"> — Subtask # {leafInfo.get(p.itemId)!.ordinal} of {leafInfo.get(p.itemId)!.parentTitle}</span>
+                )}
                 {open && <span className="sub"> open</span>}
                 {p.parts.length > 1 && <span className="sub"> — part {idx + 1}</span>}
                 {p.squeezedDeficit > 0 && <span className="sub num"> ⌁{p.squeezedDeficit}m</span>}

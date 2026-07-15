@@ -54,6 +54,78 @@ export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT):
 
 const byRank = (a: PlanItem, b: PlanItem): number => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);
 
+/** §2.7 (G24): a decomposed task's committed size is Σ of its children. A
+ * fixed child's size is its wall; otherwise its budget (0 if truly open). */
+function childBudget(t: UnstartedTask): Dur {
+  if (t.budget !== undefined) return t.budget;
+  if (t.timing === "fixed" && t.anchorStart !== undefined && t.anchorEnd !== undefined)
+    return t.anchorEnd - t.anchorStart;
+  return 0;
+}
+
+/** §2.7: walk the composition tree down to the first unstarted leaf (lowest
+ * rank at each level). A leaf (no children in the plan) resolves to itself —
+ * so START on a parent starts its first leaf. */
+function firstLeaf(plan: PlanItem[], t: UnstartedTask): UnstartedTask {
+  let cur = t;
+  for (;;) {
+    const kids = plan
+      .filter((i): i is UnstartedTask => i.kind === "task" && i.parentId === cur.id)
+      .sort(byRank);
+    if (kids.length === 0) return cur;
+    cur = kids[0]!;
+  }
+}
+
+/** §2.7 (G24): zero-sum is recursive — recompute every parent's budget as Σ of
+ * its children, bottom-up, to a fixpoint (a child's own decomposition changes
+ * its size, which must ripple up to the grandparent). Bounded by tree depth. */
+function rebalanceParents(plan: PlanItem[]): PlanItem[] {
+  const parentIds = new Set<string>();
+  for (const i of plan) if (i.kind === "task" && i.parentId) parentIds.add(i.parentId);
+  if (parentIds.size === 0) return plan;
+  let result = plan;
+  for (let pass = 0; pass < parentIds.size + 1; pass++) {
+    let changed = false;
+    result = result.map((i) => {
+      if (i.kind !== "task" || !parentIds.has(i.id)) return i;
+      const sum = result
+        .filter((c): c is UnstartedTask => c.kind === "task" && c.parentId === i.id)
+        .reduce((acc, c) => acc + childBudget(c), 0);
+      if (i.budget !== sum) {
+        changed = true;
+        return { ...i, budget: sum };
+      }
+      return i;
+    });
+    if (!changed) break;
+  }
+  return result;
+}
+
+/** §2.7 (G24): the composition link to stamp on a leaf's history entry, so the
+ * timeline can still bracket it after the parent object is gone. */
+function parentLink(
+  plan: PlanItem[],
+  parentId: string | undefined,
+): { parentId?: string; parentTitle?: string } {
+  if (parentId === undefined) return {};
+  const title = (plan.find((i) => i.id === parentId) as UnstartedTask | undefined)?.title;
+  return { parentId, ...(title !== undefined ? { parentTitle: title } : {}) };
+}
+
+/** §2.7: the chain of ancestor ids above a task (nearest first). */
+function ancestorIds(plan: PlanItem[], t: UnstartedTask): Set<string> {
+  const out = new Set<string>();
+  let pid = t.parentId;
+  while (pid) {
+    out.add(pid);
+    const p = plan.find((i) => i.id === pid) as UnstartedTask | undefined;
+    pid = p?.parentId;
+  }
+  return out;
+}
+
 function nextId(s: State, prefix: string): [string, State] {
   const id = `${prefix}-${s.seq + 1}`;
   return [id, { ...s, seq: s.seq + 1 }];
@@ -86,13 +158,34 @@ export function runningView(s: State): RunningView | null {
 
 const totalChannels = (c: Channels): Dur => c.spent + c.wasted + c.managed + c.breaks;
 
+/** §2.7 (G24): ids of the running leaf's ancestors — kept as brackets while
+ * their sole leaf runs so a decomposed task never re-places as a schedulable
+ * task (its stored budget/anchors may not agree once it de-parents). */
+function runningBracketIds(s: State): Set<string> {
+  const ids = new Set<string>();
+  let pid = s.running?.parentId;
+  while (pid) {
+    ids.add(pid);
+    pid = (s.plan.find((i) => i.id === pid) as UnstartedTask | undefined)?.parentId;
+  }
+  return ids;
+}
+
 function resettle(s: State): State {
+  // §2.7 (G24): keep every parent's zero-sum budget in step with its CURRENT
+  // plan children on every event — a leaf entering (paused remainder returns) or
+  // leaving (started/completed/cancelled) the plan changes the sum. No-ops for a
+  // plan with no parents. So a composed bracket's budget always equals the sum
+  // of the leaves still to do under it.
+  const rebalanced = rebalanceParents(s.plan);
+  if (rebalanced !== s.plan) s = { ...s, plan: rebalanced };
   const placements = settle({
     plan: s.plan,
     cursor: cursorOf(s),
     minFragment: s.minFragment,
     openExtentCap: s.openExtentCap,
     semiTailFloor: s.semiTailFloor,
+    bracketIds: runningBracketIds(s),
   });
   // G28: slide = MOVING (§3.2) — a slid task's anchor coordinate moves WITH
   // the ride, every settle. The stored anchor always equals the placed edge,
@@ -176,6 +269,7 @@ function applyAmputations(s: State): State {
             end: skipEnd,
             outcome: "skipped",
             channels: emptyChannels(),
+            ...parentLink(state.plan, item.parentId),
           },
         ];
       }
@@ -202,6 +296,7 @@ function applyAmputations(s: State): State {
             end: anchoredEnd!,
             outcome: "skipped",
             channels: emptyChannels(),
+            ...parentLink(state.plan, item.parentId),
           },
         ];
       }
@@ -261,10 +356,13 @@ export function reduce(state: State, event: Event): State {
     }
 
     case "START_TASK": {
-      const target = state.plan.find((i) => i.kind === "task" && i.id === event.taskId) as
+      const requested = state.plan.find((i) => i.kind === "task" && i.id === event.taskId) as
         | UnstartedTask
         | undefined;
-      if (!target) return state;
+      if (!requested) return state;
+      // §2.7 (G24): starting a parent resolves to its first unstarted leaf —
+      // only leaves ever run. A leaf resolves to itself.
+      const target = firstLeaf(state.plan, requested);
       let s = state;
 
       // 1. Start-over-running default: PAUSE the runner (locked ruling, §3.10).
@@ -290,9 +388,13 @@ export function reduce(state: State, event: Event): State {
       }
 
       // 2. Starting a mid-queue task CANCELS all unstarted tasks above it (§3.10,
-      //    sheet muscle-memory); gaps above are dropped.
+      //    sheet muscle-memory); gaps above are dropped. §2.7 (G24): the
+      //    started leaf's own ANCESTORS are exempt — they rank above it as
+      //    brackets but must survive so the composition stays intact while the
+      //    leaf runs.
+      const ancestors = ancestorIds(s.plan, target);
       const cancelled = s.plan.filter(
-        (i): i is UnstartedTask => i.kind === "task" && i.rank < target.rank,
+        (i): i is UnstartedTask => i.kind === "task" && i.rank < target.rank && !ancestors.has(i.id),
       );
       let history = s.history;
       for (const c of cancelled) {
@@ -309,10 +411,24 @@ export function reduce(state: State, event: Event): State {
             end: s.now,
             outcome: "cancelled",
             channels: emptyChannels(),
+            ...parentLink(s.plan, c.parentId),
           },
         ];
       }
-      const plan = s.plan.filter((i) => i.rank >= target.rank && i.id !== target.id);
+      let plan = s.plan.filter(
+        (i) => (i.rank >= target.rank || ancestors.has(i.id)) && i.id !== target.id,
+      );
+      // §2.7: earlier siblings cancelled by starting this leaf vanish from the
+      // numbering too — shrink the parent's planned count by that many.
+      if (target.parentId) {
+        const cancelledSiblings = cancelled.filter((c) => c.parentId === target.parentId).length;
+        if (cancelledSiblings > 0)
+          plan = plan.map((i) =>
+            i.id === target.parentId && i.kind === "task"
+              ? ({ ...i, subtaskCount: Math.max(0, (i.subtaskCount ?? cancelledSiblings) - cancelledSiblings) } as UnstartedTask)
+              : i,
+          );
+      }
 
       // 3. Start (explicit human act — the only way anything runs, G11).
       // An anchored END is a contract that survives starting: fixed AND
@@ -336,6 +452,7 @@ export function reduce(state: State, event: Event): State {
         startedAt: s.now,
         ...(budget !== undefined ? { budget } : {}),
         ...(target.sleepKind !== undefined ? { sleepKind: target.sleepKind } : {}),
+        ...(target.parentId !== undefined ? { parentId: target.parentId } : {}),
         channels: emptyChannels(),
       };
       return resettle({ ...s, plan, history, running });
@@ -357,6 +474,7 @@ export function reduce(state: State, event: Event): State {
         outcome: "soft-ended",
         channels: r.channels,
         ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
+        ...parentLink(state.plan, r.parentId),
       };
       let s: State = { ...state, running: null, history: [...state.history, entry], seq: state.seq + 1 };
 
@@ -379,6 +497,7 @@ export function reduce(state: State, event: Event): State {
           ...(r.ommf ? { anchorStart: s.now } : {}), // ommf remainder holds its coords (G25)
           ...(remBudget !== undefined ? { budget: remBudget } : {}),
           ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
+          ...(r.parentId !== undefined ? { parentId: r.parentId } : {}), // §2.7: stay a child
           remainderOf: r.id,
         };
         const { task: snapped } = snapTask(remainder, s.minFragment, s.now);
@@ -409,11 +528,28 @@ export function reduce(state: State, event: Event): State {
         outcome: "completed",
         channels: r.channels,
         ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
+        ...parentLink(state.plan, r.parentId),
       };
+      // §2.7 (G24): completing the last leaf completes its ancestors. The
+      // leaf already left the plan at START; walk up removing any ancestor
+      // that has no remaining child in the plan. Ancestors carry no history
+      // of their own — each leaf's occupancy is the sole record (analytics
+      // split per-leaf head). Recurses to the grandparent and beyond.
+      let plan = state.plan;
+      let pid = r.parentId;
+      while (pid) {
+        const parent = plan.find((i) => i.id === pid) as UnstartedTask | undefined;
+        if (!parent) break;
+        const stillHasChildren = plan.some((i) => i.kind === "task" && i.parentId === pid);
+        if (stillHasChildren) break; // pending leaves remain — parent lives on
+        plan = plan.filter((i) => i.id !== pid);
+        pid = parent.parentId;
+      }
       return resettle({
         ...state,
         running: null,
         history: [...state.history, entry],
+        plan,
         seq: state.seq + 1,
       });
     }
@@ -434,12 +570,31 @@ export function reduce(state: State, event: Event): State {
         end: state.now,
         outcome: "cancelled",
         channels: emptyChannels(),
+        ...parentLink(state.plan, t.parentId),
       };
-      return resettle({
-        ...state,
-        plan: state.plan.filter((i) => i.id !== t.id),
-        history: [...state.history, entry],
-      });
+      let plan = state.plan.filter((i) => i.id !== t.id);
+      // §2.7 (G24): cancelling a LEAF makes it vanish from the numbering — the
+      // parent's planned count shrinks so the surviving leaves renumber
+      // contiguously (unlike a STARTED leaf, which keeps its slot). A parent
+      // left with no children (and none running under it) is removed too.
+      if (t.parentId) {
+        const runBrackets = runningBracketIds(state);
+        plan = plan.map((i) =>
+          i.id === t.parentId && i.kind === "task"
+            ? ({ ...i, subtaskCount: Math.max(0, (i.subtaskCount ?? 1) - 1) } as UnstartedTask)
+            : i,
+        );
+        let pid: string | undefined = t.parentId;
+        while (pid) {
+          const parent = plan.find((i) => i.id === pid) as UnstartedTask | undefined;
+          if (!parent) break;
+          const hasKids = plan.some((i) => i.kind === "task" && i.parentId === pid);
+          if (hasKids || runBrackets.has(pid)) break;
+          plan = plan.filter((i) => i.id !== pid);
+          pid = parent.parentId;
+        }
+      }
+      return resettle({ ...state, plan, history: [...state.history, entry] });
     }
 
     case "SET_MIN_FRAGMENT": {
@@ -509,7 +664,9 @@ export function reduce(state: State, event: Event): State {
       const snapped = event.batch
         .map((i) => (i.kind === "task" ? snapTask(i, state.minFragment, state.now).task : i))
         .sort(byRank);
-      const plan = placeBatch(snapped, state.now, state.minFragment);
+      // §2.7: a fork may have edited leaf budgets or re-parented — re-derive
+      // every parent's zero-sum budget before placing.
+      const plan = rebalanceParents(placeBatch(snapped, state.now, state.minFragment));
       return resettle(applyAmputations({ ...state, plan }));
     }
 
@@ -533,6 +690,85 @@ export function reduce(state: State, event: Event): State {
         matches(h.headId, h.activityId) ? { ...h, headId: toHeadId, activityId: toActivityId } : h,
       );
       return { ...state, plan, running, history };
+    }
+
+    case "SET_SUBTASKS": {
+      // §2.7 (G24): decompose a parent into leaves in ONE atomic rebalance.
+      // Re-issuing replaces the whole prior decomposition (one direction, R5).
+      const parent = state.plan.find((i) => i.kind === "task" && i.id === event.parentId) as
+        | UnstartedTask
+        | undefined;
+      if (!parent) return state;
+      // Drop the parent's existing direct children (and their subtrees, since
+      // an orphaned child is removed with its parent link) before re-creating.
+      const descendantIds = new Set<string>();
+      const collect = (pid: string): void => {
+        for (const i of state.plan) {
+          if (i.kind === "task" && i.parentId === pid && !descendantIds.has(i.id)) {
+            descendantIds.add(i.id);
+            collect(i.id);
+          }
+        }
+      };
+      collect(parent.id);
+      let plan = state.plan.filter((i) => !descendantIds.has(i.id));
+
+      // New children rank CONTIGUOUSLY just below the parent (parent brackets
+      // its leaves), between the parent's rank and the next sibling's.
+      const after = plan
+        .filter((i) => i.rank > parent.rank && i.id !== parent.id)
+        .map((i) => i.rank)
+        .sort()[0] ?? null;
+      let s: State = state;
+      let lo = parent.rank;
+      const children: UnstartedTask[] = [];
+      for (const spec of event.children) {
+        let id = spec.id;
+        if (!id) {
+          const [nid, ns] = nextId(s, "task");
+          id = nid;
+          s = ns;
+        }
+        const rank = spec.rank ?? rankBetween(lo, after);
+        // Build explicitly (no spread of an optional-field object — a spread
+        // `undefined` would clobber a default). Head/activity inherit the
+        // parent's unless the child overrides (§2.7: a subtask may carry its
+        // own head, splitting analytics per-leaf).
+        const draft: UnstartedTask = {
+          kind: "task",
+          id,
+          rank,
+          title: spec.title,
+          headId: spec.headId ?? parent.headId,
+          activityId: spec.activityId ?? parent.activityId,
+          tier: spec.tier ?? parent.tier,
+          timing: spec.timing ?? "budgeted",
+          ommf: spec.ommf ?? false,
+          slideable: spec.slideable ?? true,
+          breakable: spec.breakable ?? false,
+          parentId: parent.id,
+          ...(spec.budget !== undefined ? { budget: spec.budget } : {}),
+          ...(spec.anchorStart !== undefined ? { anchorStart: spec.anchorStart } : {}),
+          ...(spec.anchorEnd !== undefined ? { anchorEnd: spec.anchorEnd } : {}),
+          ...(spec.sleepKind !== undefined ? { sleepKind: spec.sleepKind } : {}),
+        };
+        const { task: snapped } = snapTask(draft, state.minFragment, state.now);
+        children.push(snapped);
+        lo = rank;
+      }
+
+      // Record the child count on the parent (display only — leaf ordinals and
+      // the Start-first/…/last label). Cleared when recomposing to a leaf.
+      plan = plan.map((i) =>
+        i.id === parent.id
+          ? ({ ...i, subtaskCount: children.length > 0 ? children.length : undefined } as UnstartedTask)
+          : i,
+      );
+      // Zero-sum: recompute the parent's budget (and any ancestor's) as Σ of
+      // its children, rippling up the tree. With no children the parent
+      // recomposes into an ordinary leaf (budget left as-is).
+      plan = rebalanceParents(plan.concat(children).sort(byRank));
+      return resettle({ ...s, plan });
     }
   }
 }

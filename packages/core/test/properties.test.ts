@@ -26,7 +26,8 @@ type Cmd =
   | { c: "pause" }
   | { c: "complete" }
   | { c: "cancel"; pick: number }
-  | { c: "log"; ch: number; m: number };
+  | { c: "log"; ch: number; m: number }
+  | { c: "decompose"; pick: number; budgets: number[] };
 
 const cmdArb: fc.Arbitrary<Cmd> = fc.oneof(
   fc.record({ c: fc.constant("tick" as const), d: fc.integer({ min: 1, max: 45 }) }),
@@ -45,6 +46,11 @@ const cmdArb: fc.Arbitrary<Cmd> = fc.oneof(
     c: fc.constant("log" as const),
     ch: fc.integer({ min: 0, max: 2 }),
     m: fc.integer({ min: 1, max: 60 }),
+  }),
+  fc.record({
+    c: fc.constant("decompose" as const),
+    pick: fc.nat(),
+    budgets: fc.array(fc.integer({ min: 5, max: 90 }), { minLength: 1, maxLength: 3 }),
   }),
 );
 
@@ -99,6 +105,17 @@ function toEvent(s: State, cmd: Cmd): Event | null {
             minutes: cmd.m,
           }
         : null;
+    case "decompose": {
+      // §2.7: pick a plan task and split it into budgeted leaves (inherit head).
+      const tasks = s.plan.filter((i) => i.kind === "task");
+      if (tasks.length === 0) return null;
+      const parentId = tasks[cmd.pick % tasks.length]!.id;
+      return {
+        type: "SET_SUBTASKS",
+        parentId,
+        children: cmd.budgets.map((b, k) => ({ title: `${parentId}.${k}`, budget: b })),
+      };
+    }
   }
 }
 
@@ -197,6 +214,21 @@ describe("simulation: long random soup survives thousands of ticks", () => {
 
     for (let i = 0; i < 5000; i++) {
       if (i % 37 === 0) s = reduce(s, mk(i));
+      if (i % 71 === 0) {
+        // §2.7: periodically decompose a plan task into 2 budgeted leaves
+        const tasks = s.plan.filter((x) => x.kind === "task");
+        if (tasks.length > 0) {
+          const p = tasks[i % tasks.length]!.id;
+          s = reduce(s, {
+            type: "SET_SUBTASKS",
+            parentId: p,
+            children: [
+              { title: `${p}.a`, budget: 10 + (i % 5) * 10 },
+              { title: `${p}.b`, budget: 10 + (i % 3) * 10 },
+            ],
+          });
+        }
+      }
       if (i % 101 === 0) {
         const tasks = s.plan.filter((x) => x.kind === "task");
         if (tasks.length > 0)

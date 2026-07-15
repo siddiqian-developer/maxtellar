@@ -8,13 +8,14 @@ import { GlobalClock } from "./components/GlobalClock";
 import { DevClock } from "./components/DevClock";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { HeadsConfigScreen } from "./components/HeadsConfigScreen";
+import { AiStudioScreen } from "./components/AiStudioScreen";
 import { HistoryScreen } from "./components/HistoryScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
 import { fmtDur } from "./time";
 import { useSettings, type TimeFormat, type GridGranularity, type PresetDefaults } from "./settings";
 
 type Theme = "light" | "dark" | "system";
-type View = "main" | "headsConfig" | "history" | "analytics";
+type View = "main" | "headsConfig" | "history" | "analytics" | "aiStudio";
 
 /** Splash screen (SPEC VI): serif wordmark + the now-seam motif (hairline with
  * a sweeping accent dot) + tagline. Held for a minimum of 3s from first paint
@@ -276,7 +277,9 @@ export function App(): JSX.Element {
         </button>
       </div>
 
-      {view === "headsConfig" ? (
+      {view === "aiStudio" ? (
+        <AiStudioScreen onBack={() => { setView("main"); setSettingsOpen(true); }} />
+      ) : view === "headsConfig" ? (
         <HeadsConfigScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => { setView("main"); setSettingsOpen(true); }} />
       ) : view === "history" ? (
         <HistoryScreen state={state} onBack={() => setView("main")} />
@@ -321,6 +324,7 @@ export function App(): JSX.Element {
           onCancel={revertSettings}
           onDone={commitSettings}
           onOpenHeadsConfig={() => { setSettingsOpen(false); setView("headsConfig"); }}
+          onOpenAiStudio={() => { setSettingsOpen(false); setView("aiStudio"); }}
         />
       )}
       {error && <div className="error-toast">{error}</div>}

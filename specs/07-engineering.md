@@ -277,6 +277,25 @@ error-prevention. The reducer's `snapTask`/physics snap is the backstop; the fie
   (`3pm`→`3:00 PM`) is silent (expected, not a correction).
 Applies now to every clock/duration field and binds every future input.
 
+### 7.0.3 Configurable compute intensity — "ship both, let the client choose" (2026-07-15)
+**The pattern (binding for every AI-using feature):** ship the deterministic path AND the
+on-device AI path, and make the choice the **user's**, per feature. AI is **never load-bearing**
+(§7.0.1) — the deterministic level is always a complete path, so a low-end machine loses
+suggestions, never function.
+- **Two control layers.** A GLOBAL quick switch (**Maximum AI** = all features Full · **Lightweight**
+  = all Deterministic · *custom* when the detail diverges), and a per-feature detail screen —
+  **AI Studio** — where every feature is set to **Deterministic** (no model), **Lightweight AI**
+  (model, stricter/cheaper bar), or **Full AI** (model, full quality). Stored per feature
+  (`aiLevels`), default all Full; the global switch just writes all features at once.
+- **Covered features (every place a model is used):** sub-head suggestion, head suggestion, task
+  **decomposition** suggestion (§2.7), and the casual-time parser's ML fallback (§7.0.2; grammar
+  always runs, the AI fallback level is provisioned).
+- **§2.7 decomposition suggester:** on composing a task, offer the subtasks used for a *similar
+  past task*. Deterministic exact-title match runs at every level; semantic match (reusing the
+  existing on-device title-embedding model — no new weight) runs at the AI levels, with a stricter
+  cosine bar at Lightweight. Corpus is derived cache (recomputable from the event log), capped,
+  never backed up. Fire-and-forget recording on create; never blocks or throws.
+
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly
   later; `now` strictly advances; every structural op consumes gap, consumes budget, or reduces

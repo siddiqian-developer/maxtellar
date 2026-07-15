@@ -20,6 +20,8 @@ import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
 import { recordTitleActivity } from "../ml/suggest";
+import { useDecompositionSuggestion } from "../ml/useDecompositionSuggestion";
+import { recordDecomposition } from "../ml/decompose";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 
 interface Props {
@@ -166,7 +168,7 @@ const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget
 
 export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
   const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
-  const { presetDefaults, timeFormat } = useSettings();
+  const { presetDefaults, timeFormat, aiLevels } = useSettings();
   const hour12 = timeFormat === "12h";
   const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
   // Head-suggester should only ever propose PLANNABLE heads (never the system
@@ -201,6 +203,10 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // by the preset pill (not a free-form control).
   const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(undefined);
   const [flags, setFlags] = useState<{ slideable?: boolean; breakable?: boolean }>({});
+  // §2.7 (G24) composition: optional subtasks entered at creation. Each leaf is
+  // a title + casual budget; if any are present, the task is created then
+  // decomposed (SET_SUBTASKS) so its budget becomes the zero-sum Σ of leaves.
+  const [subtasks, setSubtasks] = useState<{ title: string; budgetStr: string }[]>([]);
   const [error, setError] = useState<string | null>(null);
   // §7.0.2 universal snap-notify: every meaning-changing adjustment made on a
   // commit (past-time moved, overnight wrap, budget floored) is listed here.
@@ -240,8 +246,10 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // Only PLANNABLE sub-heads are offered/suggested (system heads never appear).
   const allActivities = plannableActivities;
   // A preset locks the sub-head, so suppress the title→sub-head suggester while
-  // one is active (its result would fight the locked value).
-  const suggestion = useSubheadSuggestion(activePreset ? "" : title, allActivities);
+  // one is active (its result would fight the locked value). §7.0.3: in
+  // lightweight compute mode the ML suggesters are off (feed them an empty
+  // title, which resolves to no suggestion) — deterministic entry still works.
+  const suggestion = useSubheadSuggestion(activePreset || aiLevels.subhead === "deterministic" ? "" : title, allActivities);
   // §7.0.1 "new" namer: when nothing existing matches, the suggester's taxonomy
   // step may carry a proposed NAME (a universal category label, e.g. "Alumni
   // meetup" → "Socialization"); without one, echo the title.
@@ -286,7 +294,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // §7.0.1 ML-assist "same duality" clause: sub-head → head suggestion for a
   // brand-new sub-head. A confident match auto-fills (provisional, tagged);
   // "intent wins" — touching the field silences it for the session.
-  const headSuggestion = useHeadSuggestion(isNewActivity ? activity : "", newHeadTouched, plannableRegistry);
+  const headSuggestion = useHeadSuggestion(isNewActivity && aiLevels.head !== "deterministic" ? activity : "", newHeadTouched, plannableRegistry);
   useEffect(() => {
     if (newHeadTouched || !headSuggestion) return;
     if (headSuggestion.kind === "existing") setNewHeadChoice(headSuggestion.head);
@@ -295,6 +303,18 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     else if (headSuggestion.kind === "new") setNewHeadChoice(activity.trim());
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headSuggestion, newHeadTouched]);
+
+  // §2.7 ML-assisted decomposition: offer the subtasks used for a similar past
+  // task. Deterministic exact-match works in any mode; semantic match is
+  // maximum-mode only (the hook is passed the live mode). Suppressed once the
+  // user has started entering their own subtasks (their intent wins).
+  const decompSuggestion = useDecompositionSuggestion(title, aiLevels.decompose);
+  const showDecompOffer =
+    decompSuggestion !== null && subtasks.every((s) => s.title.trim() === "");
+  const useDecomposition = (): void => {
+    if (!decompSuggestion) return;
+    setSubtasks(decompSuggestion.children.map((c) => ({ title: c.title, budgetStr: fmtDurUnits(c.budget) })));
+  };
 
   const timing = useMemo(() => deriveTiming(startMin, endMin, budgetMin), [startMin, endMin, budgetMin]);
 
@@ -534,13 +554,51 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   };
 
   const add = (thenStart: boolean): void => {
+    // §2.7: decompose right after creation. A leaf's budget defaults to the
+    // standard 30m if its casual duration doesn't parse (never silently 0).
+    const kids = subtasks
+      .map((st) => ({ title: st.title.trim(), budget: Math.max(minFragment, parseCasualDuration(st.budgetStr) ?? DEFAULT_BUDGET) }))
+      .filter((k) => k.title !== "");
+    // A composition needs at least two subtasks — one "subtask" is just the task
+    // itself. Block before creating anything (the app never half-commits).
+    if (kids.length === 1) {
+      setError("A composed task needs at least 2 subtasks — add another, or remove it to keep a single task.");
+      return;
+    }
     const ev = buildEvent();
-    if (!ev) return;
+    if (!ev || ev.type !== "CREATE_TASK") return;
     dispatch(ev);
-    if (thenStart && ev.type === "CREATE_TASK") {
-      dispatch({ type: "START_TASK", taskId: (ev.task as { id: string }).id });
+    const parentId = (ev.task as { id: string }).id;
+    if (kids.length >= 2) {
+      dispatch({ type: "SET_SUBTASKS", parentId, children: kids });
+      // §2.7: remember this breakdown so a similar future task can reuse it.
+      recordDecomposition(title.trim(), kids);
+    }
+    if (thenStart) {
+      dispatch({ type: "START_TASK", taskId: parentId });
     }
     onClose();
+  };
+
+  /** §2.7 + §1.6: a subtask's budget is a first-class smart-input field — on
+   * blur it runs the same casual-duration parse as the main Budget, snaps to the
+   * MIN_FRAGMENT floor, and reformats to `Nd Nh Nm`. A meaning-change (floor
+   * raise) or unreadable input surfaces in the universal snap-notify strip; a
+   * pure reformat (`45` → `45m`) is silent. */
+  const commitSubtaskBudget = (i: number): void => {
+    const raw = (subtasks[i]?.budgetStr ?? "").trim();
+    if (!raw) return;
+    const parsed = parseCasualDuration(raw);
+    if (parsed === undefined) {
+      setAdjustments([{ field: "subtask", message: `Couldn't read "${raw}" for subtask ${i + 1} — leaving it as typed` }]);
+      return;
+    }
+    const floored = Math.max(minFragment, parsed);
+    const formatted = fmtDurUnits(floored);
+    if (floored !== parsed) {
+      setAdjustments([{ field: "subtask", message: `Subtask ${i + 1} budget below the ${minFragment}-minute floor — raised to ${formatted}` }]);
+    }
+    setSubtasks((xs) => xs.map((x, j) => (j === i ? { ...x, budgetStr: formatted } : x)));
   };
 
   const roles = FIELD_ROLES[timing];
@@ -615,6 +673,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
             </div>
           </div>
           <div className="field">
+            <label>Presets</label>
             <div className="hint-row">
               <div className="type-chips" role="radiogroup" aria-label="Presets">
                 {PRESETS.map((p) => (
@@ -627,12 +686,12 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
                   >
                     {p.label}
                     {p.id === activePreset && presetAuto && (
-                      <span className="ml-tag ml-tag-existing" data-tip="Auto-selected from your title — tap the pill to undo">auto</span>
+                      <span className="ml-tag ml-tag-auto" data-tip="Auto-selected from your title — tap the pill to undo">auto</span>
                     )}
                   </button>
                 ))}
               </div>
-              <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Presets for the inevitable dailies — Sleep, Nap, Food. Locks title/sub-head/head; timing type stays editable. Typing a matching title selects one automatically (§2.9)">ⓘ</span>
+              <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Typing a matching title selects one automatically (§2.9)">ⓘ</span>
             </div>
           </div>
           <div className="field">
@@ -766,6 +825,58 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
               </div>
               <span className="hint-glyph" tabIndex={0} aria-label="Flags help" data-tip="Flags derive from the timing type; editable within the validity rules">ⓘ</span>
             </div>
+          </div>
+          <div className="field">
+            <div className="hint-row">
+              <label data-tip="Break this task into subtasks — its budget becomes the sum of theirs (§2.7). Leaves run in order; completing the last completes the parent.">
+                Subtasks
+              </label>
+              <span className="hint-glyph" tabIndex={0} aria-label="Subtasks help" data-tip="Optional. Each subtask is a title + budget. The parent becomes a bracket spanning its leaves; only leaves occupy the timeline.">ⓘ</span>
+            </div>
+            {showDecompOffer && decompSuggestion && (
+              <div className="decomp-offer" data-tip="Reuse the subtasks from a similar task you broke down before">
+                <span className="ml-tag ml-tag-existing">
+                  {decompSuggestion.source === "exact" ? "AI · your past breakdown" : "AI · similar task"}
+                </span>
+                <span className="decomp-offer-text">{decompSuggestion.children.map((c) => c.title).join(" · ")}</span>
+                <button type="button" className="ml-choice-value" onClick={useDecomposition}>
+                  Use these {decompSuggestion.children.length} subtasks
+                </button>
+              </div>
+            )}
+            {subtasks.map((st, i) => (
+              <div key={i} className="subtask-entry">
+              <div className="subtask-row">
+                <input
+                  className="subtask-title"
+                  value={st.title}
+                  onChange={(e) => setSubtasks((xs) => xs.map((x, j) => (j === i ? { ...x, title: e.target.value } : x)))}
+                  placeholder="Subtask title"
+                  aria-label={`Subtask ${i + 1} title`}
+                />
+                <input
+                  value={st.budgetStr}
+                  onChange={(e) => setSubtasks((xs) => xs.map((x, j) => (j === i ? { ...x, budgetStr: e.target.value } : x)))}
+                  onBlur={() => commitSubtaskBudget(i)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitSubtaskBudget(i); } }}
+                  placeholder="e.g. 45m, 1h30"
+                  className="num subtask-budget"
+                  aria-label={`Subtask ${i + 1} budget`}
+                />
+                <button type="button" className="subtask-remove" aria-label={`Remove subtask ${i + 1}`} onClick={() => setSubtasks((xs) => xs.filter((_, j) => j !== i))}>&times;</button>
+              </div>
+              <div className="subtask-preview">
+                {st.title.trim() || "Subtask"} <span className="subtask-suffix">— Subtask # {i + 1} of {title.trim() || "this task"}</span>
+              </div>
+              </div>
+            ))}
+            <button
+              type="button"
+              className="subtask-add"
+              onClick={() => setSubtasks((xs) => [...xs, { title: "", budgetStr: fmtDurUnits(DEFAULT_BUDGET) }])}
+            >
+              + Add subtask
+            </button>
           </div>
           {adjustments.length > 0 && (
             <div className="form-warning" role="status">
