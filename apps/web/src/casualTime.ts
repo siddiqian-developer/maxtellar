@@ -172,6 +172,41 @@ export function parseCasualTime(input: string, now: Min): CasualTime {
   return { value: base + tod.hour * 60 + tod.min, dayOffset, explicitDay };
 }
 
+export interface PastTime {
+  /** Absolute epoch minute in the past (≤ now), or undefined if unparseable. */
+  value: Min | undefined;
+  /** Meaning-changing adjustments to announce (§7.0.2 snap-notify). */
+  notes: string[];
+}
+
+/**
+ * Resolve a casual time for a HISTORY / back-log field — the mirror of the
+ * planning drawer's forward-snap. Smart-input DIRECTION is caller-owned
+ * (§7.0.2): here a bare clock resolves into the PAST — today if `≤ now`, else
+ * the day before — and never bumps forward. An explicit day the user typed is
+ * respected but still clamped to `now` (history can't cross into the future).
+ * Returns meaning-changes in `notes` for the universal snap-notify.
+ */
+export function resolvePastTime(input: string, now: Min): PastTime {
+  const { value, explicitDay } = parseCasualTime(input, now);
+  if (value === undefined) return { value: undefined, notes: [] };
+
+  const notes: string[] = [];
+  let v = value;
+  // A bare clock parsed to today; if that lands in the future, the user means
+  // the most recent past occurrence — the day before.
+  if (!explicitDay && v > now) {
+    v -= MIN_PER_DAY;
+    notes.push("Resolved to yesterday (history is in the past)");
+  }
+  // Backstop: anything still beyond now (e.g. an explicit future day) clamps.
+  if (v > now) {
+    v = now;
+    notes.push("Clamped to now — history can't cross into the future");
+  }
+  return { value: v, notes };
+}
+
 /* ------------------------------ dates ------------------------------------ */
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];

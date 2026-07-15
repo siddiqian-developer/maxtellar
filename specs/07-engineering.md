@@ -275,6 +275,13 @@ error-prevention. The reducer's `snapTask`/physics snap is the backstop; the fie
 - **Notify scope — meaning-changes only.** Announce: past-time snapped forward (with a
   one-tap "tomorrow" offer), overnight wrap, MIN_FRAGMENT floor. Pure reformatting
   (`3pm`→`3:00 PM`) is silent (expected, not a correction).
+- **Direction is CALLER-owned (Stage 3, 2026-07-15).** The shared grammar (`parseCasualTime`)
+  resolves a bare clock onto today and returns `explicitDay`; the **caller** decides past-vs-future
+  bias. **Planning fields** (task drawer) snap a past bare clock *forward* + offer "tomorrow".
+  **History / back-log fields** (history editor, gap-fill) are the mirror: `resolvePastTime`
+  resolves a bare clock into the **past** (today if `≤ now`, else the day before), never forward,
+  and clamps `end ≤ now` — with the same meaning-change notes. One parser, opposite bias per
+  surface; neither direction lives in the grammar.
 Applies now to every clock/duration field and binds every future input.
 
 ### 7.0.3 Configurable compute intensity — "ship both, let the client choose" (2026-07-15)
@@ -324,7 +331,12 @@ suggestions, never function.
 ### 7.2 Architecture & stack
 - **TypeScript strict, pnpm monorepo:**
   - `packages/core` — pure scheduler: `(State, Event) → State`, integer minutes, **zero deps/
-    IO**. Houses the settle-pass, tick pipeline, fork/commit, accounting identity.
+    IO**. Houses the settle-pass, tick pipeline, fork/commit, accounting identity. **History
+    writes share one validated path:** `BACKLOG` (single-entry insert) and `EDIT_HISTORY`
+    (atomic full-history replace for the editor's edit/delete) both go through one
+    `validateHistoryBatch` helper (snap edges into the legal past, reject occupancy overlap by
+    throwing → discarded, live untouched — the `EDIT_COMMIT` backstop). History is
+    scheduler-immune: neither resettles.
   - `packages/store` — append-only **event log** + snapshots behind a `StorageAdapter`
     interface → **SQLite-wasm** (OPFS) on web (chosen over Dexie for history-scale queries,
     analytics GROUP BYs, mobile parity, Drive export); `expo-sqlite` later.

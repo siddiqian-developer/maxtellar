@@ -295,7 +295,7 @@ export function App(): JSX.Element {
       ) : view === "headsConfig" ? (
         <HeadsConfigScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => { setView("main"); setSettingsOpen(true); }} />
       ) : view === "history" ? (
-        <HistoryScreen state={state} onBack={() => setView("main")} />
+        <HistoryScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => setView("main")} />
       ) : view === "analytics" ? (
         <AnalyticsScreen state={state} onBack={() => setView("main")} />
       ) : (

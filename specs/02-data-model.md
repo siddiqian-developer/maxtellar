@@ -206,7 +206,8 @@ into two kinds by whether the user may *plan* a task under them:
 - **Food** — eating. Sub-head **Food**.
 
 **System built-ins** (never plannable; shown in the config as locked, with a one-line note):
-- **Wasted Time** — *explicitly logged* waste (loggable in back-log/gap-fill, never plannable;
+- **Wasted Time** — *explicitly logged* waste (loggable in back-log/gap-fill — a one-tap fill
+  type in the §4.1 GapFillModal alongside Activity/Sleep/Nap/Leave→Lost — never plannable;
   never in the drawer's planning pickers; at-most quota on it is an intended feature). Note:
   *"system head — logged, never planned."*
 - **Lost Hours** — the gutter: *unaccounted* time, **system-booked at SOD** (§4.2); never

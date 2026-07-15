@@ -215,6 +215,11 @@ export type Event =
       children: (Partial<Omit<UnstartedTask, "kind" | "parentId">> & { title: string })[];
     }
   | { type: "BACKLOG"; entry: Omit<HistoryEntry, "id"> }
+  // §4.1 history editor: atomically REPLACE history with a validated batch —
+  // edits (changed spans) and deletes (omitted entries) in one shot. Entries
+  // may omit `id` (assigned on insert). Overlap/illegal spans throw → discarded
+  // (pure reduce, same backstop as EDIT_COMMIT). History is scheduler-immune.
+  | { type: "EDIT_HISTORY"; batch: (Omit<HistoryEntry, "id"> & { id?: string })[] }
   | { type: "EDIT_COMMIT"; batch: PlanItem[] } // fork commit: replacement plan (re-settled at real now)
   // Bulk-reassigns every plan/running/history reference from one (head,activity)
   // pair to another — used when deleting a head/sub-head still in use (§2.1).

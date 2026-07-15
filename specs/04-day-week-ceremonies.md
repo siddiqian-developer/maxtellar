@@ -7,6 +7,17 @@
   a Finished Sleep** (the day's head). Days may run 30–100+ hours (no sleep, no new day).
 - **Back-logging:** past tasks born directly into history; time after last SOD editable in the
   main view, earlier via the history editor; no-overlap enforced throughout.
+  - **Mechanism (Stage 3, 2026-07-15).** "Earlier via the history editor" = the History screen's
+    editor slice (§6.4): per-entry immediate edit/delete via the `EDIT_HISTORY` event (atomic,
+    validated full-history replace — occupancy non-overlapping, `end ≤ now`, `start ≤ end`; illegal
+    edges snap, overlap throws and discards, live untouched — the same pure-reduce backstop as the
+    fork's `EDIT_COMMIT`); fresh back-log via the single-entry `BACKLOG` insert.
+  - **The >30-min missing-data ceremony is ONE component — `GapFillModal`.** "Unaccounted time
+    between X and Y — what happened?" with fill types **Activity / Sleep / Nap / Wasted / leave →
+    Lost** (§2.9/§2.10). It has **two entry points**: the History editor's gap rows (interior and
+    the forming trailing gap) ship now (Stage 3); the **SOD missing-data precondition (§4.2) reuses
+    the exact same modal** (Stage 4). Filling drives `BACKLOG`; leaving it books nothing — the
+    residue becomes Lost Hours at the next SOD.
 
 ### 4.2 SOD — the commit ceremony (state machine) — G13/G15
 Precondition: **exactly two Finished Sleep items, topmost = Sleep A.** If missing → the

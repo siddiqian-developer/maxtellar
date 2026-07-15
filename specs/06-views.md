@@ -170,7 +170,8 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
 4. **History:** exact as-happened flow; history editor for pre-SOD edits (no-overlap enforced;
    end ≤ now wall). Cloud-offload provision (e.g. Drive) for unbounded growth.
    **First slice shipped (2026-07-12), a full screen via the topbar menu — read-only** (the
-   editor is a later slice): entries **grouped by day, oldest day first**, day heading with a
+   editor was a later slice, now landed — see below): entries **grouped by day, oldest day
+   first**, day heading with a
    hairline underline; within a day, rows **oldest-first** (top-to-bottom = chronological, the
    screen reads like the day happened; reversed from the first slice, 2026-07-13). **Idle time
    between two consecutive finished runs renders as a quiet gap row** between them (dimmed, no
@@ -182,6 +183,23 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
    **outcome pill** (Completed / Soft-ended / Cancelled / Skipped — outcome is state, so these
    take a hue: completed = accent, soft-ended = hue-less, cancelled/skipped = danger-tinted /
    dimmed), and the duration (`fmtDur`; skipped = `00:00` zero-occupancy marker).
+   - **Editor slice (shipped 2026-07-15, Stage 3).** The screen is no longer read-only. Commit is
+     **immediate and per-entry** (no sandbox toggle): each entry **row is clickable** → a right-side
+     editor drawer (reusing the task-drawer chrome) editing Title / Sub-head (head derived) / Start
+     / End / Outcome / Sleep-kind; **Save** dispatches `EDIT_HISTORY` (full-history atomic replace,
+     this entry changed) and **Delete** dispatches `EDIT_HISTORY` with the entry omitted. A header
+     **"+ Add entry"** back-logs a fresh past entry via `BACKLOG` (the guarded single-entry insert).
+   - **Time fields are smart-input with the HISTORY direction (§7.0.2).** A bare clock resolves into
+     the **past** (`resolvePastTime`: today if `≤ now`, else the day before) — the mirror of the
+     planning drawer's forward-snap — never bumped forward, always `end ≤ now`; every meaning-change
+     (resolved-to-yesterday, clamped-to-now) shows in the universal snap-notify strip. Direction is
+     **caller-owned**: the same shared parser, opposite bias per surface.
+   - **Gap-fill affordance.** Any gap longer than **30 min** — interior (between two finished runs)
+     **or the still-forming trailing gap from the last run to `now`** — carries a **"fill"** button
+     opening the >30-min **GapFillModal** ("what happened?" → Activity / Sleep / Nap / Wasted /
+     Leave→Lost, driving `BACKLOG`; §4.2). Surfacing the trailing gap is the editor's **one
+     deliberate divergence** from the read-only "no trailing gap" rule (the read view still omits it;
+     analytics' Lost Hours still owns the unfilled residue until SOD). Gaps ≤ 30 min stay quiet.
 
 **Task entry:** FAB → drawer (Title / Sub-head / Start / End / Budget), live type-morph
 chip, inline physics-snapping, `[Start now ⚡]`. Title accepts deterministic shorthand tokens

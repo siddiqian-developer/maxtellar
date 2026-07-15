@@ -1073,6 +1073,23 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .history-row.skipped { opacity: 0.6; }
 .history-row.skipped .hr-title { text-decoration: line-through; }
+/* editor slice (2026-07-15): rows are clickable; gaps offer a fill affordance */
+.history-row.clickable { cursor: pointer; border-radius: 6px; }
+.history-row.clickable:hover { background: var(--paper-raised); }
+.history-gap.trailing .hr-title { color: var(--notice); font-style: italic; }
+.hist-add-btn, .fill-btn {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+.hist-add-btn:hover, .fill-btn:hover { color: var(--ink); border-color: var(--ink-soft); }
+.fill-btn { color: var(--notice); border-color: color-mix(in srgb, var(--notice) 35%, transparent); }
 /* padlock on non-slideable cards (2026-07-13) — neutral, never a state hue */
 .lock-icon { color: var(--ink-faint); flex-shrink: 0; }
 

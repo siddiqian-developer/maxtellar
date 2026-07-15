@@ -7,6 +7,7 @@ import {
   parseTimeOfDay,
   parseCasualTime,
   parseCasualDuration,
+  resolvePastTime,
   dayOffsetOf,
   dayStartMin,
 } from "./casualTime";
@@ -90,6 +91,41 @@ describe("parseCasualTime — day-aware", () => {
     expect(r.explicitDay).toBe(false);
     expect(dayOffsetOf(r.value!, NOW)).toBe(0);
     expect(r.value! < NOW).toBe(true);
+  });
+});
+
+describe("resolvePastTime — history/back-log mirror (direction is caller-owned)", () => {
+  it("a past bare clock stays today, silently (already in the past)", () => {
+    const r = resolvePastTime("07:00", NOW); // now 08:30
+    expect(dayOffsetOf(r.value!, NOW)).toBe(0);
+    expect(r.value).toBe(dayStartMin(NOW) + 7 * 60);
+    expect(r.notes).toEqual([]);
+  });
+
+  it("a bare clock in the future resolves to YESTERDAY, with a note", () => {
+    const r = resolvePastTime("3pm", NOW); // 15:00 > now 08:30
+    expect(dayOffsetOf(r.value!, NOW)).toBe(-1);
+    expect(r.value).toBe(dayStartMin(NOW) - 1440 + 15 * 60);
+    expect(r.notes.join(" ")).toMatch(/yesterday/i);
+  });
+
+  it("an explicit future day clamps to now", () => {
+    const r = resolvePastTime("tom 9am", NOW);
+    expect(r.value).toBe(NOW);
+    expect(r.notes.join(" ")).toMatch(/can't cross|clamp/i);
+  });
+
+  it("an explicit past day is respected without notes", () => {
+    const r = resolvePastTime("yesterday 10pm", NOW);
+    expect(dayOffsetOf(r.value!, NOW)).toBe(-1);
+    expect(r.value).toBe(dayStartMin(NOW) - 1440 + 22 * 60);
+    expect(r.notes).toEqual([]);
+  });
+
+  it("unparseable input returns undefined, no notes", () => {
+    const r = resolvePastTime("zzz", NOW);
+    expect(r.value).toBeUndefined();
+    expect(r.notes).toEqual([]);
   });
 });
 

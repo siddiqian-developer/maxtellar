@@ -131,6 +131,33 @@ function nextId(s: State, prefix: string): [string, State] {
   return [id, { ...s, seq: s.seq + 1 }];
 }
 
+/** §4.1/§7 history laws — the single validator for both the single-entry
+ * back-log insert and the full-history editor replace. Occupancy edges are
+ * snapped into the legal past (end ≤ now, start ≤ end — the past can never push
+ * `now`, §1.2), then any occupancy overlap is REJECTED by throwing. A throw
+ * leaves the caller's `live` state unreferenced (pure reduce) — the same
+ * backstop guarantee as EDIT_COMMIT. Insertion order of `entries` is preserved
+ * (the overlap scan sorts a copy); zero-occupancy markers never bound overlap. */
+function validateHistoryBatch<T extends { kind: HistoryEntry["kind"]; start: Min; end: Min }>(
+  entries: T[],
+  now: Min,
+): T[] {
+  const snapped = entries.map((e) => {
+    const end = Math.min(e.end, now);
+    const start = Math.min(e.start, end);
+    return { ...e, start, end };
+  });
+  const occ = snapped
+    .filter((e) => e.kind === "occupancy")
+    .slice()
+    .sort((a, b) => a.start - b.start);
+  for (let i = 1; i < occ.length; i++) {
+    if (occ[i - 1]!.end > occ[i]!.start)
+      throw new Error("history edit would overlap occupancy history (G7)");
+  }
+  return snapped;
+}
+
 /** The first schedulable instant for the plan (§3.13). */
 export function cursorOf(s: State): Min {
   if (!s.running) return s.now;
@@ -668,17 +695,31 @@ export function reduce(state: State, event: Event): State {
 
     case "BACKLOG": {
       // History is born directly into the past (G6); never pushes now (1.2).
-      const e = event.entry;
-      const end = Math.min(e.end, state.now);
-      const start = Math.min(e.start, end);
-      if (e.kind === "occupancy") {
-        const overlaps = state.history.some(
-          (h) => h.kind === "occupancy" && h.start < end && start < h.end,
-        );
-        if (overlaps) throw new Error("BACKLOG would overlap occupancy history (G7)");
-      }
+      // Validated against the whole existing history via the shared law helper
+      // (snap edges, reject overlap) so back-log and the editor share one path.
       const [id, s1] = nextId(state, "log");
-      return { ...s1, history: [...s1.history, { ...e, start, end, id }] };
+      const history = validateHistoryBatch([...s1.history, { ...event.entry, id }], s1.now);
+      return { ...s1, history };
+    }
+
+    case "EDIT_HISTORY": {
+      // History editor commit (§4.1): the batch atomically REPLACES history
+      // after validation — edits (changed spans) and deletes (omitted entries)
+      // in one shot. Any missing id is assigned; overlap/illegal spans throw and
+      // discard the batch upstream (pure reduce, EDIT_COMMIT backstop). History
+      // is scheduler-immune — no resettle.
+      let s = state;
+      const withIds: HistoryEntry[] = event.batch.map((e) => {
+        let id = e.id;
+        if (!id) {
+          const [nid, ns] = nextId(s, "log");
+          id = nid;
+          s = ns;
+        }
+        return { ...e, id };
+      });
+      const history = validateHistoryBatch(withIds, s.now);
+      return { ...s, history };
     }
 
     case "EDIT_COMMIT": {
