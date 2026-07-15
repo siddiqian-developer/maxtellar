@@ -269,18 +269,17 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
             </div>
           )}
         </div>
-        {/* Footer order/spacing consistent with the New Task drawer: primary
-            first (left), spacer, Cancel last (right); Delete takes the
-            secondary slot next to the primary (edit only, danger-tinted). */}
+        {/* Footer: [Add/Save, Cancel] grouped left, spacer, Delete far right
+            (edit only, danger-tinted — separated from the confirm actions). */}
         <div className="drawer-footer">
           <button className="primary" onClick={save} disabled={fieldErr !== null} data-tip={fieldErr ?? "Save"}>
             {isNew ? "Add" : "Save"}
           </button>
+          <button className="cancel-accent" onClick={onClose}>Cancel</button>
+          <span style={{ flex: 1 }} />
           {!isNew && (
             <button className="cancel-accent delete-btn" onClick={remove} data-tip="Delete this entry">Delete</button>
           )}
-          <span style={{ flex: 1 }} />
-          <button className="cancel-accent" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>
