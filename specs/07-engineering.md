@@ -255,6 +255,16 @@ reduced from the same stale state and the second **silently discarded the first'
 enforces it at the store boundary. A rejected event must not jam the chain (the chain
 swallows the rejection; the caller still gets it).
 
+### 7.0.2 Snap-at-entry (binding UI-input pattern)
+The correct-at-the-boundary rule for **all** input fields (the UI face of the E3 physics-snap
+law): a value that violates a floor/physics constraint is **corrected the instant it is
+committed to the field**, in place, with a quiet inline warning — never the accept-then-scold
+anti-pattern (let an illegal value in, disallow it later, then notify). This is "parse, don't
+validate" (normalize at the boundary so illegal states are unrepresentable downstream) and the
+engineering face of Nielsen's error-prevention heuristic. The reducer's `snapTask`/physics
+snap is the backstop; the field must never *display* an illegal value as accepted. Applies now
+to Budget vs MIN_FRAGMENT and every clock/duration field, and binds every future input.
+
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly
   later; `now` strictly advances; every structural op consumes gap, consumes budget, or reduces

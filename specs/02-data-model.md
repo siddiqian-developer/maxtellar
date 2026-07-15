@@ -111,13 +111,55 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
   6-hour Nap are both legal.
 - Wearable provision: sleep/wake from a pluggable source (`manual` | `wearable`); detected
   sleep only ever *proposes* (never auto-commits).
+- **Preset pills (task drawer).** Sleep and Nap (and Food, §2.10) are entered from a **preset
+  pill row** directly under the timing-type chips — not a free-form flag. A pill pre-fills a
+  bundle of fields, some **locked**, some **editable**:
+
+  | Field | Sleep | Nap | Food | Locked? |
+  |---|---|---|---|---|
+  | Title | Sleep | Nap | Food | 🔒 for Sleep/Nap; ✏️ **editable for Food** (Lunch/Dinner/…) — ML auto-switch still applies |
+  | Sub-head | Sleep | Nap | Food | 🔒 locked |
+  | Head | Recharge | Recharge | Food | 🔒 locked |
+  | `sleepKind` | `sleep` | `nap` | — | 🔒 (set by pill) |
+  | `breakable` | off | off | off | 🔒 locked off (never split by the scheduler) |
+  | timing type | **budgeted** | **unscheduled** | **budgeted** | ✏️ editable; **default configurable** in Settings |
+  | `slideable` | on | on | on | ✏️ editable (default on — a slideable Sleep *rides* under pressure, G28, rather than being amputated) |
+  | `ommf` | off | off | off | ✏️ editable (default off — a missed bedtime must slide, not perish; an OMMF nap is a legitimate choice) |
+
+  - **Deselect restores.** Tapping the active pill again toggles it off and **restores the
+    field values captured just before it was activated** (snapshot-on-activate) — no data loss
+    from a stray tap.
+  - **ML auto-switch.** A title matching a preset (the preset's keywords, exact or ML-similar)
+    **auto-activates** that pill, tagged with the existing suggestion styling and one-click
+    undo. **Intent wins (§7.0.1):** once the user has manually toggled any pill this drawer
+    session, auto-switch stays silent.
+  - Naps and Food are **mostly back-logged**, so their pills earn most of their keep in the
+    gap-fill/back-log flow (§4.1), less in the planning drawer.
 
 ### 2.10 Built-in heads
+All built-in heads are **real heads, undeletable**, and sort first in the registry. They split
+into two kinds by whether the user may *plan* a task under them:
+
+**Plannable built-ins** (schedulable like any head; **no** "system" note in the config):
 - **Self-Management** — ceremonies, planning, in-app edit time.
-- **Wasted Time** — *explicitly logged* waste (loggable, never plannable; at-most quota on it
-  is an intended feature).
-- **Lost Hours** — the gutter: *unaccounted* time, system-booked at SOD.
-- Real heads with sub-activities; undeletable. (**Lost ≠ Wasted:** Lost = unlogged gutter;
-  Wasted = user-declared waste.)
+- **Recharge** — sleep and rest. Sleep is a body-maintenance necessity, not a luxury or a
+  waste; its head name says so. Ships with built-in sub-heads **Sleep** and **Nap** (§2.9).
+- **Food** — eating. Sub-head **Food**.
+
+**System built-ins** (never plannable; shown in the config as locked, with a one-line note):
+- **Wasted Time** — *explicitly logged* waste (loggable in back-log/gap-fill, never plannable;
+  never in the drawer's planning pickers; at-most quota on it is an intended feature). Note:
+  *"system head — logged, never planned."*
+- **Lost Hours** — the gutter: *unaccounted* time, **system-booked at SOD** (§4.2); never
+  user-selectable anywhere. Note: *"system head — auto-booked at day close."*
+
+(**Lost ≠ Wasted:** Lost = unlogged gutter; Wasted = user-declared waste.)
+
+**Pattern — inevitable-necessity heads (binding for the future).** Sleep, Nap, Food and their
+kin are **built-in, undeletable, AND plannable** — not optional, not left to user discretion,
+because no productive routine exists without them. When a future category is a biological/
+structural inevitability of a day (not a preference), it joins this class rather than being a
+user-created head. This is distinct from the *system* built-ins (Wasted/Lost), which are
+undeletable because the accounting model owns them, not because they're inevitable.
 
 ---

@@ -7,8 +7,12 @@ export type Min = number; // absolute minutes since epoch (integer)
 export type Dur = number; // duration in minutes (integer)
 
 /** Built-in heads (§2.10) — real heads, undeletable. Shared by core (Lost
- * Hours booking at SOD) and the web registry so the names have one source. */
+ * Hours booking at SOD) and the web registry so the names have one source.
+ * Two kinds: PLANNABLE (schedulable like any head) and SYSTEM (accounting-owned,
+ * never planned). Recharge/Food are "inevitable-necessity" heads (§2.10). */
 export const SELF_MANAGEMENT = "Self-Management";
+export const RECHARGE = "Recharge";
+export const FOOD = "Food";
 export const WASTED_TIME = "Wasted Time";
 export const LOST_HOURS = "Lost Hours";
 

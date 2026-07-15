@@ -7,27 +7,70 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
-import { SELF_MANAGEMENT } from "@maxtellar/core";
+import { SELF_MANAGEMENT, RECHARGE, FOOD, WASTED_TIME, LOST_HOURS } from "@maxtellar/core";
 import { forgetActivity } from "./ml/vectorStore";
 
 /** head name -> its activity (sub-head) names. */
 export type HeadsRegistry = Record<string, string[]>;
 
+/** §2.10 plannable built-ins — schedulable like any head, no config note.
+ * Recharge/Food are "inevitable-necessity" heads: undeletable AND plannable. */
+export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [SELF_MANAGEMENT, RECHARGE, FOOD];
+/** §2.10 system built-ins — accounting-owned, never planned; shown in config
+ * (with a note) but hidden from the drawer's planning pickers. */
+export const SYSTEM_BUILT_IN_HEADS: readonly string[] = [WASTED_TIME, LOST_HOURS];
+/** All undeletable built-ins (plannable + system). */
+export const BUILT_IN_HEADS: readonly string[] = [...PLANNABLE_BUILT_IN_HEADS, ...SYSTEM_BUILT_IN_HEADS];
+
+/** One-line note shown in the config for the non-plannable system heads only
+ * (plannable built-ins carry no note — §2.10). */
+export const BUILT_IN_HEAD_NOTES: Record<string, string> = {
+  [WASTED_TIME]: "system head — logged, never planned",
+  [LOST_HOURS]: "system head — auto-booked at day close",
+};
+
+/** Built-in sub-heads seeded under their head (the §2.9 presets live here). */
+const BUILT_IN_SUBHEADS: Record<string, string[]> = {
+  [RECHARGE]: ["Sleep", "Nap"],
+  [FOOD]: ["Food"],
+};
+
+/** Is (head, activity) a built-in preset sub-head? Undeletable, like its head. */
+export function isBuiltInActivity(head: string, activity: string): boolean {
+  return (BUILT_IN_SUBHEADS[head] ?? []).includes(activity);
+}
+
 const DEFAULT_REGISTRY: HeadsRegistry = {
   "Main Work": [],
   [SELF_MANAGEMENT]: [],
+  [RECHARGE]: [...(BUILT_IN_SUBHEADS[RECHARGE] ?? [])],
+  [FOOD]: [...(BUILT_IN_SUBHEADS[FOOD] ?? [])],
+  [WASTED_TIME]: [],
+  [LOST_HOURS]: [],
 };
 
-/** Spec §2.10: Self-Management is the one true built-in among the heads this
- * registry manages (Wasted Time / Lost Hours are never-plannable and never
- * enter this registry at all) — undeletable. "Main Work" is only a
- * convenience default seed, not a spec-protected built-in, so it CAN be
- * deleted. */
-export const BUILT_IN_HEADS: readonly string[] = [SELF_MANAGEMENT];
+/** Merge a persisted registry over the defaults so every built-in head — and
+ * its seeded built-in sub-heads — is always present, without dropping the
+ * user's own additions (unions sub-head lists for built-in heads). */
+function mergeRegistry(stored: HeadsRegistry): HeadsRegistry {
+  const merged: HeadsRegistry = { ...DEFAULT_REGISTRY, ...stored };
+  for (const head of BUILT_IN_HEADS) {
+    const seeded = BUILT_IN_SUBHEADS[head] ?? [];
+    const existing = stored[head] ?? [];
+    merged[head] = [...seeded, ...existing.filter((a) => !seeded.includes(a))];
+  }
+  return merged;
+}
 
 interface HeadsApi {
   registry: HeadsRegistry;
+  /** All heads (built-ins first), for the config screen. */
   heads: string[];
+  /** Only the heads a user may PLAN under — excludes the system built-ins
+   * (Wasted Time / Lost Hours). This is what the drawer's pickers read. */
+  plannableHeads: string[];
+  /** Sub-heads under plannable heads only — the drawer's sub-head options. */
+  plannableActivities: string[];
   /** activity name -> its head name, or undefined if unknown. */
   headFor: (activity: string) => string | undefined;
   addHead: (head: string) => void;
@@ -49,7 +92,7 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
   const [registry, setRegistry] = useState<HeadsRegistry>(() => {
     try {
       const stored = localStorage.getItem("headsRegistry");
-      if (stored) return { ...DEFAULT_REGISTRY, ...JSON.parse(stored) };
+      if (stored) return mergeRegistry(JSON.parse(stored) as HeadsRegistry);
     } catch {
       // fall through to defaults
     }
@@ -78,6 +121,7 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
   };
 
   const deleteActivity = (head: string, activity: string): void => {
+    if (isBuiltInActivity(head, activity)) return; // built-in preset sub-heads are undeletable
     setRegistry((r) => {
       const existing = r[head];
       if (!existing || !existing.includes(activity)) return r;
@@ -105,8 +149,12 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
     return Object.entries(registry).find(([, acts]) => acts.includes(a))?.[0];
   };
 
+  const heads = Object.keys(registry);
+  const plannableHeads = heads.filter((h) => !SYSTEM_BUILT_IN_HEADS.includes(h));
+  const plannableActivities = plannableHeads.flatMap((h) => registry[h] ?? []);
+
   return (
-    <HeadsContext.Provider value={{ registry, heads: Object.keys(registry), headFor, addHead, addActivity, deleteActivity, deleteHead }}>
+    <HeadsContext.Provider value={{ registry, heads, plannableHeads, plannableActivities, headFor, addHead, addActivity, deleteActivity, deleteHead }}>
       {children}
     </HeadsContext.Provider>
   );

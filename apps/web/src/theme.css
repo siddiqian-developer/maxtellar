@@ -631,6 +631,21 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   border-radius: var(--radius);
   padding: 6px 10px;
 }
+/* §7.0.2 snap-at-entry notice: a value was corrected in place (softer than an
+   error — the app fixed it for you, it isn't a failure). */
+.form-warning {
+  color: var(--ink-soft);
+  font-size: 12px;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius);
+  padding: 6px 10px;
+}
+/* A field locked by a preset (§2.9): read-only, visibly quiet. */
+.drawer input.locked {
+  opacity: 0.7;
+  cursor: not-allowed;
+  background: var(--accent-soft);
+}
 .drawer label { font-size: 12px; color: var(--ink-soft); display: block; margin-bottom: 2px; }
 .drawer .field { display: flex; flex-direction: column; }
 .drawer .chip {
@@ -1058,6 +1073,8 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .fuzzy-option.active, .fuzzy-option:hover { background: var(--accent-soft); color: var(--ink); }
 
 .config-head-title { display: flex; align-items: center; gap: 6px; }
+/* §2.10 system built-in heads carry a quiet one-line note (never planned). */
+.config-head-note { font-size: 11px; color: var(--ink-faint); font-style: italic; }
 
 .built-in-dot {
   width: 5px;

@@ -11,7 +11,7 @@ import { HeadsConfigScreen } from "./components/HeadsConfigScreen";
 import { HistoryScreen } from "./components/HistoryScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
 import { fmtDur } from "./time";
-import { useSettings } from "./settings";
+import { useSettings, type TimeFormat, type GridGranularity, type PresetDefaults } from "./settings";
 
 type Theme = "light" | "dark" | "system";
 type View = "main" | "headsConfig" | "history" | "analytics";
@@ -37,7 +37,8 @@ const SPLASH_FADE_MS = 450;
 export function App(): JSX.Element {
   const { ready, persistent, state, dispatch, error } = useStore();
   const { addActivity } = useHeads();
-  const { devSandbox } = useSettings();
+  const settings = useSettings();
+  const { devSandbox } = settings;
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Resizable timeline/pipeline split: pipeline width in px, persisted.
   const [pipelineWidth, setPipelineWidth] = useState<number>(() => {
@@ -78,6 +79,54 @@ export function App(): JSX.Element {
   }, [splashPhase]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>("main");
+
+  // §06 transactional Settings: changes reflect live but only commit on Done;
+  // Esc/×/scrim revert to this snapshot. Held above the panel so it survives the
+  // round-trip to the Heads screen (which unmounts the panel).
+  interface SettingsSnapshot {
+    minFragment: number;
+    openExtentCap: number;
+    semiTailFloor: number;
+    timeFormat: TimeFormat;
+    gridGranularity: GridGranularity;
+    devSandboxVal: boolean;
+    presetDefaults: PresetDefaults;
+  }
+  const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSnapshot | null>(null);
+  const openSettings = (): void => {
+    if (!settingsSnapshot && state) {
+      setSettingsSnapshot({
+        minFragment: state.minFragment,
+        openExtentCap: state.openExtentCap,
+        semiTailFloor: state.semiTailFloor,
+        timeFormat: settings.timeFormat,
+        gridGranularity: settings.gridGranularity,
+        devSandboxVal: settings.devSandbox,
+        presetDefaults: settings.presetDefaults,
+      });
+    }
+    setSettingsOpen(true);
+  };
+  const commitSettings = (): void => {
+    setSettingsSnapshot(null); // Done: keep the live changes
+    setSettingsOpen(false);
+  };
+  const revertSettings = (): void => {
+    const s = settingsSnapshot;
+    if (s && state) {
+      if (s.minFragment !== state.minFragment) dispatch({ type: "SET_MIN_FRAGMENT", minutes: s.minFragment });
+      if (s.openExtentCap !== state.openExtentCap) dispatch({ type: "SET_OPEN_CAP", minutes: s.openExtentCap });
+      if (s.semiTailFloor !== state.semiTailFloor) dispatch({ type: "SET_TAIL_FLOOR", minutes: s.semiTailFloor });
+      settings.setTimeFormat(s.timeFormat);
+      settings.setGridGranularity(s.gridGranularity);
+      settings.setDevSandbox(s.devSandboxVal);
+      settings.setPresetDefault("sleep", s.presetDefaults.sleep);
+      settings.setPresetDefault("nap", s.presetDefaults.nap);
+      settings.setPresetDefault("food", s.presetDefaults.food);
+    }
+    setSettingsSnapshot(null);
+    setSettingsOpen(false);
+  };
   const [theme, setTheme] = useState<Theme>(() => {
     const stored = localStorage.getItem("theme") as Theme | null;
     return stored || "system";
@@ -216,7 +265,7 @@ export function App(): JSX.Element {
         </button>
         <button
           className="theme-toggle"
-          onClick={() => setSettingsOpen(true)}
+          onClick={openSettings}
           title="Settings"
           aria-label="Settings"
         >
@@ -256,6 +305,7 @@ export function App(): JSX.Element {
           {drawerOpen && (
             <TaskDrawer
               now={state.now}
+              minFragment={state.minFragment}
               dispatch={(e) => void dispatch(e)}
               onClose={() => setDrawerOpen(false)}
             />
@@ -268,7 +318,8 @@ export function App(): JSX.Element {
           openExtentCap={state.openExtentCap}
           semiTailFloor={state.semiTailFloor}
           dispatch={(e) => void dispatch(e)}
-          onClose={() => setSettingsOpen(false)}
+          onCancel={revertSettings}
+          onDone={commitSettings}
           onOpenHeadsConfig={() => { setSettingsOpen(false); setView("headsConfig"); }}
         />
       )}

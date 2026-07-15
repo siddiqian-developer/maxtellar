@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Event, SleepKind, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
+import { useSettings, type PresetId } from "../settings";
+import { PRESETS, presetById, matchPreset } from "../presets";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
@@ -19,8 +21,25 @@ import { FuzzyDropdown } from "./FuzzyDropdown";
 
 interface Props {
   now: number;
+  minFragment: number;
   dispatch: (e: Event) => void;
   onClose: () => void;
+}
+
+/** All drawer fields a preset touches — snapshotted on activate so deselecting
+ * a pill restores exactly what was there before (§2.9). */
+interface FieldSnapshot {
+  title: string;
+  activity: string;
+  subheadSource: "app" | "user";
+  startStr: string;
+  endStr: string;
+  budgetStr: string;
+  ommf: boolean;
+  flags: { slideable?: boolean; breakable?: boolean };
+  sleepKind: SleepKind | undefined;
+  newHeadChoice: string;
+  newHeadTouched: boolean;
 }
 
 const DEFAULT_BUDGET = 30;
@@ -128,9 +147,16 @@ const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget
   fixed: { start: "required", end: "required", budget: "required" },
 };
 
-export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
-  const { heads, registry, headFor, addActivity } = useHeads();
+export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
+  const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
+  const { presetDefaults } = useSettings();
   useEscClose(onClose);
+  // Head-suggester should only ever propose PLANNABLE heads (never the system
+  // built-ins Wasted Time / Lost Hours). Feed it a registry filtered to those.
+  const plannableRegistry = useMemo(
+    () => Object.fromEntries(plannableHeads.map((h) => [h, registry[h] ?? []])),
+    [plannableHeads, registry],
+  );
 
   const [title, setTitle] = useState("");
   const [activity, setActivity] = useState("");
@@ -148,10 +174,24 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   const [endStr, setEndStr] = useState("");
   const [budgetStr, setBudgetStr] = useState(fmtBudget(DEFAULT_BUDGET));
   const [ommf, setOmmf] = useState(false);
-  // §2.9: Sleep/Nap is an EXPLICIT declaration at logging, never inferred.
+  // §2.9: Sleep/Nap is an EXPLICIT declaration at logging, never inferred — set
+  // by the preset pill (not a free-form control).
   const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(undefined);
   const [flags, setFlags] = useState<{ slideable?: boolean; breakable?: boolean }>({});
   const [error, setError] = useState<string | null>(null);
+  // §7.0.2 snap-at-entry: a quiet inline note when a field value was corrected
+  // in place (e.g. budget raised to MIN_FRAGMENT). Distinct from a hard error.
+  const [warning, setWarning] = useState<string | null>(null);
+
+  // §2.9 preset pills (Sleep / Nap / Food). activePreset locks a bundle of
+  // fields; presetSnapshot restores them on deselect; presetTouched silences ML
+  // auto-switch once the user has toggled a pill this session (intent wins);
+  // presetAuto marks a pill that ML selected (so it can auto-deselect on a
+  // no-longer-matching editable title, without clobbering what the user typed).
+  const [activePreset, setActivePreset] = useState<PresetId | null>(null);
+  const [presetSnapshot, setPresetSnapshot] = useState<FieldSnapshot | null>(null);
+  const [presetTouched, setPresetTouched] = useState(false);
+  const [presetAuto, setPresetAuto] = useState(false);
 
   // §2.1: sub-head (activity) selection auto-derives its (uneditable) head.
   // Unknown activity → the user must assign a head (existing or new).
@@ -166,8 +206,11 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   // gets overwritten, and instead surfaces the keep-mine choice below. Editing/clearing
   // the sub-head is NOT a trigger — the effect keys off `suggestion` (which only changes
   // on a title edit), so `autofillSubhead` is a gate read at that moment, not a dependency.
-  const allActivities = useMemo(() => heads.flatMap((h) => registry[h] ?? []), [heads, registry]);
-  const suggestion = useSubheadSuggestion(title, allActivities);
+  // Only PLANNABLE sub-heads are offered/suggested (system heads never appear).
+  const allActivities = plannableActivities;
+  // A preset locks the sub-head, so suppress the title→sub-head suggester while
+  // one is active (its result would fight the locked value).
+  const suggestion = useSubheadSuggestion(activePreset ? "" : title, allActivities);
   // §7.0.1 "new" namer: when nothing existing matches, the suggester's taxonomy
   // step may carry a proposed NAME (a universal category label, e.g. "Alumni
   // meetup" → "Socialization"); without one, echo the title.
@@ -196,7 +239,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   const newSubheadHead = useHeadSuggestion(
     suggestion?.kind === "new" ? (suggestedSubhead ?? "") : "",
     false,
-    registry,
+    plannableRegistry,
   );
   const suggestedHead =
     suggestion?.kind === "existing" ? headFor(suggestion.activity)
@@ -212,7 +255,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   // §7.0.1 ML-assist "same duality" clause: sub-head → head suggestion for a
   // brand-new sub-head. A confident match auto-fills (provisional, tagged);
   // "intent wins" — touching the field silences it for the session.
-  const headSuggestion = useHeadSuggestion(isNewActivity ? activity : "", newHeadTouched, registry);
+  const headSuggestion = useHeadSuggestion(isNewActivity ? activity : "", newHeadTouched, plannableRegistry);
   useEffect(() => {
     if (newHeadTouched || !headSuggestion) return;
     if (headSuggestion.kind === "existing") setNewHeadChoice(headSuggestion.head);
@@ -231,7 +274,20 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
   // validity matrix (fixed → never slideable; budgeted → always slideable;
   // breakable only for budgeted; ommf → never breakable).
   const slideable = timing === "fixed" ? false : timing === "budgeted" ? true : (flags.slideable ?? true);
-  const breakable = timing === "budgeted" && !ommf ? (flags.breakable ?? true) : false;
+  // §2.9: an active preset locks breakable OFF regardless of timing.
+  const breakable = activePreset ? false : timing === "budgeted" && !ommf ? (flags.breakable ?? true) : false;
+
+  /** §7.0.2 snap-at-entry: a committed budget below MIN_FRAGMENT is corrected in
+   * the field itself (never accepted-then-rejected). Returns the snapped string
+   * and sets the inline warning. */
+  const snapBudgetStr = (bStr: string): string => {
+    const b = bStr ? parseBudget(bStr) : undefined;
+    if (b !== undefined && b < minFragment) {
+      setWarning(`Budget below the ${minFragment}-minute floor — raised to ${fmtBudget(minFragment)}`);
+      return fmtBudget(minFragment);
+    }
+    return bStr;
+  };
 
   /** §3.6 derivation applied to explicit field strings (no stale closure): the
    * changed field is authoritative; a second present field derives the third;
@@ -243,9 +299,10 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
     bStr: string,
   ): void => {
     const r = derive(changed, sStr, eStr, bStr);
+    setWarning(null);
     setStartStr(r.start);
     setEndStr(r.end);
-    setBudgetStr(r.budget);
+    setBudgetStr(snapBudgetStr(r.budget)); // §7.0.2 correct-at-the-boundary
     setError(r.err);
   };
 
@@ -267,7 +324,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
     let bStr = budgetStr;
     if (field === "budget") {
       const cur = budgetStr ? parseBudget(budgetStr) ?? 0 : 0;
-      bStr = fmtBudget(Math.max(5, cur + dir * 5));
+      bStr = fmtBudget(Math.max(minFragment, cur + dir * 5)); // §7.0.2 floor
     } else {
       const str = field === "start" ? startStr : endStr;
       const cur = str ? parseClock(str) : undefined;
@@ -276,6 +333,80 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
     }
     applyDerive(field, sStr, eStr, bStr);
   };
+
+  /* ------------------------- §2.9 preset pills --------------------------- */
+
+  const captureFields = (): FieldSnapshot => ({
+    title, activity, subheadSource, startStr, endStr, budgetStr, ommf, flags, sleepKind, newHeadChoice, newHeadTouched,
+  });
+  const restoreFields = (snap: FieldSnapshot, keepTitle: boolean): void => {
+    if (!keepTitle) setTitle(snap.title);
+    setActivity(snap.activity);
+    setSubheadSource(snap.subheadSource);
+    setStartStr(snap.startStr);
+    setEndStr(snap.endStr);
+    setBudgetStr(snap.budgetStr);
+    setOmmf(snap.ommf);
+    setFlags(snap.flags);
+    setSleepKind(snap.sleepKind);
+    setNewHeadChoice(snap.newHeadChoice);
+    setNewHeadTouched(snap.newHeadTouched);
+    setError(null);
+    setWarning(null);
+  };
+  /** Fill the locked/seeded fields for a preset. Sleep/Nap force the title;
+   * Food (editable title) only seeds it when empty, so a matching typed title
+   * ("Lunch") is preserved. */
+  const applyPreset = (id: PresetId): void => {
+    const p = presetById(id);
+    if (!p.titleEditable) setTitle(p.title);
+    else if (!title.trim()) setTitle(p.title);
+    setActivity(p.subhead);
+    setSubheadSource("user"); // locked value = user intent (protects from suggester)
+    setSleepKind(p.sleepKind);
+    setOmmf(false);
+    setNewHeadChoice("");
+    setNewHeadTouched(false);
+    shapeTo(presetDefaults[id]); // seeds timing fields, resets flags, clears error
+  };
+  /** Manual pill tap: toggles the preset and silences ML auto-switch for the session. */
+  const togglePreset = (id: PresetId): void => {
+    setPresetTouched(true);
+    if (activePreset === id) {
+      if (presetSnapshot) restoreFields(presetSnapshot, false);
+      setActivePreset(null);
+      setPresetSnapshot(null);
+      setPresetAuto(false);
+    } else {
+      if (activePreset === null) setPresetSnapshot(captureFields());
+      setActivePreset(id);
+      setPresetAuto(false);
+      applyPreset(id);
+    }
+  };
+  // §7.0.1 ML auto-switch: a matching title auto-selects a pill (tagged, undoable)
+  // unless the user has toggled a pill this session (intent wins). An auto-selected
+  // pill on an editable title (Food) auto-deselects when the title stops matching,
+  // without clobbering what the user is typing.
+  useEffect(() => {
+    if (presetTouched) return;
+    const m = matchPreset(title);
+    if (m && activePreset !== m.id) {
+      if (activePreset === null) setPresetSnapshot(captureFields());
+      setActivePreset(m.id);
+      setPresetAuto(true);
+      applyPreset(m.id);
+    } else if (!m && activePreset !== null && presetAuto) {
+      if (presetSnapshot) restoreFields(presetSnapshot, true);
+      setActivePreset(null);
+      setPresetSnapshot(null);
+      setPresetAuto(false);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [title]);
+
+  const activePresetObj = activePreset ? presetById(activePreset) : null;
+  const titleLocked = activePresetObj !== null && !activePresetObj.titleEditable;
 
   const buildEvent = (): Event | null => {
     if (!title.trim()) { setError("Title is required"); return null; }
@@ -387,33 +518,66 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
             </div>
           </div>
           <div className="field">
+            <div className="hint-row">
+              <div className="type-chips" role="radiogroup" aria-label="Presets">
+                {PRESETS.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className={`type-chip${p.id === activePreset ? " active" : ""}`}
+                    data-status="semi-tail"
+                    onClick={() => togglePreset(p.id)}
+                  >
+                    {p.label}
+                    {p.id === activePreset && presetAuto && (
+                      <span className="ml-tag ml-tag-existing" data-tip="Auto-selected from your title — tap the pill to undo">auto</span>
+                    )}
+                  </button>
+                ))}
+              </div>
+              <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Presets for the inevitable dailies — Sleep, Nap, Food. Locks title/sub-head/head; timing type stays editable. Typing a matching title selects one automatically (§2.9)">ⓘ</span>
+            </div>
+          </div>
+          <div className="field">
             <label>Title <span className="req-dot" aria-label="required">•</span></label>
             <div className="clearable-field">
-              <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="What are you doing?" />
-              {title && (
+              <input
+                autoFocus
+                value={title}
+                readOnly={titleLocked}
+                className={titleLocked ? "locked" : undefined}
+                data-tip={titleLocked ? "Locked by the preset — tap the pill to unlock" : undefined}
+                onChange={(e) => setTitle(e.target.value)}
+                placeholder="What are you doing?"
+              />
+              {title && !titleLocked && (
                 <button type="button" className="clear-btn" tabIndex={-1} aria-label="Clear title" onClick={() => setTitle("")}>&times;</button>
               )}
             </div>
           </div>
           <div className="field">
-            <label data-tip="Search existing sub-heads, or type a new one">
+            <label data-tip={activePreset ? "Locked by the preset" : "Search existing sub-heads, or type a new one"}>
               Sub-head <span className="req-dot" aria-label="required">•</span>
-              {autofillSubhead && suggestion?.kind === "existing" && (
+              {!activePreset && autofillSubhead && suggestion?.kind === "existing" && (
                 <span className="ml-tag ml-tag-existing" data-tip="Suggested from your past titles — still fully editable">suggested</span>
               )}
-              {autofillSubhead && suggestion?.kind === "new" && (
+              {!activePreset && autofillSubhead && suggestion?.kind === "new" && (
                 <span className="ml-tag ml-tag-new" data-tip="No close match — suggesting a NEW sub-head, not a pick from the existing list">suggested new</span>
               )}
             </label>
-            <FuzzyDropdown
-              value={activity}
-              onChange={(v) => { setActivity(v); setSubheadSource("user"); }}
-              options={allActivities}
-              placeholder="e.g. Project — AI Automation"
-              clearable
-              ariaLabel="Sub-head"
-            />
-            {offerSubheadChoice && (
+            {activePreset ? (
+              <input value={activity} readOnly className="locked" aria-label="Sub-head" data-tip="Locked by the preset — tap the pill to unlock" />
+            ) : (
+              <FuzzyDropdown
+                value={activity}
+                onChange={(v) => { setActivity(v); setSubheadSource("user"); }}
+                options={allActivities}
+                placeholder="e.g. Project — AI Automation"
+                clearable
+                ariaLabel="Sub-head"
+              />
+            )}
+            {!activePreset && offerSubheadChoice && (
               <div className="ml-choice" data-tip="Your new title suggests a different sub-head — click it to use the suggestion">
                 <span className="ml-choice-text">
                   <span className="ml-choice-lead">
@@ -460,7 +624,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
                 <FuzzyDropdown
                   value={newHeadChoice}
                   onChange={(v) => { setNewHeadChoice(v); setNewHeadTouched(true); }}
-                  options={heads}
+                  options={plannableHeads}
                   placeholder="Pick or create a head"
                   clearable
                   ariaLabel="New sub-head's head"
@@ -492,12 +656,12 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
               </label>
               <label
                 className="flag"
-                data-tip={ommf ? "OMMF tasks can never be split" : timing !== "budgeted" ? "Only budgeted tasks can be split" : "The scheduler may split this task into segments"}
+                data-tip={activePreset ? "Presets are never split by the scheduler" : ommf ? "OMMF tasks can never be split" : timing !== "budgeted" ? "Only budgeted tasks can be split" : "The scheduler may split this task into segments"}
               >
                 <input
                   type="checkbox"
                   checked={breakable}
-                  disabled={timing !== "budgeted" || ommf}
+                  disabled={activePreset !== null || timing !== "budgeted" || ommf}
                   onChange={(e) => setFlags((f) => ({ ...f, breakable: e.target.checked }))}
                 />
                 breakable
@@ -506,24 +670,7 @@ export function TaskDrawer({ now, dispatch, onClose }: Props): JSX.Element {
               <span className="hint-glyph" tabIndex={0} aria-label="Flags help" data-tip="Flags derive from the timing type; editable within the validity rules">ⓘ</span>
             </div>
           </div>
-          <div className="field">
-            <div className="hint-row">
-              <div className="type-chips" role="radiogroup" aria-label="Sleep kind">
-                {([undefined, "sleep", "nap"] as const).map((k) => (
-                  <button
-                    key={k ?? "none"}
-                    type="button"
-                    className={`type-chip${k === sleepKind ? " active" : ""}`}
-                    data-status={k === undefined ? "unscheduled" : "semi-tail"}
-                    onClick={() => setSleepKind(k)}
-                  >
-                    {k === undefined ? "ordinary" : k}
-                  </button>
-                ))}
-              </div>
-              <span className="hint-glyph" tabIndex={0} aria-label="Sleep kind help" data-tip="Sleep = your main day-defining sleep; Nap = any other sleep. Both are ordinary tasks otherwise — declared here, never inferred (§2.9)">ⓘ</span>
-            </div>
-          </div>
+          {warning && <div className="form-warning" role="status">{warning}</div>}
           {error && <div className="form-error" role="alert">{error}</div>}
         </div>
         <div className="drawer-footer">

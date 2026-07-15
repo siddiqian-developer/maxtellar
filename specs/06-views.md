@@ -222,6 +222,20 @@ Drawer behavior (see also `docs/drawer-reference.md`):
 - **Time fields** show no format hint in their labels (minimalism) — the placeholder
   (`00:30`) carries the shape. Budget parses HH:MM or a bare integer as minutes; ±5-min
   stepper chevrons on all time fields (steppers skipped by tab order).
+- **Preset pill row (directly under the timing-type chips).** `Sleep · Nap · Food` — each a
+  §2.9 preset that pre-fills a bundle (locked Title/Sub-head/Head + `breakable` off + the
+  pill's `sleepKind`; editable timing type, `slideable`, `ommf`). Selecting a pill fills and
+  locks those fields (locked inputs render read-only/disabled); tapping the active pill again
+  deselects and **restores the pre-activate snapshot**. A title matching a preset auto-selects
+  its pill (ML-tagged, undoable), unless the user has already toggled a pill this session
+  (intent wins, §7.0.1). There is **no "ordinary" pill** — no pill selected *is* ordinary.
+- **Snap-at-entry (binding pattern, all input fields — see §7 "snap-at-entry").** A value that
+  violates a floor/physics rule is **corrected the instant it is committed to the field**, with
+  a quiet inline warning — never accepted-then-rejected later. Concretely: a Budget entered
+  below MIN_FRAGMENT snaps up to MIN_FRAGMENT in the field itself on commit, showing
+  "below the N-minute floor — raised". No invalid value ever enters state. (This is the
+  UI-layer face of the E3 physics-snap law; the reducer's `snapTask` is the backstop, but the
+  field must never *show* the illegal value as accepted.)
 - **Flags on one row**, terse: `OMMF` (uppercase), `slideable`, `breakable`.
 - **Title, Sub-head, and the new-sub-head's-head field each carry a very subtle inline
   clear (×)** — appears only once non-empty, `ink-faint` at 50% opacity, brightens on
@@ -272,6 +286,25 @@ the now-seam.
 
 **Settings panel:** gear icon in the topbar opens a panel using the same slide-in chrome as
 the task drawer (right-side card, scrim, sticky header, `Done` footer, Escape closes it too).
+
+**Transactional (draft/commit/revert).** Every change **reflects live** in the running app the
+moment it is made (the plan re-lays-out, the clock reformats, etc.), but is **only committed on
+`Done`**. **Esc, the header ×, and a scrim click all revert** every field to the values captured
+when the panel opened. The snapshot is held **above** the panel so it **survives the round-trip
+to the Heads & Sub-heads screen** ("Manage heads & sub-heads →" navigates away but keeps the
+uncommitted changes; returning re-opens Settings with them still pending). Accepted consequence
+(intentional, per the "no commit without an explicit Done" rule): leaving the Settings→Heads
+flow by any path that never returns to Settings leaves those live changes **effectively
+soft-committed** — neither a formal Done nor a revert fires. One lossy edge: raising
+MIN_FRAGMENT re-snaps sub-floor budgets up; a later revert restores the *setting* but not
+budgets that were never legal to store (they were snapped, not remembered).
+
+Holds the **Minimum fragment (minutes)** setting (§3.7): the MIN_FRAGMENT floor, default 5,
+min 1; dispatches `SET_MIN_FRAGMENT`. Raising it re-snaps every stored budget up to the new
+floor and lifts the dependent floors (open cap, semi-tail floor) if it overtakes them.
+Holds a **Presets** group: the **default timing type** for each of Sleep / Nap / Food (§2.9),
+persisted (localStorage, not event-sourced — a UI preference); defaults Sleep=budgeted,
+Nap=unscheduled, Food=budgeted.
 Holds the **Open-task cap (hours)** setting (2026-07-11): the `openExtentCap` from §3.9 —
 how far an open/budget-less task fills the day before lower-rank tasks land after it. Number
 field in hours (default 10); dispatches `SET_OPEN_CAP` (minutes) into the event-sourced state.
@@ -329,12 +362,16 @@ its head automatically, existing or freshly typed, so this second form is the ex
 not the main path). Plus a listing of the registry grouped by head. Each sub-head chip
 carries a quiet **× delete**
 (ink-faint, turns danger on hover). **Heads carry the same quiet × delete, except the
-built-ins** (§2.10: only `Self-Management` is spec-protected here — Wasted Time/Lost Hours
-never enter this registry at all; `Main Work` is a convenience default seed, not
-spec-protected, so it CAN be deleted). **Built-in heads sort first** in the registry
-listing, marked only by a very subtle dot (`docs/design-tokens.md` "built-in marker") — no
-badge/label text, the delete button's absence is the primary signal, the dot a secondary
-quiet hint.
+built-ins.** All five §2.10 built-ins appear here and are undeletable: the **plannable**
+ones (`Self-Management`, `Recharge` with its Sleep/Nap sub-heads, `Food`) show **no note**;
+the **system** ones (`Wasted Time`, `Lost Hours`) show a quiet one-line note in front —
+"system head — logged, never planned" / "system head — auto-booked at day close" — since
+their non-plannability is the thing worth surfacing. (`Main Work` is a convenience default
+seed, not a built-in, so it CAN be deleted.) **Built-in heads sort first** in the registry
+listing, marked by a very subtle dot (`docs/design-tokens.md` "built-in marker") — the
+delete button's absence is the primary signal, the dot and any note secondary. The system
+built-ins are **excluded from the drawer's planning pickers** (Sub-head / head fields); only
+plannable heads and their sub-heads appear there.
 
 **Deletion guard — a sub-head or head still referenced by any task cannot be deleted
 outright (revised 2026-07-10, supersedes the earlier "always low-stakes, no-confirm"

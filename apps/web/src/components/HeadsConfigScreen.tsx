@@ -13,7 +13,7 @@
 
 import { useEffect, useState } from "react";
 import type { Event, State } from "@maxtellar/core";
-import { useHeads, BUILT_IN_HEADS } from "../heads";
+import { useHeads, BUILT_IN_HEADS, BUILT_IN_HEAD_NOTES, isBuiltInActivity } from "../heads";
 import { useEscClose } from "../useEscClose";
 import { rehomeActivity } from "../ml/vectorStore";
 import { FuzzyDropdown } from "./FuzzyDropdown";
@@ -293,6 +293,9 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
                 {BUILT_IN_HEADS.includes(h) && (
                   <span className="built-in-dot" aria-label="Built-in head" data-tip="Built-in — can't be deleted" />
                 )}
+                {BUILT_IN_HEAD_NOTES[h] && (
+                  <span className="config-head-note">{BUILT_IN_HEAD_NOTES[h]}</span>
+                )}
                 {!BUILT_IN_HEADS.includes(h) && (
                   <button
                     type="button"
@@ -313,24 +316,31 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
               </div>
               <div className="config-activities">
                 {(registry[h] ?? []).length === 0 && <span className="config-empty">no sub-heads yet</span>}
-                {(registry[h] ?? []).map((a) => (
-                  <span key={a} className="type-chip chip-deletable">
-                    {a}
-                    <button
-                      type="button"
-                      className="chip-delete"
-                      aria-label={`Delete sub-head ${a}`}
-                      data-tip={
-                        activityInUse(state, h, a)
-                          ? "In use by a task — deleting will ask you to reassign first"
-                          : "Remove this sub-head from the registry"
-                      }
-                      onClick={() => requestDeleteActivity(h, a)}
-                    >
-                      &times;
-                    </button>
-                  </span>
-                ))}
+                {(registry[h] ?? []).map((a) =>
+                  isBuiltInActivity(h, a) ? (
+                    <span key={a} className="type-chip">
+                      {a}
+                      <span className="built-in-dot" aria-label="Built-in sub-head" data-tip="Built-in preset — can't be deleted" />
+                    </span>
+                  ) : (
+                    <span key={a} className="type-chip chip-deletable">
+                      {a}
+                      <button
+                        type="button"
+                        className="chip-delete"
+                        aria-label={`Delete sub-head ${a}`}
+                        data-tip={
+                          activityInUse(state, h, a)
+                            ? "In use by a task — deleting will ask you to reassign first"
+                            : "Remove this sub-head from the registry"
+                        }
+                        onClick={() => requestDeleteActivity(h, a)}
+                      >
+                        &times;
+                      </button>
+                    </span>
+                  ),
+                )}
               </div>
             </div>
           ))}
