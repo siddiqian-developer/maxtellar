@@ -7,7 +7,7 @@
  */
 
 import type { Dur, Min, State } from "@maxtellar/core";
-import { LOST_HOURS } from "@maxtellar/core";
+import { LOST_HOURS, SLEEP_HEAD, budgetEntries, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -47,6 +47,124 @@ function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, D
     add(state.running.headId, overlap(state.running.startedAt, state.now, winStart, winEnd));
   }
   return byHead;
+}
+
+/** §11 Stage 5 — budget vs achieved. Today's day-shape lines against today's
+ * achieved (Sleep matched by sleepKind — its occupancy books under Recharge),
+ * plus weekly-quota fulfillment with the §5.1 type semantics: at-least "to go",
+ * at-most warn-on-over (track, never block), exact both ways. Redistributed
+ * shares (the SOD ledger) are shown so a moved share is never a silent change. */
+function BudgetSection({ state, todayStart, todayByHead }: {
+  state: State;
+  todayStart: Min;
+  todayByHead: Map<string, Dur>;
+}): JSX.Element | null {
+  const week = state.week;
+  if (week.budgets.length === 0) return null;
+  const weekday = toDate(state.now).getDay();
+  const isOff = week.offDays.includes(weekday);
+  const shape = weekDayShape(week, weekday);
+  const entries = budgetEntries(week); // quotaAdjust folded into shares
+
+  const sleepToday = state.history
+    .filter((h) => h.kind === "occupancy" && h.sleepKind === "sleep")
+    .reduce((a, h) => a + overlap(h.start, h.end, todayStart, todayStart + DAY), 0);
+  const achievedFor = (headId: string): Dur => (headId === SLEEP_HEAD ? sleepToday : todayByHead.get(headId) ?? 0);
+
+  // Weekly quotas: achieved since the week started (or the last 7 days when no
+  // week is running — degrade gracefully, §4.4 reality 3).
+  const winStart = week.startedAt ?? todayStart - 6 * DAY;
+  const weekAchieved = (headId: string): Dur =>
+    state.history
+      .filter((h) => h.kind === "occupancy" && h.headId === headId && h.headId !== LOST_HOURS)
+      .reduce((a, h) => a + overlap(h.start, h.end, winStart, state.now), 0) +
+    (state.running?.headId === headId ? overlap(state.running.startedAt, state.now, winStart, state.now) : 0);
+
+  const weeklies = entries.filter((b) => b.kind === "weekly");
+
+  return (
+    <div className="config-section">
+      <h3>Budgets</h3>
+      {isOff ? (
+        <span className="config-empty">today is an OFF day — no day-shape to compare against</span>
+      ) : (
+        <table className="ledger-table">
+          <thead>
+            <tr>
+              <th>Head</th>
+              <th className="num-col">Budget today</th>
+              <th className="num-col">Achieved</th>
+              <th className="num-col">Remaining</th>
+            </tr>
+          </thead>
+          <tbody>
+            {shape.lines.filter((l) => l.minutes > 0).map((l) => {
+              const ach = achievedFor(l.headId);
+              const rem = l.minutes - ach;
+              return (
+                <tr key={l.headId}>
+                  <td>{l.headId}{l.pct !== undefined ? ` (${l.pct}%)` : ""}</td>
+                  <td className="num num-col">{fmtDur(l.minutes)}</td>
+                  <td className="num num-col">{ach > 0 ? fmtDur(ach) : "—"}</td>
+                  <td className={`num num-col${rem < 0 ? " is-danger" : ""}`}>{rem >= 0 ? fmtDur(rem) : `over ${fmtDur(-rem)}`}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
+      {weeklies.length > 0 && (
+        <>
+          <h4 className="ledger-subhead">Weekly quotas</h4>
+          <table className="ledger-table">
+            <thead>
+              <tr>
+                <th>Head</th>
+                <th>Type</th>
+                <th className="num-col">Quota</th>
+                <th className="num-col">Achieved</th>
+                <th className="num-col">Standing</th>
+              </tr>
+            </thead>
+            <tbody>
+              {weeklies.map((b) => {
+                const quota = b.quotaMinutes ?? 0;
+                const ach = weekAchieved(b.headId);
+                const type = b.quotaType ?? "atLeast";
+                const diff = quota - ach;
+                const label = type === "atLeast" ? "at least" : type === "atMost" ? "at most" : "exact";
+                const standing =
+                  type === "atMost"
+                    ? diff >= 0
+                      ? `${fmtDur(diff)} headroom`
+                      : `over by ${fmtDur(-diff)}`
+                    : diff > 0
+                      ? `${fmtDur(diff)} to go`
+                      : type === "exact" && diff < 0
+                        ? `over by ${fmtDur(-diff)}`
+                        : "met ✓";
+                const danger = (type === "atMost" && diff < 0) || (type === "exact" && diff !== 0 && ach > quota);
+                const moved = week.quotaAdjust.filter((q) => q.headId === b.headId).reduce((a, q) => a + Math.abs(q.delta), 0);
+                return (
+                  <tr key={b.headId}>
+                    <td>
+                      {b.headId}
+                      {moved > 0 && <span className="ledger-note" data-tip="Shares were redistributed at SOD (§5.1) — shortfall moved to later days">{" "}· redistributed</span>}
+                    </td>
+                    <td>{label}</td>
+                    <td className="num num-col">{fmtDur(quota)}</td>
+                    <td className="num num-col">{ach > 0 ? fmtDur(ach) : "—"}</td>
+                    <td className={`num num-col${danger ? " is-danger" : ""}`}>{standing}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          <p className="field-desc">Nothing carries beyond the week — unmet quota is reported as shortfall at week's end (§5.1). Today's shares include any SOD redistribution.</p>
+        </>
+      )}
+    </div>
+  );
 }
 
 export function AnalyticsScreen({ state, onBack }: Props): JSX.Element {
@@ -125,6 +243,8 @@ export function AnalyticsScreen({ state, onBack }: Props): JSX.Element {
             </table>
           )}
         </div>
+
+        <BudgetSection state={state} todayStart={todayStart} todayByHead={todayByHead} />
 
         <div className="config-section">
           <h3>This week</h3>

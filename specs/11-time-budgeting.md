@@ -146,6 +146,18 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 - A weekly-plan validity selector: `Σ === 24h` (gate), per-Category explicit-target fits, live
   netCore + %→hours projection. All pure/event-sourced; the 24h + % math belongs in `packages/core`.
 
+## 11.9a Analytics (built 2026-07-16)
+The Analytics screen gains a **Budgets** section (only when head budgets exist):
+- **Budget today** — today's resolved day-shape lines (% shown with their hours) vs achieved,
+  with Remaining (over → warn styling, never blocked). OFF day → stated, no comparison. Sleep's
+  achieved matches by `sleepKind` (its occupancy books under Recharge).
+- **Weekly quotas** — per weekly head: type, quota, achieved since the week started (last 7 days
+  when no week is running — degrade gracefully), and the standing per §5.1 type semantics:
+  *at-least* "X to go / met ✓"; *at-most* "headroom / over by X" (warn, never block); *exact*
+  both ways. Heads whose shares were redistributed at SOD are marked "· redistributed".
+- Quota trim during Pruning (with its sticky visible deficit) is **not yet built** — it stays
+  §4.2's "no-op until Stage 6" and §5.1's Pruning bullet is the standing spec for it.
+
 ## 11.10 Micro-items — RESOLVED (grilled 2026-07-16)
 1. **Category names**: *Supportive Work* → **Maintenance**; *Not Work* → **keeps its name**.
    (Core Work, Time Wasted unchanged.)

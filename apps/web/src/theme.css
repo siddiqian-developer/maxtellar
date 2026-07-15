@@ -1714,3 +1714,5 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 @keyframes bp-flash { 0%, 100% { box-shadow: none; } 25%, 75% { box-shadow: 0 0 0 2px var(--danger, #b3452f) inset; } }
 .bp-flash { animation: bp-flash 1.2s ease 2; }
 .config-cat-select { font-size: 11px; padding: 2px 6px; margin-left: 8px; color: var(--ink-soft); }
+.ledger-subhead { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
+.ledger-note { font-size: 11px; color: var(--ink-soft); font-style: italic; }
