@@ -4,5 +4,6 @@ export * from "./validate.js";
 export * from "./settle.js";
 export * from "./placement.js";
 export * from "./reducer.js";
+export * from "./ceremony.js";
 export * from "./invariants.js";
 export * from "./fork.js";

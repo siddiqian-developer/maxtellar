@@ -16,11 +16,15 @@
 
 import { useState } from "react";
 import type { Event, HistoryEntry, State } from "@maxtellar/core";
+import { formingDayStart } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
+import { dayStartMin } from "../casualTime";
 import { fmtClock, fmtDur, toDate } from "../time";
 import { useSettings } from "../settings";
 import { HistoryEntryEditor } from "./HistoryEntryEditor";
 import { GapFillModal } from "./GapFillModal";
+
+const MIN_PER_DAY = 1440;
 
 interface Props {
   state: State;
@@ -72,6 +76,14 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
   const { timeFormat } = useSettings();
   const hour12 = timeFormat === "12h";
   const clock = (min: number): string => fmtClock(toDate(min), hour12);
+
+  // §4.2: editable-window floor = the last day-start (last DayRecord.end / the
+  // forming day's head sleep). With no records and no history yet, keep the
+  // pre-SOD fallback of yesterday so a first back-log can still span before now.
+  const editableFloor =
+    state.days.length > 0 || state.history.some((h) => h.kind === "occupancy")
+      ? formingDayStart(state)
+      : dayStartMin(state.now) - MIN_PER_DAY;
 
   // Oldest-first flow with gap rows between two consecutive FINISHED runs
   // (occupancy entries with real span; zero-occupancy markers never bound a
@@ -180,6 +192,7 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
           entry={editing === "new" ? null : editing}
           history={state.history}
           now={state.now}
+          floor={editableFloor}
           dispatch={dispatch}
           onClose={() => setEditing(null)}
         />

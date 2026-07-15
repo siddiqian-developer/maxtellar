@@ -1516,3 +1516,56 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .block.plan[data-timing="semi-head"],
 .block.plan[data-timing="semi-tail"]   { border-left-color: var(--st-semi);        background: color-mix(in srgb, var(--st-semi) 10%, var(--plan-card)); }
 .block.plan[data-timing="fixed"]       { border-left-color: var(--st-fixed);       background: color-mix(in srgb, var(--st-fixed) 10%, var(--plan-card)); }
+
+/* ── §4.2 SOD / EOD ceremonies ─────────────────────────────────────────── */
+.ceremony-controls { display: inline-flex; align-items: center; gap: 8px; margin-left: 12px; }
+.sod-btn, .eod-btn {
+  font: inherit;
+  font-size: 12px;
+  font-weight: 600;
+  padding: 5px 12px;
+  border-radius: 7px;
+  border: 1px solid var(--hairline);
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.sod-btn:hover, .eod-btn:hover { border-color: var(--accent); color: var(--ink); }
+.sod-btn.ready {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
+}
+.sod-btn.ready:hover { background: var(--accent-strong); color: #fff; }
+
+/* Step chips in the ceremony header */
+.sod-steps { display: inline-flex; gap: 6px; list-style: none; margin: 0; padding: 0; }
+.sod-step {
+  font-size: 11px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid var(--hairline);
+  color: var(--ink-faint);
+}
+.sod-step.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+.sod-step.done { color: var(--ink-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+
+/* Ceremony body sub-sections + leftover rows */
+.config-subsection { margin-top: 16px; }
+.config-subsection h4 { font-size: 12px; margin: 0 0 8px; color: var(--ink-soft); font-weight: 600; }
+.sod-bulk { display: flex; gap: 6px; margin-bottom: 10px; }
+.sod-leftovers { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.sod-leftover {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  background: var(--paper-raised);
+}
+.sod-leftover.discarded { opacity: 0.55; }
+.sod-leftover.discarded .sl-title { text-decoration: line-through; }
+.sl-title { flex: 1; font-size: 13px; }
+.eod-modal { max-width: 420px; }

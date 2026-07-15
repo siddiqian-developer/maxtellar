@@ -139,6 +139,25 @@ export interface HistoryEntry {
   parentTitle?: string;
 }
 
+/** §4.2 (G13/G15): one sealed sleep-cycle day, appended at each SOD. The day is
+ * Sleep-start → Sleep-start by construction: [start, end) = [Sleep A start,
+ * Sleep B start). MINIMAL by design (open-item 7, settled 2026-07-15) — it
+ * stores only the boundary facts; accounted/lost/per-head aggregates stay a
+ * derived selector over `history` (SOD books Lost Hours occupancy so the day
+ * tiles fully: within [start,end), Σ occupancy = end − start, hence the zero-sum
+ * identity wall = accounted + lost with nothing cached to go stale. */
+export interface DayRecord {
+  id: string;
+  /** Sweep start = Sleep A's start (this day's head sleep). */
+  start: Min;
+  /** Sweep end, exclusive = Sleep B's start (the next day's head sleep). */
+  end: Min;
+  /** Calendar day SOD was pressed — local-midnight epoch-minute; the UI derives
+   * the label. Carried by the SOD event (the web computes it; core stays Date-
+   * free), defaulting to `now` when omitted. */
+  reportDate: Min;
+}
+
 export type TimerMode = "countdown" | "stopwatch"; // §9.2 (from the 8-yr AppScript)
 
 export interface RunningTask {
@@ -180,6 +199,14 @@ export interface State {
   plan: PlanItem[];
   /** Derived by settle() after every event — the laid-out future. */
   placements: Placement[];
+  /** §4.2 (G13): null when Live; during the SOD ceremony the current guided
+   * phase. Set by SOD (→ "pruning"), advanced by PRUNING_DONE (→ "planning"),
+   * cleared by PLANNING_DONE (→ Live). Persisted so a mid-ceremony reload
+   * resumes at the right step (deterministic replay). */
+  ceremony: null | { phase: "pruning" | "planning" };
+  /** §4.2: sealed sleep-cycle days, appended one per SOD. NOT re-derived each
+   * render (open-item 7) — stored via the SOD event, reproduced by replay. */
+  days: DayRecord[];
   /** Monotonic counter for deterministic ids. */
   seq: number;
   /** Transient UI notice (§7.0.2 snap-notify) — set when the scheduler moves a
@@ -224,7 +251,21 @@ export type Event =
   // Bulk-reassigns every plan/running/history reference from one (head,activity)
   // pair to another — used when deleting a head/sub-head still in use (§2.1).
   // Pure label swap: never touches timing/placement, no resettle needed.
-  | { type: "REASSIGN_HEAD"; fromHeadId: string; fromActivityId: string; toHeadId: string; toActivityId: string };
+  | { type: "REASSIGN_HEAD"; fromHeadId: string; fromActivityId: string; toHeadId: string; toActivityId: string }
+  // §4.2 SOD (G13/G15) — the commit ceremony. Precondition: ≥2 Finished Sleep
+  // occupancy entries in the forming day (else the UI opens the missing-data
+  // GapFillModal instead; the reducer no-ops). Sweeps [Sleep A start … Sleep B
+  // start) into a DayRecord, books every unaccounted gap in that span as Lost
+  // Hours occupancy (headId LOST_HOURS, taskId null — one per span, open-item
+  // 10), leaves unstarted leftovers untouched, and enters phase "pruning".
+  // `reportDate` (local-midnight Min) defaults to `now`.
+  | { type: "SOD"; reportDate?: Min }
+  // §4.2 step 2 → 3: discard dead leftovers (auto-dead ∪ user-chosen `discardIds`),
+  // trim quotas (no quotas until Stage 6 → no-op), auto-run today's weekly-plan
+  // injection (no week plan until Stage 5 → no-op), then enter phase "planning".
+  | { type: "PRUNING_DONE"; discardIds?: string[] }
+  // §4.2 step 4 → 5: Planning Done → ceremony = null (Live).
+  | { type: "PLANNING_DONE" };
 
 export interface RunningView {
   mode: TimerMode;

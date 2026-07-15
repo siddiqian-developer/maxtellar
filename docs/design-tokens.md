@@ -356,6 +356,29 @@ value in `ink`; Wasted/Lost values take `--danger` only when non-zero. Tables
 row 600 weight with a `ink-soft` top border. Durations only, `fmtDur`. Section headings
 match the config screen's (14px, `ink-soft`).
 
+## SOD / EOD ceremony (§4.2/§4.3, 2026-07-15)
+
+**Topbar controls** (`.ceremony-controls`, after the accounted/lost hero): `.sod-btn` +
+`.eod-btn` — 12px 600, `paper-raised` fill, `hairline` border, `ink-soft`; hover → `accent`
+border + `ink`. When the SOD precondition holds and no ceremony is running, `.sod-btn.ready`
+fills `accent` with white text (hue = a primary, ready action — reuses the accent, introduces
+no new hue). **No new colours anywhere in the ceremony** — accent / hairline / paper-raised /
+ink-soft / danger only.
+
+**SodCeremony** reuses the full-page config-screen chrome. Header has a right-aligned step
+rail `.sod-steps` → `.sod-step` (11px pill; `.active` = accent fill + white; `.done` =
+`ink-soft` with a 40%-accent border). Body uses `.config-section` + `.config-subsection`
+(h4 12px 600 `ink-soft`). Sweep step shows a `.ledger-hero` (Day span / Accounted / Lost;
+Lost `--danger` when non-zero). Leftover rows `.sod-leftover` (8×12px, hairline, radius 8):
+title (`.sl-title` 13px, flex), head badge, and a Keep/Discard `.type-chip` (budgeted hue =
+keep, fixed hue = discard) — or an "expired — cleared" skipped pill for auto-dead. Discarded
+rows are 55% opacity with a strikethrough title. Bulk `.sod-bulk` = Carry all / Discard all.
+Durations via `fmtDur`; times via `fmtDayTime`.
+
+**EOD modal** (`.eod-modal`, `max-width: 420px`) reuses drawer chrome: footer
+[Complete (primary)] · [Pause] · spacer · [Keep working]. A no-op EOD (nothing running) shows
+the shared `.notice-toast`.
+
 ## Heads & Sub-heads config screen (full page)
 
 Not a modal — replaces the timeline+pipeline grid area entirely (`grid-column: 1/-1;

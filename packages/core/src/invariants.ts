@@ -114,6 +114,22 @@ export function checkInvariants(s: State): Violation[] {
       });
   }
 
+  // 3c. §4.2 zero-sum day records: a sealed DayRecord tiles fully — within
+  //     [start,end) the occupancy history (real work + the SOD-booked Lost
+  //     Hours) sums to exactly the span, so wall = accounted + lost is explicit
+  //     history, not a live subtraction. A residual gap means SOD failed to book
+  //     Lost Hours; an excess means occupancy overran the sweep boundary.
+  for (const rec of s.days) {
+    const sum = s.history
+      .filter((h) => h.kind === "occupancy")
+      .reduce((acc, h) => acc + Math.max(0, Math.min(h.end, rec.end) - Math.max(h.start, rec.start)), 0);
+    if (sum !== rec.end - rec.start)
+      v.push({
+        rule: "day-record-zero-sum",
+        detail: `record ${rec.id}: occupancy ${sum} ≠ span ${rec.end - rec.start}`,
+      });
+  }
+
   // 4. Running occupies [startedAt, now]; no placed part may invade it.
   if (s.running) {
     for (const part of allParts) {

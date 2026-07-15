@@ -11,6 +11,10 @@ import { HeadsConfigScreen } from "./components/HeadsConfigScreen";
 import { AiStudioScreen } from "./components/AiStudioScreen";
 import { HistoryScreen } from "./components/HistoryScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
+import { SodCeremony } from "./components/SodCeremony";
+import { EodButton } from "./components/EodButton";
+import { GapFillModal } from "./components/GapFillModal";
+import { LOST_HOURS, formingDayStart, sodPrecondition } from "@maxtellar/core";
 import { fmtDur } from "./time";
 import { useSettings, type TimeFormat, type GridGranularity, type PresetDefaults } from "./settings";
 
@@ -93,6 +97,12 @@ export function App(): JSX.Element {
   }, [splashPhase]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>("main");
+  // §4.2 SOD ceremony overlay (pre-sweep). Once dispatched, state.ceremony
+  // drives the phase and keeps the overlay up across reloads.
+  const [sodOpen, setSodOpen] = useState(false);
+  // Missing-data fallback: when the precondition fails, the same GapFillModal
+  // (its §4.2 second entry point) opens on the trailing unaccounted span.
+  const [sodGapFill, setSodGapFill] = useState<{ from: number; to: number } | null>(null);
 
   // §06 transactional Settings: changes reflect live but only commit on Done;
   // Esc/×/scrim revert to this snapshot. Held above the panel so it survives the
@@ -189,18 +199,37 @@ export function App(): JSX.Element {
     return <Splash leaving={false} />;
   }
 
-  // Hero metric (SPEC 1.4): time accounted vs unaccounted — today's window
-  // approximated as the visible history span for this first slice.
-  const dayStart = state.history.reduce(
-    (min, h) => (h.kind === "occupancy" ? Math.min(min, h.start) : min),
-    state.now,
-  );
+  // Hero metric (SPEC 1.4, §4.2): time accounted vs lost across the FORMING day
+  // — the window since the last sealed DayRecord (or the day's head sleep).
+  // "Accounted" excludes Lost Hours (the SOD-booked gutter is its own category),
+  // so the zero-sum identity holds live and after sealing: wall = accounted + lost.
+  const dayStart = formingDayStart(state);
   const wall = Math.max(0, state.now - dayStart);
+  const clip = (s: number, e: number): number =>
+    Math.max(0, Math.min(e, state.now) - Math.max(s, dayStart));
   const accounted = state.history
-    .filter((h) => h.kind === "occupancy")
-    .reduce((acc, h) => acc + (h.end - h.start), 0)
-    + (state.running ? state.now - state.running.startedAt : 0);
+    .filter((h) => h.kind === "occupancy" && h.headId !== LOST_HOURS)
+    .reduce((acc, h) => acc + clip(h.start, h.end), 0)
+    + (state.running ? clip(state.running.startedAt, state.now) : 0);
   const lost = Math.max(0, wall - accounted);
+  const canSod = sodPrecondition(state).ok;
+
+  // Start-of-Day entry point. Mid-ceremony → resume. Precondition ok → open the
+  // guided sweep. Otherwise open the missing-data GapFillModal on the trailing
+  // unaccounted span so the user can log the sleep that's blocking the sweep.
+  const startSod = (): void => {
+    setView("main"); // the ceremony (and its add-task drawer) lives over the Day
+    if (state.ceremony || canSod) {
+      setSodOpen(true);
+      return;
+    }
+    const lastOcc = state.history
+      .filter((h) => h.kind === "occupancy" && h.end > h.start)
+      .reduce((m, h) => Math.max(m, h.end), dayStart);
+    let from = Math.max(dayStart, lastOcc);
+    if (from >= state.now) from = dayStart;
+    setSodGapFill({ from, to: state.now });
+  };
 
   const themeIcon = {
     system: (
@@ -261,9 +290,25 @@ export function App(): JSX.Element {
             </svg>
           </button>
         </nav>
-        <span className="meta num" title="Time Accounted vs Unaccounted — the hero metric">
+        <span className="meta num" title="Time Accounted vs Unaccounted — the hero metric (this forming day)">
           accounted {fmtDur(accounted)} · lost {fmtDur(lost)}
         </span>
+        <div className="ceremony-controls">
+          <button
+            className={`sod-btn${canSod && !state.ceremony ? " ready" : ""}`}
+            onClick={startSod}
+            data-tip={
+              state.ceremony
+                ? "Resume the Start-of-Day ceremony"
+                : canSod
+                  ? "Start of Day — sweep yesterday, prune, plan today"
+                  : "Start of Day — needs two Finished Sleeps; log the missing one"
+            }
+          >
+            {state.ceremony ? "Resume day setup" : "Start Day"}
+          </button>
+          <EodButton state={state} dispatch={(e) => void dispatch(e)} />
+        </div>
         <span className="spacer" />
         <GlobalClock />
         {devSandbox && <DevClock now={state.now} dispatch={(e) => void dispatch(e)} />}
@@ -327,6 +372,23 @@ export function App(): JSX.Element {
             />
           )}
         </>
+      )}
+      {(sodOpen || state.ceremony) && (
+        <SodCeremony
+          state={state}
+          dispatch={(e) => void dispatch(e)}
+          onClose={() => setSodOpen(false)}
+          onAddTask={() => setDrawerOpen(true)}
+        />
+      )}
+      {sodGapFill && (
+        <GapFillModal
+          from={sodGapFill.from}
+          to={sodGapFill.to}
+          now={state.now}
+          dispatch={(e) => void dispatch(e)}
+          onClose={() => setSodGapFill(null)}
+        />
       )}
       {settingsOpen && (
         <SettingsPanel

@@ -16,10 +16,9 @@ import { useMemo, useState } from "react";
 import type { Channels, Event, HistoryEntry, HistoryOutcome } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
-import { resolvePastTime, fitPastInterval, dayStartMin } from "../casualTime";
+import { resolvePastTime, fitPastInterval } from "../casualTime";
 import { fmtDayTime, fmtDur } from "../time";
 
-const MIN_PER_DAY = 1440;
 import { useEscClose } from "../useEscClose";
 import { SubheadField } from "./SubheadField";
 
@@ -29,6 +28,9 @@ interface Props {
   /** Full current history — the batch base for an EDIT_HISTORY replace. */
   history: HistoryEntry[];
   now: number;
+  /** §4.2 (2026-07-15): the editable-window floor = the last day-start (last
+   * DayRecord.end / the forming day's head sleep). Sealed days are locked. */
+  floor: number;
   dispatch: (e: Event) => void;
   onClose: () => void;
 }
@@ -41,7 +43,7 @@ const OUTCOME_LABEL: Record<HistoryOutcome, string> = {
   skipped: "Skipped",
 };
 
-export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: Props): JSX.Element {
+export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClose }: Props): JSX.Element {
   useEscClose(onClose);
   const { timeFormat } = useSettings();
   const hour12 = timeFormat === "12h";
@@ -65,9 +67,8 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
 
   const span = Math.max(0, endMin - startMin);
 
-  // Interim editable-window floor: yesterday's calendar-day start (grilled
-  // 2026-07-15). Stage 4's day records will refine this to "the last day-start".
-  const floor = dayStartMin(now) - MIN_PER_DAY;
+  // Editable-window floor = the last day-start (§4.2 day records; passed in).
+  // Sealed days are locked; the forming day is editable.
   const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
   // Existing occupancy the fit must not overlap (self excluded when editing).
   const others = history
@@ -86,7 +87,7 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
     // The start-floor is a single-field rule → announce it here at the boundary.
     if (field === "start" && v < floor) {
       v = floor;
-      localNotes.push(`Start earlier than the editable window (yesterday) — moved to ${fmtT(floor)}`);
+      localNotes.push(`Start earlier than the editable window (the last day-start) — moved to ${fmtT(floor)}`);
     }
     if (field === "start") {
       setStartMin(v);

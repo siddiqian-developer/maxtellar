@@ -211,7 +211,11 @@ into two kinds by whether the user may *plan* a task under them:
   never in the drawer's planning pickers; at-most quota on it is an intended feature). Note:
   *"system head — logged, never planned."*
 - **Lost Hours** — the gutter: *unaccounted* time, **system-booked at SOD** (§4.2); never
-  user-selectable anywhere. Note: *"system head — auto-booked at day close."*
+  user-selectable anywhere. Note: *"system head — auto-booked at day close."* **Booked (Stage 4):**
+  the SOD event writes one Lost Hours **occupancy** entry per unaccounted span in the swept day
+  (`headId = LOST_HOURS`, `taskId: null`), so a sealed `DayRecord` tiles fully and
+  wall = accounted + lost is explicit history. Analytics **excludes** Lost Hours from "accounted"
+  and reports it as the Lost figure.
 
 (**Lost ≠ Wasted:** Lost = unlogged gutter; Wasted = user-declared waste.)
 

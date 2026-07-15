@@ -42,6 +42,8 @@ export class EventStore {
       // Back-compat: snapshots predating a State field get the default.
       if (state.openExtentCap === undefined) state.openExtentCap = 600;
       if (state.semiTailFloor === undefined) state.semiTailFloor = 60;
+      if (state.ceremony === undefined) state.ceremony = null;
+      if (state.days === undefined) state.days = [];
       from = snap.uptoSeq;
     } else {
       // The log must FULLY determine state (event-sourcing): state always

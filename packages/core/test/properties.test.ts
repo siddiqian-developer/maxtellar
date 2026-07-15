@@ -11,6 +11,7 @@ import {
   reduce,
   checkInvariants,
   checkForwardOnly,
+  sodPrecondition,
   type Event,
   type State,
 } from "../src/index.js";
@@ -239,5 +240,95 @@ describe("simulation: long random soup survives thousands of ticks", () => {
       if (i % 50 === 0) expect(checkInvariants(s)).toEqual([]);
     }
     expect(checkInvariants(s)).toEqual([]);
+  });
+
+  it("50,000 ticks with sleeps + SOD ceremonies — zero violations, day records tile", () => {
+    // §4.2: back-log a sleep-cycle roughly every ~16 dev-hours, run a full SOD
+    // ceremony whenever the precondition holds, and keep the invariant asserts
+    // (incl. day-record-zero-sum) green throughout a long multi-day run.
+    let s = initialState(START_NOW);
+    let n = 0;
+    let lastSleepEnd = START_NOW;
+    let sods = 0;
+
+    const mk = (i: number): Event => {
+      const timing = (["budgeted", "fixed", "semi-tail"] as const)[i % 3]!;
+      const id = `sm${++n}`;
+      const base = {
+        id,
+        title: id,
+        headId: "Work",
+        activityId: "a",
+        tier: "normal" as const,
+        ommf: i % 7 === 0,
+        slideable: true,
+        breakable: true,
+      };
+      const budget = 5 + (i % 12) * 10;
+      const anchor = s.now + 30 + (i % 9) * 40;
+      const task =
+        timing === "budgeted"
+          ? { ...base, timing, budget }
+          : timing === "fixed"
+            ? { ...base, timing, anchorStart: anchor, anchorEnd: anchor + budget, budget }
+            : { ...base, timing, anchorEnd: anchor + budget, budget };
+      return { type: "CREATE_TASK", task: task as never };
+    };
+
+    const backlogSleep = (): void => {
+      if (s.running) return; // never book into a live running span
+      // Anchor the Finished Sleep strictly after the latest occupied minute so
+      // it can't overlap any existing occupancy (BACKLOG would reject that, G7).
+      const lastOcc = s.history
+        .filter((h) => h.kind === "occupancy" && h.end > h.start)
+        .reduce((m, h) => Math.max(m, h.end), START_NOW);
+      const start = Math.max(lastSleepEnd, lastOcc) + 30;
+      const end = start + 7 * 60;
+      if (end >= s.now) return; // must be finished (in the past)
+      s = reduce(s, {
+        type: "BACKLOG",
+        entry: {
+          taskId: null,
+          title: "Sleep",
+          headId: "Recharge",
+          activityId: "Sleep",
+          kind: "occupancy",
+          start,
+          end,
+          outcome: "completed",
+          channels: { spent: end - start, wasted: 0, managed: 0, breaks: 0 },
+          sleepKind: "sleep",
+        },
+      });
+      lastSleepEnd = end;
+    };
+
+    for (let i = 0; i < 50000; i++) {
+      if (i % 340 === 0) s = reduce(s, mk(i)); // ordinary tasks churn the plan
+      if (i % 220 === 0) backlogSleep(); // ~ a sleep every few hours of dev-time
+      if (i % 190 === 0) {
+        const tasks = s.plan.filter((x) => x.kind === "task");
+        if (tasks.length > 0)
+          s = reduce(s, { type: "START_TASK", taskId: tasks[i % tasks.length]!.id });
+      }
+      if (i % 260 === 0 && s.running) s = reduce(s, { type: "COMPLETE_RUNNING" });
+      // Run the ceremony whenever it's available (drives many SODs over the run).
+      if (!s.ceremony) {
+        const pre = sodPrecondition(s);
+        if (pre.ok) {
+          s = reduce(s, { type: "SOD" });
+          sods++;
+        }
+      } else if (s.ceremony.phase === "pruning") {
+        s = reduce(s, { type: "PRUNING_DONE" });
+      } else {
+        s = reduce(s, { type: "PLANNING_DONE" });
+      }
+      s = reduce(s, { type: "TICK" });
+      if (i % 500 === 0) expect(checkInvariants(s)).toEqual([]);
+    }
+    expect(checkInvariants(s)).toEqual([]);
+    expect(sods).toBeGreaterThan(5); // the run actually exercised the ceremony
+    expect(s.days.length).toBeGreaterThan(5);
   });
 });

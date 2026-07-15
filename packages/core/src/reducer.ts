@@ -12,6 +12,7 @@
 
 import type {
   Channels,
+  DayRecord,
   Dur,
   Event,
   HistoryEntry,
@@ -21,7 +22,8 @@ import type {
   State,
   UnstartedTask,
 } from "./types.js";
-import { emptyChannels } from "./types.js";
+import { emptyChannels, LOST_HOURS } from "./types.js";
+import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
 import { settle } from "./settle.js";
 import { snapTask } from "./validate.js";
 import { rankAfter, rankBetween } from "./rank.js";
@@ -46,6 +48,8 @@ export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT):
     history: [],
     plan: [],
     placements: [],
+    ceremony: null,
+    days: [],
     seq: 0,
   };
 }
@@ -513,6 +517,11 @@ export function reduce(state: State, event: Event): State {
       const r = state.running;
       if (!r) return state;
       // Occupied part → history (§3.10); unspent budget → remainder in the plan.
+      // A zero-wall pause (paused the same minute it started) occupied nothing —
+      // recording a [t,t] occupancy would be a spurious point that a later Lost
+      // Hours span (§4.2) or the no-overlap scan reads as an overlap. Skip it;
+      // the remainder below carries the whole budget forward.
+      const occupied = state.now > r.startedAt;
       const entry: HistoryEntry = {
         id: `occ-${r.id}-${state.seq}`,
         taskId: r.id,
@@ -527,7 +536,12 @@ export function reduce(state: State, event: Event): State {
         ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
         ...parentLink(state.plan, r.parentId),
       };
-      let s: State = { ...state, running: null, history: [...state.history, entry], seq: state.seq + 1 };
+      let s: State = {
+        ...state,
+        running: null,
+        history: occupied ? [...state.history, entry] : state.history,
+        seq: state.seq + 1,
+      };
 
       const remaining = r.budget !== undefined ? r.budget - r.channels.spent : undefined;
       if (remaining === undefined || remaining > 0) {
@@ -567,6 +581,9 @@ export function reduce(state: State, event: Event): State {
     case "COMPLETE_RUNNING": {
       const r = state.running;
       if (!r) return state;
+      // Zero-wall complete (completed the same minute it started) occupied
+      // nothing — omit the spurious [t,t] occupancy point (see PAUSE_RUNNING).
+      const occupied = state.now > r.startedAt;
       const entry: HistoryEntry = {
         id: `occ-${r.id}-${state.seq}`,
         taskId: r.id,
@@ -599,7 +616,7 @@ export function reduce(state: State, event: Event): State {
       return resettle({
         ...state,
         running: null,
-        history: [...state.history, entry],
+        history: occupied ? [...state.history, entry] : state.history,
         plan,
         seq: state.seq + 1,
       });
@@ -834,6 +851,65 @@ export function reduce(state: State, event: Event): State {
       // recomposes into an ordinary leaf (budget left as-is).
       plan = rebalanceParents(plan.concat(children).sort(byRank));
       return resettle({ ...s, plan });
+    }
+
+    case "SOD": {
+      // §4.2 (G13/G15): the commit ceremony. Precondition ≥2 Finished Sleep in
+      // the forming day; A = topmost, B = the next (3+ → first two, iterative).
+      // The UI gates on sodPrecondition and opens the missing-data GapFillModal
+      // when not ok; the reducer no-ops defensively.
+      const pre = sodPrecondition(state);
+      if (!pre.ok || !pre.sleepA || !pre.sleepB) return state;
+      const start = pre.sleepA.start;
+      const end = pre.sleepB.start; // sweep [A.start, B.start); B is the new head
+      const [id, s1] = nextId(state, "day");
+      // Book every unaccounted gap in the swept span as Lost Hours occupancy
+      // (open-item 10: one entry per span, taskId null). History is append-only
+      // and scheduler-immune; nothing is moved — the DayRecord marks boundaries
+      // and the Lost Hours entries fill the gutter so the day tiles fully
+      // (wall = accounted + lost, made explicit).
+      const occ = state.history
+        .filter((h) => h.kind === "occupancy" && h.end > h.start)
+        .map((h) => ({ start: h.start, end: h.end }));
+      const gaps = unaccountedGaps(occ, start, end);
+      const lost: HistoryEntry[] = gaps.map((g, k) => ({
+        id: `lost-${id}-${k}`,
+        taskId: null,
+        title: "Lost Hours",
+        headId: LOST_HOURS,
+        activityId: "",
+        kind: "occupancy",
+        start: g.start,
+        end: g.end,
+        outcome: "completed",
+        channels: { spent: g.end - g.start, wasted: 0, managed: 0, breaks: 0 },
+      }));
+      const history = validateHistoryBatch([...state.history, ...lost], state.now);
+      const record: DayRecord = { id, start, end, reportDate: event.reportDate ?? state.now };
+      // Unstarted leftovers SURVIVE the sweep; enter Pruning. No resettle — the
+      // plan is untouched and history is scheduler-immune.
+      return { ...s1, history, days: [...state.days, record], ceremony: { phase: "pruning" } };
+    }
+
+    case "PRUNING_DONE": {
+      // §4.2 step 2 → 3. Discard dead leftovers (auto-dead ∪ user-chosen) via the
+      // existing CANCEL_TASK path (records a cancelled entry, cleans up parent
+      // brackets, resettles). Quota trim + weekly-plan injection are no-ops until
+      // Stages 6/5 (shipped as no-ops). → phase "planning".
+      if (!state.ceremony || state.ceremony.phase !== "pruning") return state;
+      const dead = deadLeftovers(state).map((t) => t.id);
+      const discard = new Set<string>([...dead, ...(event.discardIds ?? [])]);
+      let s: State = state;
+      for (const taskId of discard) {
+        if (s.plan.some((i) => i.id === taskId)) s = reduce(s, { type: "CANCEL_TASK", taskId });
+      }
+      return { ...s, ceremony: { phase: "planning" } };
+    }
+
+    case "PLANNING_DONE": {
+      // §4.2 step 4 → 5: Planning Done → Live.
+      if (!state.ceremony) return state;
+      return { ...state, ceremony: null };
     }
   }
 }

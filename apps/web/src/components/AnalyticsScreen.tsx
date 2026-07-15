@@ -7,6 +7,7 @@
  */
 
 import type { Dur, Min, State } from "@maxtellar/core";
+import { LOST_HOURS } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -29,7 +30,9 @@ function overlap(start: Min, end: Min, winStart: Min, winEnd: Min): Dur {
 }
 
 /** Achieved minutes per head inside a window: occupancy history clipped to it,
- * plus the running task's live spend (it is real elapsed work too). */
+ * plus the running task's live spend (it is real elapsed work too). Lost Hours
+ * (§4.2 SOD-booked gutter) is excluded — it is not achieved work, it's reported
+ * as its own Lost figure so the zero-sum identity wall = accounted + lost holds. */
 function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, Dur> {
   const byHead = new Map<string, Dur>();
   const add = (head: string, mins: Dur): void => {
@@ -37,7 +40,7 @@ function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, D
     byHead.set(head, (byHead.get(head) ?? 0) + mins);
   };
   for (const h of state.history) {
-    if (h.kind !== "occupancy") continue;
+    if (h.kind !== "occupancy" || h.headId === LOST_HOURS) continue;
     add(h.headId, overlap(h.start, h.end, winStart, winEnd));
   }
   if (state.running) {

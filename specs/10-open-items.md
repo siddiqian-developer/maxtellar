@@ -3,6 +3,11 @@
 - Exact single-tick op order when many events coincide (R3 gives the frame; edge sequencing
   finalizes in code).
 - Frogleap trigger details for unbreakable non-budgeted types (rare).
-- Whether the missing-data ceremony fully merges with the >30-min-gap modal in UI (assumed yes).
+- ~~Whether the missing-data ceremony fully merges with the >30-min-gap modal in UI (assumed
+  yes).~~ **RESOLVED (Stage 3/4):** yes — one `GapFillModal` with two entry points (history
+  editor gap rows; the SOD missing-data precondition, §4.2).
+- **RESOLVED (Stage 4):** `DayRecord` shape is minimal `{ id, start, end, reportDate }` (aggregates
+  derived, not cached); SOD sleep-count scoping is 0/1 → GapFill, 2 → sweep, 3+ → sweep first two;
+  pruning discards auto-dead ∪ user-chosen (per-item + Discard-all/Carry-all). See §4.2.
 - Default pomodoro preset shipped.
 - Injected-leftover relative priority default (assumed: injected ranks below leftovers).

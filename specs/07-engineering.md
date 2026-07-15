@@ -287,8 +287,11 @@ error-prevention. The reducer's `snapTask`/physics snap is the backstop; the fie
 - **History interval fitting — "all valid snaps" (feedback 2026-07-15).** The history editor's
   Start/End go through `fitPastInterval` at commit, which makes **every** correction needed to
   land a legal, non-overlapping past interval, then announces each: (1) **Start floor** — the
-  interim editable window is **yesterday's calendar-day start** (Stage 4's day records refine this
-  to "the last day-start"); an earlier Start snaps up to it. (2) **Start out of overlap** — a Start
+  editable window is **the last day-start** (Stage 4, refined from the interim "yesterday"): the
+  last `DayRecord.end`, else the forming day's head sleep, with a **pre-SOD fallback to yesterday's
+  calendar-day start** when there are no records and no history yet (so a first back-log can still
+  span before now). **Sealed days are locked**, the forming day is editable; an earlier Start snaps
+  up to the floor. (2) **Start out of overlap** — a Start
   inside an existing entry moves to that entry's end. (3) **End ceiling** — End snaps to the
   **largest legal value = `min(now, start-of-the-next-entry)`**, so it never crosses `now` nor
   overlaps the item below it; an End that landed before Start snaps up to this same ceiling.
@@ -322,6 +325,26 @@ suggestions, never function.
   - Surfaced two ways: a passive offer when a confident match exists, and an explicit
     **"Suggest subtasks (AI)"** button in the drawer for on-demand matching (reports plainly when
     nothing similar is found — never invents filler subtasks).
+
+### 7.0.4 Buy over build — prefer existing packages (2026-07-15)
+**Default bias: reach for a well-maintained package before hand-rolling** — for *anything*,
+including UI (date pickers, dialogs, calendars, drag/drop, virtualization, parsers, etc.), not
+just plumbing. Writing a component from scratch is the exception, taken only with a reason:
+- **When to build instead:** the packaged option can't meet a locked spec law (e.g. the
+  §7.0.2 smart-input / snap-notify pipeline, the §3 scheduler, hue-reserved-for-state tokens),
+  it's disproportionately heavy for what's used, it's unmaintained/insecure, or a trivial
+  wrapper is genuinely smaller than the dependency.
+- **Non-negotiables still bind a bought component:** it must be wrapped to honor the design
+  tokens (`docs/design-tokens.md`), `useEscClose` back-navigation, theme-awareness, and any
+  field it exposes still inherits smart-input parity (§7.0.2) — the package supplies mechanics,
+  the app owns behavior.
+- **Regenerability (§7.0):** the *choice* of package is a decision, so it's named in markdown
+  (here or the relevant spec), not discoverable only from `package.json`. This does **not**
+  contradict "consult v3-rebuild first" — check the reference for a pattern, but a maintained
+  package beats copying bespoke code when one fits.
+
+This reconciles the existing bespoke components (DatePicker, drawers, etc.): they predate this
+ruling and stay, but **new** UI work starts from "what package does this?" first.
 
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly
