@@ -138,9 +138,15 @@ export interface CasualTime {
  * word ("tom", "tmorow") or "Tomorrow,"/"today" prefix sets the day; an
  * explicit ISO-ish date ("jul 22", "2026-07-22", "22/7") sets it absolutely.
  * Without a day part, resolves to today's date (the caller decides whether a
- * past time should bump to tomorrow — §7.0.2 past-time rule).
+ * past time should bump to tomorrow — §7.0.2 past-time rule). `pastBias` makes
+ * a year-less explicit date resolve to its nearest PAST occurrence instead of
+ * the nearest future one — the history/back-log direction (caller-owned).
  */
-export function parseCasualTime(input: string, now: Min): CasualTime {
+export function parseCasualTime(
+  input: string,
+  now: Min,
+  opts: { pastBias?: boolean } = {},
+): CasualTime {
   const raw = input.trim();
   if (!raw) return { value: undefined, dayOffset: 0, explicitDay: false };
 
@@ -157,7 +163,7 @@ export function parseCasualTime(input: string, now: Min): CasualTime {
     rest = tokens.filter((_, i) => i !== dayTokenIdx).join(" ");
   } else {
     // explicit calendar date? "jul 22", "22 jul", "2026-07-22", "22/7", "7/22"
-    const abs = parseAbsoluteDate(raw, now);
+    const abs = parseAbsoluteDate(raw, now, opts.pastBias);
     if (abs) {
       dayOffset = dayOffsetOf(abs.dayMin, now);
       explicitDay = true;
@@ -188,7 +194,7 @@ export interface PastTime {
  * Returns meaning-changes in `notes` for the universal snap-notify.
  */
 export function resolvePastTime(input: string, now: Min): PastTime {
-  const { value, explicitDay } = parseCasualTime(input, now);
+  const { value, explicitDay } = parseCasualTime(input, now, { pastBias: true });
   if (value === undefined) return { value: undefined, notes: [] };
 
   const notes: string[] = [];
@@ -207,6 +213,70 @@ export function resolvePastTime(input: string, now: Min): PastTime {
   return { value: v, notes };
 }
 
+export interface FitResult {
+  start: Min;
+  end: Min;
+  notes: string[];
+  /** false only when no positive span fits here (caller keeps the editor open). */
+  ok: boolean;
+}
+
+/**
+ * Fit a `[start, end)` history interval into the legal past without overlapping
+ * existing occupancy — "make all possible valid snaps" (feedback 2026-07-15).
+ * In order: (1) raise `start` to the editable-window `floor` (default yesterday
+ * 00:00); (2) push `start` out of any entry it lands inside; (3) clamp `end` to
+ * the largest legal value = `min(now, start of the next entry)` so it never
+ * crosses into the future NOR overlaps the item below it. Every meaning-change
+ * is recorded in `notes`; `ok` is false only when no positive span remains.
+ * `fmt` renders a stamp for the notes (injected to avoid a time.ts dependency).
+ */
+export function fitPastInterval(
+  start: Min,
+  end: Min,
+  others: { start: Min; end: Min }[],
+  now: Min,
+  floor: Min,
+  fmt: (m: Min) => string,
+): FitResult {
+  const notes: string[] = [];
+  const occ = others.slice().sort((a, b) => a.start - b.start);
+
+  // 1. editable-window floor (interim: yesterday's calendar-day start).
+  if (start < floor) {
+    start = floor;
+    notes.push(`Start earlier than the editable window — moved to ${fmt(floor)}`);
+  }
+  if (start > now) start = now; // resolvePastTime already clamps; belt-and-braces.
+
+  // 2. start can't land inside an existing entry.
+  for (const o of occ) {
+    if (o.start <= start && start < o.end) {
+      start = o.end;
+      notes.push(`Start overlapped an existing entry — moved to ${fmt(o.end)}`);
+    }
+  }
+
+  // 3. end ceiling = min(now, start of the next entry after `start`).
+  const next = occ.find((o) => o.start >= start);
+  const ceiling = Math.min(now, next ? next.start : now);
+
+  if (end > ceiling || end <= start) {
+    if (ceiling <= start) {
+      notes.push("No room here without overlapping an existing entry — adjust the times.");
+      return { start, end: start, notes, ok: false };
+    }
+    notes.push(
+      ceiling === now
+        ? `End moved to now (${fmt(now)}) — history can't cross into the future`
+        : `End snapped to ${fmt(ceiling)} to avoid overlapping the next entry`,
+    );
+    end = ceiling;
+  }
+
+  return { start, end, notes, ok: end > start };
+}
+
 /* ------------------------------ dates ------------------------------------ */
 
 const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
@@ -214,15 +284,19 @@ const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "
 /**
  * Parse an explicit calendar date out of `input`, returning its local-midnight
  * epoch-minute and the leftover string (the time part). Supports "jul 22",
- * "22 jul", "2026-07-22", "22/7", "7/22". Year defaults to the nearest future
- * occurrence relative to `now`. Returns null if no date is present.
+ * "22 jul", "2026-07-22", "22/7", "7/22". For a year-less date the year
+ * defaults to the nearest FUTURE occurrence (planning) unless `pastBias`, which
+ * picks the nearest PAST occurrence (history/back-log). Returns null if no date
+ * is present.
  */
 export function parseAbsoluteDate(
   input: string,
   now: Min,
+  pastBias = false,
 ): { dayMin: Min; rest: string } | null {
   const s = input.trim();
   const nowD = toDate(now);
+  const todayStart = new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime();
 
   // ISO 2026-07-22
   let m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
@@ -244,9 +318,9 @@ export function parseAbsoluteDate(
   }
   if (m && monIdx !== -1 && dayNum >= 1 && dayNum <= 31) {
     let year = nowD.getFullYear();
-    const candidate = new Date(year, monIdx, dayNum);
-    if (candidate.getTime() < new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime())
-      year += 1; // nearest future occurrence
+    const candidate = new Date(year, monIdx, dayNum).getTime();
+    if (!pastBias && candidate < todayStart) year += 1; // nearest future
+    if (pastBias && candidate > todayStart) year -= 1; // nearest past
     const dayMin = Math.floor(new Date(year, monIdx, dayNum).getTime() / 60000);
     return { dayMin, rest: s.replace(m[0], " ").trim() };
   }
@@ -263,8 +337,9 @@ export function parseAbsoluteDate(
     else { day = a; mon = b; } // ambiguous → day/month
     if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
       let year = nowD.getFullYear();
-      if (new Date(year, mon - 1, day).getTime() < new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime())
-        year += 1;
+      const candidate = new Date(year, mon - 1, day).getTime();
+      if (!pastBias && candidate < todayStart) year += 1; // nearest future
+      if (pastBias && candidate > todayStart) year -= 1; // nearest past
       const dayMin = Math.floor(new Date(year, mon - 1, day).getTime() / 60000);
       return { dayMin, rest: s.replace(m[0], " ").trim() };
     }

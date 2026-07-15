@@ -16,8 +16,10 @@ import { useMemo, useState } from "react";
 import type { Channels, Event, HistoryEntry, HistoryOutcome } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
-import { resolvePastTime } from "../casualTime";
+import { resolvePastTime, fitPastInterval, dayStartMin } from "../casualTime";
 import { fmtDayTime, fmtDur } from "../time";
+
+const MIN_PER_DAY = 1440;
 import { useEscClose } from "../useEscClose";
 import { SubheadField } from "./SubheadField";
 
@@ -63,6 +65,15 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
 
   const span = Math.max(0, endMin - startMin);
 
+  // Interim editable-window floor: yesterday's calendar-day start (grilled
+  // 2026-07-15). Stage 4's day records will refine this to "the last day-start".
+  const floor = dayStartMin(now) - MIN_PER_DAY;
+  const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
+  // Existing occupancy the fit must not overlap (self excluded when editing).
+  const others = history
+    .filter((h) => h.kind === "occupancy" && h.id !== entry?.id)
+    .map((h) => ({ start: h.start, end: h.end }));
+
   const commitTime = (field: "start" | "end", raw: string): void => {
     if (!raw.trim()) return;
     const r = resolvePastTime(raw, now);
@@ -70,14 +81,21 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
       setNotes([`Couldn't read "${raw}" as a time — leaving it as typed`]);
       return;
     }
-    if (field === "start") {
-      setStartMin(r.value);
-      setStartStr(fmtDayTime(r.value, now, hour12));
-    } else {
-      setEndMin(r.value);
-      setEndStr(fmtDayTime(r.value, now, hour12));
+    const localNotes = [...r.notes];
+    let v = r.value;
+    // The start-floor is a single-field rule → announce it here at the boundary.
+    if (field === "start" && v < floor) {
+      v = floor;
+      localNotes.push(`Start earlier than the editable window (yesterday) — moved to ${fmtT(floor)}`);
     }
-    setNotes(r.notes);
+    if (field === "start") {
+      setStartMin(v);
+      setStartStr(fmtT(v));
+    } else {
+      setEndMin(v);
+      setEndStr(fmtT(v));
+    }
+    setNotes(localNotes);
   };
 
   // A Sleep/Nap tag also names the sub-head (Recharge auto-derives, §2.9).
@@ -87,28 +105,54 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
     else if (k === "nap") setActivity("Nap");
   };
 
-  const err = useMemo<string | null>(() => {
+  const fieldErr = useMemo<string | null>(() => {
     if (!title.trim()) return "Give it a title.";
     if (!activity.trim() || !head) return "Pick a sub-head.";
-    if (startMin > endMin) return "Start is after end — adjust the times.";
     return null;
-  }, [title, activity, head, startMin, endMin]);
+  }, [title, activity, head]);
 
   const save = (): void => {
-    if (err || !head) {
-      setNotes(err ? [err] : []);
+    if (fieldErr || !head) {
+      setNotes(fieldErr ? [fieldErr] : []);
       return;
     }
+    // Canonical resolve from the current strings (covers un-blurred edits),
+    // then the overlap-aware fit — all valid snaps in one place (§7.0.2).
+    const rs = resolvePastTime(startStr, now);
+    const re = resolvePastTime(endStr, now);
+    if (rs.value === undefined || re.value === undefined) {
+      setNotes(["Enter valid start and end times."]);
+      return;
+    }
+    const fit = fitPastInterval(rs.value, re.value, others, now, floor, fmtT);
+    const snapNotes = [...rs.notes, ...re.notes, ...fit.notes];
+    // Reflect whatever the fit resolved to, so the user always sees the truth.
+    setStartMin(fit.start);
+    setEndMin(fit.end);
+    setStartStr(fmtT(fit.start));
+    setEndStr(fmtT(fit.end));
+    if (!fit.ok) {
+      setNotes(snapNotes.length ? snapNotes : ["No room here — adjust the times."]);
+      return;
+    }
+    // A meaning-change → announce and require one more Save to confirm (never
+    // dispatch a silently-changed meaning). A clean interval saves in one tap.
+    if (snapNotes.length > 0) {
+      setNotes(snapNotes);
+      return;
+    }
+
     addActivity(head, activity.trim()); // persist a new (head, sub-head)
 
     // Keep wall = spent + wasted + managed + breaks across a span edit: the
     // non-work channels are preserved, spent absorbs the difference (clamped).
+    const finalSpan = fit.end - fit.start;
     const base: Channels = entry?.channels ?? { spent: 0, wasted: 0, managed: 0, breaks: 0 };
     const nonSpent = base.wasted + base.managed + base.breaks;
     const channels: Channels =
-      nonSpent <= span
-        ? { ...base, spent: span - nonSpent }
-        : { spent: span, wasted: 0, managed: 0, breaks: 0 };
+      nonSpent <= finalSpan
+        ? { ...base, spent: finalSpan - nonSpent }
+        : { spent: finalSpan, wasted: 0, managed: 0, breaks: 0 };
 
     const insert: Omit<HistoryEntry, "id"> = {
       taskId: entry?.taskId ?? null,
@@ -116,8 +160,8 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
       headId: head,
       activityId: activity.trim(),
       kind: entry?.kind ?? "occupancy",
-      start: startMin,
-      end: endMin,
+      start: fit.start,
+      end: fit.end,
       outcome,
       channels,
       ...(sleepKind ? { sleepKind } : {}),
@@ -225,15 +269,18 @@ export function HistoryEntryEditor({ entry, history, now, dispatch, onClose }: P
             </div>
           )}
         </div>
+        {/* Footer order/spacing consistent with the New Task drawer: primary
+            first (left), spacer, Cancel last (right); Delete takes the
+            secondary slot next to the primary (edit only, danger-tinted). */}
         <div className="drawer-footer">
-          {!isNew && (
-            <button className="cancel-accent" onClick={remove} data-tip="Delete this entry">Delete</button>
-          )}
-          <span className="spacer" style={{ flex: 1 }} />
-          <button className="cancel-accent" onClick={onClose}>Cancel</button>
-          <button className="primary" onClick={save} disabled={err !== null} data-tip={err ?? "Save"}>
+          <button className="primary" onClick={save} disabled={fieldErr !== null} data-tip={fieldErr ?? "Save"}>
             {isNew ? "Add" : "Save"}
           </button>
+          {!isNew && (
+            <button className="cancel-accent delete-btn" onClick={remove} data-tip="Delete this entry">Delete</button>
+          )}
+          <span style={{ flex: 1 }} />
+          <button className="cancel-accent" onClick={onClose}>Cancel</button>
         </div>
       </div>
     </div>

@@ -1090,6 +1090,9 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .hist-add-btn:hover, .fill-btn:hover { color: var(--ink); border-color: var(--ink-soft); }
 .fill-btn { color: var(--notice); border-color: color-mix(in srgb, var(--notice) 35%, transparent); }
+/* Delete in the history editor footer — danger-tinted, secondary slot */
+.drawer-footer .delete-btn { color: var(--danger); border-color: color-mix(in srgb, var(--danger) 30%, transparent); }
+.drawer-footer .delete-btn:hover { border-color: var(--danger); }
 /* padlock on non-slideable cards (2026-07-13) — neutral, never a state hue */
 .lock-icon { color: var(--ink-faint); flex-shrink: 0; }
 

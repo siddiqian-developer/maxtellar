@@ -108,10 +108,12 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
             <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} />
           </div>
         </div>
+        {/* Footer order consistent with the New Task drawer: primary first
+            (left), spacer, dismiss last (right). */}
         <div className="drawer-footer">
-          <button className="cancel-accent" onClick={onClose} data-tip="Leave it unaccounted — it becomes Lost Hours at the next day close">Leave (→ Lost)</button>
-          <span style={{ flex: 1 }} />
           <button className="primary" onClick={logActivity} disabled={activityErr !== null} data-tip={activityErr ?? "Log this activity"}>Log</button>
+          <span style={{ flex: 1 }} />
+          <button className="cancel-accent" onClick={onClose} data-tip="Leave it unaccounted — it becomes Lost Hours at the next day close">Leave (→ Lost)</button>
         </div>
       </div>
     </div>

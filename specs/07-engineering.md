@@ -275,13 +275,26 @@ error-prevention. The reducer's `snapTask`/physics snap is the backstop; the fie
 - **Notify scope — meaning-changes only.** Announce: past-time snapped forward (with a
   one-tap "tomorrow" offer), overnight wrap, MIN_FRAGMENT floor. Pure reformatting
   (`3pm`→`3:00 PM`) is silent (expected, not a correction).
-- **Direction is CALLER-owned (Stage 3, 2026-07-15).** The shared grammar (`parseCasualTime`)
-  resolves a bare clock onto today and returns `explicitDay`; the **caller** decides past-vs-future
-  bias. **Planning fields** (task drawer) snap a past bare clock *forward* + offer "tomorrow".
-  **History / back-log fields** (history editor, gap-fill) are the mirror: `resolvePastTime`
-  resolves a bare clock into the **past** (today if `≤ now`, else the day before), never forward,
-  and clamps `end ≤ now` — with the same meaning-change notes. One parser, opposite bias per
-  surface; neither direction lives in the grammar.
+- **Direction is CALLER-owned (Stage 3, 2026-07-15).** The shared grammar (`parseCasualTime`,
+  `parseAbsoluteDate`) resolves a bare clock onto today and returns `explicitDay`; the **caller**
+  decides past-vs-future bias via a `pastBias` flag. **Planning fields** (task drawer) snap a past
+  bare clock *forward* + offer "tomorrow", and a year-less date (`jul 1`) picks the nearest
+  **future** occurrence. **History / back-log fields** (history editor, gap-fill) are the mirror:
+  `resolvePastTime` resolves a bare clock into the **past** (today if `≤ now`, else the day
+  before), a year-less date to the nearest **past** occurrence, never forward, and clamps
+  `end ≤ now` — with the same meaning-change notes. One parser, opposite bias per surface; neither
+  direction lives in the grammar.
+- **History interval fitting — "all valid snaps" (feedback 2026-07-15).** The history editor's
+  Start/End go through `fitPastInterval` at commit, which makes **every** correction needed to
+  land a legal, non-overlapping past interval, then announces each: (1) **Start floor** — the
+  interim editable window is **yesterday's calendar-day start** (Stage 4's day records refine this
+  to "the last day-start"); an earlier Start snaps up to it. (2) **Start out of overlap** — a Start
+  inside an existing entry moves to that entry's end. (3) **End ceiling** — End snaps to the
+  **largest legal value = `min(now, start-of-the-next-entry)`**, so it never crosses `now` nor
+  overlaps the item below it; an End that landed before Start snaps up to this same ceiling.
+  When no positive span fits, save is blocked with a notice (not a silent no-op). A **meaning-
+  changing** commit reflects the snapped values into the fields and **asks for one more Save to
+  confirm** — never dispatch a silently-changed meaning; a clean interval saves in one tap.
 Applies now to every clock/duration field and binds every future input.
 
 ### 7.0.3 Configurable compute intensity — "ship both, let the client choose" (2026-07-15)

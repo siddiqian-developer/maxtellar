@@ -190,10 +190,15 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
      this entry changed) and **Delete** dispatches `EDIT_HISTORY` with the entry omitted. A header
      **"+ Add entry"** back-logs a fresh past entry via `BACKLOG` (the guarded single-entry insert).
    - **Time fields are smart-input with the HISTORY direction (§7.0.2).** A bare clock resolves into
-     the **past** (`resolvePastTime`: today if `≤ now`, else the day before) — the mirror of the
-     planning drawer's forward-snap — never bumped forward, always `end ≤ now`; every meaning-change
-     (resolved-to-yesterday, clamped-to-now) shows in the universal snap-notify strip. Direction is
-     **caller-owned**: the same shared parser, opposite bias per surface.
+     the **past** (`resolvePastTime`: today if `≤ now`, else the day before), a year-less date to the
+     nearest past occurrence — the mirror of the planning drawer's forward-snap — never bumped
+     forward, always `end ≤ now`. At commit, `fitPastInterval` makes **all valid snaps** to land a
+     legal non-overlapping interval: Start snaps up to the **editable-window floor** (interim:
+     yesterday's calendar-day start) and out of any entry it overlaps; **End snaps to the largest
+     legal value `min(now, start-of-next-entry)`** (this also catches End-before-Start). Every
+     meaning-change shows in the snap-notify strip, and a snap **asks for one more Save to confirm**
+     (a clean interval saves in one tap). Footer button order/spacing matches the New Task drawer
+     (primary left, Cancel right; Delete in the secondary slot, danger-tinted).
    - **Gap-fill affordance.** Any gap longer than **30 min** — interior (between two finished runs)
      **or the still-forming trailing gap from the last run to `now`** — carries a **"fill"** button
      opening the >30-min **GapFillModal** ("what happened?" → Activity / Sleep / Nap / Wasted /

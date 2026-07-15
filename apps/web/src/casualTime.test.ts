@@ -8,6 +8,7 @@ import {
   parseCasualTime,
   parseCasualDuration,
   resolvePastTime,
+  fitPastInterval,
   dayOffsetOf,
   dayStartMin,
 } from "./casualTime";
@@ -122,10 +123,84 @@ describe("resolvePastTime — history/back-log mirror (direction is caller-owned
     expect(r.notes).toEqual([]);
   });
 
+  it("a year-less explicit date resolves to the PAST, not next year (pastBias)", () => {
+    // NOW = Jul 15 2026; "jul 1" must mean Jul 1 2026 (past), not Jul 1 2027.
+    const r = resolvePastTime("jul 1 8am", NOW);
+    const jul1 = Math.floor(new Date(2026, 6, 1, 8, 0).getTime() / 60000);
+    expect(r.value).toBe(jul1);
+    expect(r.value! < NOW).toBe(true);
+    expect(r.notes).toEqual([]); // ≤ now, no clamp (editor applies the floor)
+  });
+
   it("unparseable input returns undefined, no notes", () => {
     const r = resolvePastTime("zzz", NOW);
     expect(r.value).toBeUndefined();
     expect(r.notes).toEqual([]);
+  });
+});
+
+describe("fitPastInterval — overlap-aware snapping (feedback 2026-07-15)", () => {
+  const fmt = (m: number): string => String(m);
+  const NOW2 = 1000;
+  const FLOOR = 0;
+
+  it("leaves a valid interval untouched (no notes)", () => {
+    const r = fitPastInterval(100, 200, [], NOW2, FLOOR, fmt);
+    expect(r).toMatchObject({ start: 100, end: 200, ok: true });
+    expect(r.notes).toEqual([]);
+  });
+
+  it("End before Start snaps End up to now (no items below)", () => {
+    const r = fitPastInterval(500, 300, [], NOW2, FLOOR, fmt);
+    expect(r.start).toBe(500);
+    expect(r.end).toBe(1000); // now
+    expect(r.ok).toBe(true);
+    expect(r.notes.join(" ")).toMatch(/now/i);
+  });
+
+  it("End snaps to the START of the next entry below, not past it", () => {
+    const others = [{ start: 600, end: 800 }];
+    const r = fitPastInterval(400, 900, others, NOW2, FLOOR, fmt);
+    expect(r.end).toBe(600); // clamped to the next entry's start
+    expect(r.notes.join(" ")).toMatch(/next entry/i);
+  });
+
+  it("End before Start with an item below snaps to that item's start", () => {
+    const others = [{ start: 700, end: 900 }];
+    const r = fitPastInterval(500, 400, others, NOW2, FLOOR, fmt);
+    expect(r.end).toBe(700);
+    expect(r.ok).toBe(true);
+  });
+
+  it("Start below the floor snaps up to the floor", () => {
+    const r = fitPastInterval(-50, 200, [], NOW2, 100, fmt);
+    expect(r.start).toBe(100);
+    expect(r.notes.join(" ")).toMatch(/editable window/i);
+  });
+
+  it("Start inside an existing entry moves to its end", () => {
+    const others = [{ start: 100, end: 300 }];
+    const r = fitPastInterval(200, 500, others, NOW2, FLOOR, fmt);
+    expect(r.start).toBe(300);
+    expect(r.end).toBe(500);
+    expect(r.notes.join(" ")).toMatch(/overlapped/i);
+  });
+
+  it("Start on the boundary of an entry moves past it, end kept if valid", () => {
+    const others = [{ start: 500, end: 700 }];
+    const r = fitPastInterval(500, 900, others, NOW2, FLOOR, fmt);
+    // 500 is inside [500,700) → start moves to 700; end 900 ≤ now, no next → kept
+    expect(r.start).toBe(700);
+    expect(r.end).toBe(900);
+    expect(r.ok).toBe(true);
+  });
+
+  it("genuinely no room → ok=false, span collapses", () => {
+    const others = [{ start: 400, end: 1000 }];
+    const r = fitPastInterval(450, 900, others, NOW2, FLOOR, fmt);
+    // start inside [400,1000) → moved to 1000 = now; ceiling = now = 1000 ≤ start
+    expect(r.ok).toBe(false);
+    expect(r.notes.join(" ")).toMatch(/no room/i);
   });
 });
 
