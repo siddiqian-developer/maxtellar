@@ -13,6 +13,8 @@ interface Props {
   minFragment: number;
   openExtentCap: number;
   semiTailFloor: number;
+  /** §11.4 Sleep budget — the one global value, synced with Weekly Planning. */
+  sleepMinutes: number;
   dispatch: (e: Event) => void;
   /** Revert-and-close (Esc / × / scrim) — §06 transactional Settings. */
   onCancel: () => void;
@@ -29,7 +31,7 @@ const PRESET_ROWS: { id: PresetId; label: string }[] = [
   { id: "food", label: "Food" },
 ];
 
-export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
+export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
   const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode } = useSettings();
   const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const toggleWeekend = (d: number): void => {
@@ -146,6 +148,22 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispa
               onChange={(e) => {
                 const m = Number(e.target.value);
                 if (Number.isFinite(m) && m >= 1) dispatch({ type: "SET_MIN_FRAGMENT", minutes: Math.round(m) });
+              }}
+            />
+          </div>
+          <div className="field">
+            <label data-tip="Sleep is the head of the day (§11.4) — an absolute budget in every day's 24h sum. One global value, synced with the Weekly Planning Budgets tab.">
+              Sleep budget (hours)
+            </label>
+            <input
+              type="number"
+              min={0}
+              max={24}
+              step={0.5}
+              value={Math.round((sleepMinutes / 60) * 10) / 10}
+              onChange={(e) => {
+                const h = Number(e.target.value);
+                if (Number.isFinite(h) && h >= 0) dispatch({ type: "SET_SLEEP_BUDGET", minutes: Math.round(h * 60) });
               }}
             />
           </div>

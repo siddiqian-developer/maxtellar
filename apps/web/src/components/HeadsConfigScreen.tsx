@@ -13,6 +13,7 @@
 
 import { useEffect, useState } from "react";
 import type { Event, State } from "@maxtellar/core";
+import { CATEGORIES } from "@maxtellar/core";
 import { useHeads, BUILT_IN_HEADS, BUILT_IN_HEAD_NOTES, isBuiltInActivity } from "../heads";
 import { useEscClose } from "../useEscClose";
 import { rehomeActivity } from "../ml/vectorStore";
@@ -54,7 +55,7 @@ function usedActivitiesUnderHead(state: State, headId: string): string[] {
 type ReassignTarget = { headId: string; activityId: string } | { headId: string; activityId: null };
 
 export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Element {
-  const { registry, heads, addHead, addActivity, deleteActivity, deleteHead, headFor } = useHeads();
+  const { registry, heads, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, setHeadCategory } = useHeads();
   const [newHead, setNewHead] = useState("");
   const [activityHead, setActivityHead] = useState("");
   const [newActivity, setNewActivity] = useState("");
@@ -296,6 +297,18 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
                 {BUILT_IN_HEAD_NOTES[h] && (
                   <span className="config-head-note">{BUILT_IN_HEAD_NOTES[h]}</span>
                 )}
+                {/* §11.1 Category tier — every head lives under one Category. */}
+                <select
+                  className="config-cat-select"
+                  aria-label={`Category for ${h}`}
+                  data-tip="Category (§11) — drives budgeting roll-ups and the netCore math"
+                  value={categoryFor(h)}
+                  onChange={(e) => setHeadCategory(h, e.target.value)}
+                >
+                  {CATEGORIES.map((c) => (
+                    <option key={c} value={c}>{c}</option>
+                  ))}
+                </select>
                 {!BUILT_IN_HEADS.includes(h) && (
                   <button
                     type="button"

@@ -425,6 +425,7 @@ export function App(): JSX.Element {
           minFragment={state.minFragment}
           openExtentCap={state.openExtentCap}
           semiTailFloor={state.semiTailFloor}
+          sleepMinutes={state.week.sleepMinutes}
           dispatch={(e) => void dispatch(e)}
           onCancel={revertSettings}
           onDone={commitSettings}

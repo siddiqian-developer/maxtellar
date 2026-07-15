@@ -103,12 +103,27 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   share. Tasks that fall out of the 24h window are **pushed to the next day** (spill), not dropped.
 - Daily edits **never** mutate the weekly template or other days (each day is its own instance).
 
-## 11.8 UI — beside the calendar in weekly planning
-- **Two-pane** (recommended): a **collapsible outliner** (Category ▸ Head ▸ Sub-head; budgets + %
-  badge inline; drag-rank; collapse-all) on one side, a **live 24h stacked bar** (the conservation
-  gauge — fills as you allocate, flashes the offending segment on breach) on the other. The existing
-  **week calendar grid** (§4.4/§4.6) remains the placement-preview surface.
-- Reuse the §4.6 calendar preview; the budgeting outliner is a sibling view within Weekly Planning.
+## 11.8 UI — beside the calendar in weekly planning (built 2026-07-16)
+- **Two-pane**: a **collapsible outliner** (Category ▸ Head; budgets + % badge inline; drag-rank
+  AND ▲▼ arrows; collapse-all in the pane header) on one side, a **live 24h stacked bar** (the
+  conservation gauge — fills as you allocate, flashes the offending segment on breach) on the
+  other. The existing **week calendar grid** (§4.4/§4.6) remains the placement-preview surface.
+- **Placement**: the grid screen's segmented toggle becomes **`[ Week Plan | Budgets | Calendar ]`**
+  — the outliner is the *Budgets* sibling view within Weekly Planning (heading stays "Weekly
+  Planning"). The **Start Week button is disabled** (with the gate reason) while §11.2 fails.
+- A **weekday selector** (chips; OFF days disabled) picks which day-shape the bar + roll-ups
+  show; unbalanced weekdays are marked on their chips. A head's expanded editor offers a
+  **this-weekday-only override** (absolute `perDay` / weekly `shares`) honoring §11.2's
+  "each weekday may carry a different shape".
+- **Snap asymmetry (all three layers — 24h wall, Category target, core-% fit): OVER → snap the
+  edited entry back to the fit-restoring value (toast names head + rule, flash on row + bar
+  segment + Category row); UNDER → never snaps, live indicator only ("needs X more") with the
+  Start-Week gate doing the blocking.**
+- **Sleep row is Settings-grade**: editable even under the mid-week structural lock (§11.4 — it
+  syncs with Settings, which is never locked); all other budget edits obey the §4.4 lock
+  (OFF-day window / urgent bypass).
+- The Heads & Sub-heads config screen assigns each head's **Category** (new heads default to
+  Core Work); a budget entry snapshots the category at creation.
 
 ## 11.9 Data-model deltas (sketch, for the build chat)
 - `Category` tier (id, name, order) above `WeekTemplate.headId`; head registry gains a category.

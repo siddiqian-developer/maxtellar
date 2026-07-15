@@ -23,6 +23,8 @@ import { parseTimeOfDay, parseCasualDuration } from "../casualTime";
 import { fmtClock, fmtDurUnits, toDate } from "../time";
 import { weekPreview, type WeekColumn } from "../weekPreview";
 import { SubheadField } from "./SubheadField";
+import { BudgetPanel } from "./BudgetPanel";
+import { weekBudgetValidity } from "@maxtellar/core";
 
 const HOUR_PX = 30; // vertical scale: 30px per hour → 720px for the full day
 const AXIS_W = 46; // px, the hour-label gutter
@@ -75,7 +77,7 @@ function columnsFrom(weekStart: number): WeekColumn[] {
 export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Props): JSX.Element {
   const { timeFormat, weekendDays } = useSettings();
   const hour12 = timeFormat === "12h";
-  const [mode, setMode] = useState<"week" | "calendar">(initialMode);
+  const [mode, setMode] = useState<"week" | "budget" | "calendar">(initialMode);
   const [editing, setEditing] = useState<WeekTemplate | "new" | null>(null);
   const [datedEdit, setDatedEdit] = useState<{ date: number; task: DatedTask | null } | null>(null);
   const [tplMenu, setTplMenu] = useState<{ date: number; templateId: string; title: string } | null>(null);
@@ -83,11 +85,14 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
   // Calendar week offset in weeks from this week (0 = this week).
   const [weekOff, setWeekOff] = useState(1); // default to the COMING week
   const anyOverlay = editing || datedEdit || tplMenu;
-  useEscClose(anyOverlay ? () => { setEditing(null); setDatedEdit(null); setTplMenu(null); } : onBack);
+  // Esc: overlays close first; in budget mode the panel owns Esc (expanded
+  // row collapses, else back) so this hook stands down there.
+  useEscClose(anyOverlay ? () => { setEditing(null); setDatedEdit(null); setTplMenu(null); } : mode === "budget" ? () => {} : onBack);
 
   const todayWeekday = toDate(state.now).getDay();
   const started = state.week.startedAt !== null;
-  const locked = mode === "week" && !canPlanWeek(state, todayWeekday, urgent);
+  const locked = mode !== "calendar" && !canPlanWeek(state, todayWeekday, urgent);
+  const budgetValidity = weekBudgetValidity(state.week);
 
   // Week Plan is pinned to the COMING week; Calendar navigates from this week.
   const thisSunday = sundayOf(state.now);
@@ -184,14 +189,17 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h2>{mode === "week" ? "Weekly Planning" : "Calendar"}</h2>
+        <h2>{mode === "calendar" ? "Calendar" : "Weekly Planning"}</h2>
         <div className="wk-mode-toggle" role="tablist" aria-label="View">
           <button role="tab" aria-selected={mode === "week"} className={`wk-mode${mode === "week" ? " active" : ""}`} onClick={() => setMode("week")}>Week Plan</button>
+          <button role="tab" aria-selected={mode === "budget"} className={`wk-mode${mode === "budget" ? " active" : ""}`} onClick={() => setMode("budget")}>Budgets</button>
           <button role="tab" aria-selected={mode === "calendar"} className={`wk-mode${mode === "calendar" ? " active" : ""}`} onClick={() => setMode("calendar")}>Calendar</button>
         </div>
         <span style={{ flex: 1 }} />
-        {mode === "week" && (
-          <button className="sod-btn ready" onClick={() => dispatch({ type: "START_WEEK", firstWeekday: todayWeekday })} data-tip="Roll over to a new week — today becomes the First Weekday">
+        {mode !== "calendar" && (
+          <button className="sod-btn ready" disabled={!budgetValidity.ok}
+            onClick={() => dispatch({ type: "START_WEEK", firstWeekday: todayWeekday })}
+            data-tip={budgetValidity.ok ? "Roll over to a new week — today becomes the First Weekday" : "Gated: every planned day must budget to exactly 24h (§11.2)"}>
             {started ? "Start New Week" : "Start Week"}
           </button>
         )}
@@ -247,13 +255,17 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
           </div>
         )}
 
-        {preview.conflicts.length > 0 && (
+        {mode === "budget" && (
+          <BudgetPanel state={state} dispatch={dispatch} locked={locked} urgent={urgent} todayWeekday={todayWeekday} onBack={onBack} />
+        )}
+
+        {mode !== "budget" && preview.conflicts.length > 0 && (
           <div className="form-warning" role="status">
             {preview.conflicts.map((c, i) => <div key={i}>⚠ {c}</div>)}
           </div>
         )}
 
-        <div className="config-section">
+        {mode !== "budget" && <div className="config-section">
           <div className="wk-section-head">
             <h3>{mode === "week" ? "The week, placed" : "The week"}</h3>
             {mode === "week" && (
@@ -310,7 +322,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
           {mode === "week" && state.week.templates.length === 0 && (
             <span className="config-empty">no templates yet — add recurring tasks; they appear placed across the week here</span>
           )}
-        </div>
+        </div>}
       </div>
 
       {editing && (
