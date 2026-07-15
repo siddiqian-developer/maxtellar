@@ -255,15 +255,27 @@ reduced from the same stale state and the second **silently discarded the first'
 enforces it at the store boundary. A rejected event must not jam the chain (the chain
 swallows the rejection; the caller still gets it).
 
-### 7.0.2 Snap-at-entry (binding UI-input pattern)
+### 7.0.2 Snap-at-entry + universal snap-notify (binding UI-input pattern)
 The correct-at-the-boundary rule for **all** input fields (the UI face of the E3 physics-snap
 law): a value that violates a floor/physics constraint is **corrected the instant it is
-committed to the field**, in place, with a quiet inline warning — never the accept-then-scold
-anti-pattern (let an illegal value in, disallow it later, then notify). This is "parse, don't
-validate" (normalize at the boundary so illegal states are unrepresentable downstream) and the
-engineering face of Nielsen's error-prevention heuristic. The reducer's `snapTask`/physics
-snap is the backstop; the field must never *display* an illegal value as accepted. Applies now
-to Budget vs MIN_FRAGMENT and every clock/duration field, and binds every future input.
+committed to the field**, in place, and **every meaning-changing adjustment is announced** to
+the user — never the accept-then-scold anti-pattern (let an illegal value in, disallow it
+later, then notify), and never a silent change of meaning. "Parse, don't validate" + Nielsen
+error-prevention. The reducer's `snapTask`/physics snap is the backstop; the field must never
+*display* an illegal value as accepted.
+
+**Per-field flow (§1.6): casual formatting → validation/adjustment → notify → rest.**
+- **Casual smart-input parser (two-staged).** A **deterministic grammar** (`casualTime.ts`:
+  `parseCasualTime`/`parseCasualDate`/`parseCasualDuration`) runs first — day-aware, on-device,
+  instant, unit-tested against every stated example. On failure/ambiguity it falls back to an
+  **ML parser (`fallbackParse` seam)**, biased toward ML when the grammar is unsure; the ML
+  model itself is a late stage (cloud/AI only late, always local fallback, **never
+  load-bearing** — the app works fully with ML off). Time fields store **absolute epoch
+  minutes** (multi-day capable); display honors the 12h/24h setting.
+- **Notify scope — meaning-changes only.** Announce: past-time snapped forward (with a
+  one-tap "tomorrow" offer), overnight wrap, MIN_FRAGMENT floor. Pure reformatting
+  (`3pm`→`3:00 PM`) is silent (expected, not a correction).
+Applies now to every clock/duration field and binds every future input.
 
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly

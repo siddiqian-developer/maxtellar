@@ -1,0 +1,292 @@
+/**
+ * Casual time / date / duration parsing (spec §06 + §7.0.2) — the deterministic
+ * FIRST stage of the two-staged smart-input parser. Turns loose human input
+ * ("3pm", "1500", "tom 7am", "1days 2.5hr") into exact domain values, day-aware.
+ *
+ * Domain time = integer minutes since the Unix epoch (local wall-clock for the
+ * day/hour math, matching time.ts). Durations = integer minutes.
+ *
+ * Two-staged design: if the grammar cannot parse an input it returns
+ * `value: undefined`; a later ML stage plugs into `fallbackParse` (null stub
+ * today), biased toward ML when the grammar is unsure. Never load-bearing (§7).
+ */
+
+import type { Min, Dur } from "@maxtellar/core";
+
+/* ------------------------------- helpers --------------------------------- */
+
+const MIN_PER_DAY = 1440;
+
+const toDate = (m: Min): Date => new Date(m * 60000);
+
+/** Local-midnight epoch-minute for the day containing `m`. */
+export function dayStartMin(m: Min): Min {
+  const d = toDate(m);
+  return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 60000);
+}
+
+/** Whole-day offset of `m` from `now` (0 = same calendar day, 1 = tomorrow). */
+export function dayOffsetOf(m: Min, now: Min): number {
+  return Math.round((dayStartMin(m) - dayStartMin(now)) / MIN_PER_DAY);
+}
+
+/** Levenshtein distance (small strings only). */
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  const dp = Array.from({ length: m + 1 }, (_, i) => [i, ...Array(n).fill(0)]);
+  for (let j = 0; j <= n; j++) dp[0]![j] = j;
+  for (let i = 1; i <= m; i++) {
+    for (let j = 1; j <= n; j++) {
+      const cost = a[i - 1] === b[j - 1] ? 0 : 1;
+      dp[i]![j] = Math.min(dp[i - 1]![j]! + 1, dp[i]![j - 1]! + 1, dp[i - 1]![j - 1]! + cost);
+    }
+  }
+  return dp[m]![n]!;
+}
+
+/** Fuzzy-match a word to a relative-day token (misspellings tolerated). */
+function matchDayWord(word: string): number | null {
+  const w = word.toLowerCase();
+  if (["today", "tdy", "tod"].includes(w)) return 0;
+  if (["tomorrow", "tom", "tmrw", "tmr", "tmw", "tomo", "tomm"].includes(w)) return 1;
+  if (["yesterday", "yest", "yday"].includes(w)) return -1;
+  // fuzzy for genuine misspellings ("tmorow", "tomorow", "yesterdy")
+  if (w.length >= 4) {
+    if (editDistance(w, "tomorrow") <= 2) return 1;
+    if (editDistance(w, "today") <= 2) return 0;
+    if (editDistance(w, "yesterday") <= 2) return -1;
+  }
+  return null;
+}
+
+/* ---------------------------- time-of-day -------------------------------- */
+
+interface TimeOfDay {
+  hour: number; // 0..23
+  min: number; // 0..59
+}
+
+/**
+ * Parse a bare time-of-day token (no day part). Handles:
+ *  "3pm" "03pm" "3:00pm" "03:PM" "3:0" "15:00" "1500" "150" "15:0" "9" "9am".
+ * hour > 12 always reads as 24h (am/pm ignored). Bare hour < 12 defaults AM;
+ * bare 12 → noon. Returns undefined if it isn't a time at all.
+ */
+export function parseTimeOfDay(input: string): TimeOfDay | undefined {
+  let s = input.trim().toLowerCase().replace(/[\s,]+/g, "");
+  if (!s) return undefined;
+
+  // am/pm suffix (a, p, am, pm), optionally glued to the digits
+  let mer: "am" | "pm" | null = null;
+  const mm = /(a|p)\.?m?\.?$/.exec(s);
+  if (mm) {
+    mer = mm[1] === "p" ? "pm" : "am";
+    s = s.slice(0, mm.index);
+  }
+  if (!s) return undefined;
+
+  let hour: number;
+  let min: number;
+
+  if (s.includes(":")) {
+    const [hStr, mStr = ""] = s.split(":");
+    if (!/^\d{1,2}$/.test(hStr ?? "")) return undefined;
+    if (mStr !== "" && !/^\d{1,2}$/.test(mStr)) return undefined;
+    hour = Number(hStr);
+    // A single-digit minute is the TENS place, matching the user's examples
+    // ("3:0"→:00, "15:0"→:00, and by extension "3:5"→:50).
+    min = mStr === "" ? 0 : mStr.length === 1 ? Number(mStr) * 10 : Number(mStr);
+  } else {
+    if (!/^\d{1,4}$/.test(s)) return undefined;
+    if (s.length <= 2) {
+      hour = Number(s);
+      min = 0;
+    } else if (s.length === 3) {
+      hour = Number(s.slice(0, 1));
+      min = Number(s.slice(1));
+    } else {
+      hour = Number(s.slice(0, 2));
+      min = Number(s.slice(2));
+    }
+  }
+
+  if (min > 59) return undefined;
+
+  // meridiem application
+  if (mer === "pm" && hour < 12) hour += 12;
+  else if (mer === "am" && hour === 12) hour = 0;
+  // bare 12 (no suffix) → noon (12); bare <12 stays AM; hour ≥13 is 24h already
+  if (hour > 23) return undefined;
+
+  return { hour, min };
+}
+
+/* ---------------------------- casual time -------------------------------- */
+
+export interface CasualTime {
+  /** Absolute epoch minute, or undefined if unparseable. */
+  value: Min | undefined;
+  /** Resolved whole-day offset from `now` (0 today, 1 tomorrow, …). */
+  dayOffset: number;
+  /** Did the input explicitly name a day (token or date)? */
+  explicitDay: boolean;
+}
+
+/**
+ * Parse a day-aware time. `now` anchors relative days. A leading/trailing day
+ * word ("tom", "tmorow") or "Tomorrow,"/"today" prefix sets the day; an
+ * explicit ISO-ish date ("jul 22", "2026-07-22", "22/7") sets it absolutely.
+ * Without a day part, resolves to today's date (the caller decides whether a
+ * past time should bump to tomorrow — §7.0.2 past-time rule).
+ */
+export function parseCasualTime(input: string, now: Min): CasualTime {
+  const raw = input.trim();
+  if (!raw) return { value: undefined, dayOffset: 0, explicitDay: false };
+
+  let dayOffset = 0;
+  let explicitDay = false;
+  let rest = raw;
+
+  // strip a relative-day word anywhere (comma-separated or spaced)
+  const tokens = raw.split(/[\s,]+/).filter(Boolean);
+  const dayTokenIdx = tokens.findIndex((t) => matchDayWord(t) !== null);
+  if (dayTokenIdx !== -1) {
+    dayOffset = matchDayWord(tokens[dayTokenIdx]!)!;
+    explicitDay = true;
+    rest = tokens.filter((_, i) => i !== dayTokenIdx).join(" ");
+  } else {
+    // explicit calendar date? "jul 22", "22 jul", "2026-07-22", "22/7", "7/22"
+    const abs = parseAbsoluteDate(raw, now);
+    if (abs) {
+      dayOffset = dayOffsetOf(abs.dayMin, now);
+      explicitDay = true;
+      rest = abs.rest;
+    }
+  }
+
+  const tod = parseTimeOfDay(rest);
+  if (!tod) return { value: undefined, dayOffset, explicitDay };
+
+  const base = dayStartMin(now) + dayOffset * MIN_PER_DAY;
+  return { value: base + tod.hour * 60 + tod.min, dayOffset, explicitDay };
+}
+
+/* ------------------------------ dates ------------------------------------ */
+
+const MONTHS = ["jan", "feb", "mar", "apr", "may", "jun", "jul", "aug", "sep", "oct", "nov", "dec"];
+
+/**
+ * Parse an explicit calendar date out of `input`, returning its local-midnight
+ * epoch-minute and the leftover string (the time part). Supports "jul 22",
+ * "22 jul", "2026-07-22", "22/7", "7/22". Year defaults to the nearest future
+ * occurrence relative to `now`. Returns null if no date is present.
+ */
+export function parseAbsoluteDate(
+  input: string,
+  now: Min,
+): { dayMin: Min; rest: string } | null {
+  const s = input.trim();
+  const nowD = toDate(now);
+
+  // ISO 2026-07-22
+  let m = /(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s);
+  if (m) {
+    const dayMin = Math.floor(new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])).getTime() / 60000);
+    return { dayMin, rest: s.replace(m[0], " ").trim() };
+  }
+
+  // "jul 22" or "22 jul" (month name)
+  m = /\b([a-z]{3,9})\s+(\d{1,2})\b/i.exec(s);
+  let monIdx = m ? MONTHS.indexOf(m[1]!.slice(0, 3).toLowerCase()) : -1;
+  let dayNum = m ? Number(m[2]) : NaN;
+  if (monIdx === -1) {
+    m = /\b(\d{1,2})\s+([a-z]{3,9})\b/i.exec(s);
+    if (m) {
+      monIdx = MONTHS.indexOf(m[2]!.slice(0, 3).toLowerCase());
+      dayNum = Number(m[1]);
+    }
+  }
+  if (m && monIdx !== -1 && dayNum >= 1 && dayNum <= 31) {
+    let year = nowD.getFullYear();
+    const candidate = new Date(year, monIdx, dayNum);
+    if (candidate.getTime() < new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime())
+      year += 1; // nearest future occurrence
+    const dayMin = Math.floor(new Date(year, monIdx, dayNum).getTime() / 60000);
+    return { dayMin, rest: s.replace(m[0], " ").trim() };
+  }
+
+  // numeric "22/7" or "7/22" (day/month, disambiguated by >12)
+  m = /\b(\d{1,2})[/.](\d{1,2})\b/.exec(s);
+  if (m) {
+    let a = Number(m[1]);
+    let b = Number(m[2]);
+    let day: number;
+    let mon: number;
+    if (a > 12) { day = a; mon = b; }
+    else if (b > 12) { day = b; mon = a; }
+    else { day = a; mon = b; } // ambiguous → day/month
+    if (mon >= 1 && mon <= 12 && day >= 1 && day <= 31) {
+      let year = nowD.getFullYear();
+      if (new Date(year, mon - 1, day).getTime() < new Date(nowD.getFullYear(), nowD.getMonth(), nowD.getDate()).getTime())
+        year += 1;
+      const dayMin = Math.floor(new Date(year, mon - 1, day).getTime() / 60000);
+      return { dayMin, rest: s.replace(m[0], " ").trim() };
+    }
+  }
+
+  return null;
+}
+
+/* ---------------------------- durations ---------------------------------- */
+
+/**
+ * Parse a casual duration → integer minutes. Handles unit tokens
+ * ("1days", "2.5hr", "90 min", "2h", "1h30") and bare "H:MM"/minutes.
+ * Sums every unit present. Returns undefined if nothing numeric is found.
+ */
+export function parseCasualDuration(input: string): Dur | undefined {
+  const s = input.trim().toLowerCase();
+  if (!s) return undefined;
+
+  // "H:MM" clock-style duration
+  const clock = /^(\d{1,3}):(\d{1,2})$/.exec(s);
+  if (clock) return Number(clock[1]) * 60 + Number(clock[2]);
+
+  // compact "1h30" / "1hr30" — hours then bare trailing minutes
+  const compact = /^(\d+)\s*(?:h|hr|hrs|hour|hours)\s*(\d{1,2})$/.exec(s);
+  if (compact) return Number(compact[1]) * 60 + Number(compact[2]);
+
+  let total = 0;
+  let found = false;
+
+  // unit tokens: <number><unit>, unit followed by a non-letter or end
+  const unitRe = /(\d+(?:\.\d+)?)\s*(days?|d|hours?|hrs?|hr|h|minutes?|mins?|min|m)(?![a-z])/g;
+  let um: RegExpExecArray | null;
+  while ((um = unitRe.exec(s)) !== null) {
+    const n = Number(um[1]);
+    const u = um[2]!;
+    if (u.startsWith("d")) total += n * MIN_PER_DAY;
+    else if (u.startsWith("h")) total += n * 60;
+    else total += n;
+    found = true;
+  }
+
+  if (!found) {
+    // bare number → minutes
+    if (/^\d+(?:\.\d+)?$/.test(s)) return Math.round(Number(s));
+    return undefined;
+  }
+  return Math.round(total);
+}
+
+/* --------------------------- ML fallback seam ---------------------------- */
+
+/**
+ * Two-staged parser seam: when the deterministic grammar returns undefined,
+ * the drawer may consult this. A later on-device/cloud ML stage plugs in here
+ * (biased toward ML on confusion). Null today — the grammar stands alone.
+ */
+export function fallbackParse(_input: string, _now: Min): CasualTime | null {
+  return null;
+}

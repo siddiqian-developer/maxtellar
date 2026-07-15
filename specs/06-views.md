@@ -219,9 +219,19 @@ Drawer behavior (see also `docs/drawer-reference.md`):
   (~45% opacity). The full role is still in the label tooltip. A **fixed** task treats
   start, end and budget as all required (symmetrical): all three are mandatory values,
   entered as any two with the third auto-derived per §3.6.
-- **Time fields** show no format hint in their labels (minimalism) — the placeholder
-  (`00:30`) carries the shape. Budget parses HH:MM or a bare integer as minutes; ±5-min
-  stepper chevrons on all time fields (steppers skipped by tab order).
+- **Time fields are day-aware & casual (§1.6).** Start/End hold an absolute epoch minute
+  (the truth), not a today-relative clock — so multi-day entry works. Input is **casual**:
+  the field parses loose forms and reformats on commit (blur/Enter) per the 12h/24h setting
+  — `3pm`→`3:00 PM`, `1500`→`3:00 PM`, `150`→`1:50 AM`, `tom 7am`→`Tomorrow, 7:00 AM`,
+  misspelled day words tolerated (`tmorow`). Rulings: hour>12 always reads 24h; digit-count
+  disambiguates (`150`=H:MM, `1500`=HH:MM); a single minute digit is the tens place
+  (`3:0`→`:00`). **Day coverage:** today & tomorrow are *typed* (`today`/`tom`/`tomorrow`);
+  a **📅 affordance opens a month-grid calendar whose earliest selectable day is `now`+2**
+  (day after tomorrow onward — today/tomorrow are never in the calendar). Budget is a
+  **casual duration** (`1h30`, `1days 2.5hr`, `45m`) shown as `Nd Nh Nm`, zero-units
+  trimmed, always ≥ minutes (`90m`→`1h 30m`, `30m`→`30m`). ±5-min stepper chevrons on all
+  time fields (steppers skipped by tab order). Parser is deterministic-grammar-first with an
+  ML fallback seam (§7.0.2); never load-bearing.
 - **Preset pill row (directly under the timing-type chips).** `Sleep · Nap · Food` — each a
   §2.9 preset that pre-fills a bundle (locked Title/Sub-head/Head + `breakable` off + the
   pill's `sleepKind`; editable timing type, `slideable`, `ommf`). Selecting a pill fills and
@@ -229,13 +239,16 @@ Drawer behavior (see also `docs/drawer-reference.md`):
   deselects and **restores the pre-activate snapshot**. A title matching a preset auto-selects
   its pill (ML-tagged, undoable), unless the user has already toggled a pill this session
   (intent wins, §7.0.1). There is **no "ordinary" pill** — no pill selected *is* ordinary.
-- **Snap-at-entry (binding pattern, all input fields — see §7 "snap-at-entry").** A value that
-  violates a floor/physics rule is **corrected the instant it is committed to the field**, with
-  a quiet inline warning — never accepted-then-rejected later. Concretely: a Budget entered
-  below MIN_FRAGMENT snaps up to MIN_FRAGMENT in the field itself on commit, showing
-  "below the N-minute floor — raised". No invalid value ever enters state. (This is the
-  UI-layer face of the E3 physics-snap law; the reducer's `snapTask` is the backstop, but the
-  field must never *show* the illegal value as accepted.)
+- **Snap-at-entry + universal snap-notify (binding pattern, all input fields — see §7.0.2).**
+  A value that violates a floor/physics rule is **corrected the instant it is committed to the
+  field**, and **every meaning-changing adjustment is announced** in the inline notice list —
+  never accepted-then-rejected later, never silently changed. Flow: **casual formatting →
+  adjustments/validation → notify**. Meaning-changes that notify: a Budget below MIN_FRAGMENT
+  raised to the floor; an End earlier than its Start wrapped to the next day; a Start/End
+  **earlier than `now`** kept today and snapped forward, **plus a one-tap "Did you mean
+  Tomorrow HH:MM?" chip** (covers both "unaware of now" and "meant tomorrow"; the app never
+  says no). Pure reformatting (`3pm`→`3:00 PM`) is **silent** — it's expected, not a
+  correction. No invalid value ever enters state; the reducer's `snapTask` is the backstop.
 - **Flags on one row**, terse: `OMMF` (uppercase), `slideable`, `breakable`.
 - **Title, Sub-head, and the new-sub-head's-head field each carry a very subtle inline
   clear (×)** — appears only once non-empty, `ink-faint` at 50% opacity, brightens on

@@ -13,6 +13,9 @@ import type { Event, SleepKind, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings, type PresetId } from "../settings";
 import { PRESETS, presetById, matchPreset } from "../presets";
+import { parseCasualTime, parseCasualDuration } from "../casualTime";
+import { fmtDayTime, fmtDurUnits } from "../time";
+import { DatePicker } from "./DatePicker";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
@@ -35,6 +38,9 @@ interface FieldSnapshot {
   startStr: string;
   endStr: string;
   budgetStr: string;
+  startMin: number | undefined;
+  endMin: number | undefined;
+  budgetMin: number | undefined;
   ommf: boolean;
   flags: { slideable?: boolean; breakable?: boolean };
   sleepKind: SleepKind | undefined;
@@ -43,43 +49,9 @@ interface FieldSnapshot {
 }
 
 const DEFAULT_BUDGET = 30;
+const MIN_PER_DAY = 1440;
 
-/** HH:mm today → epoch minutes (local). */
-function parseClock(v: string): number | undefined {
-  const m = /^(\d{1,2}):(\d{2})$/.exec(v.trim());
-  if (!m) return undefined;
-  const h = Number(m[1]);
-  const min = Number(m[2]);
-  if (h > 23 || min > 59) return undefined;
-  const d = new Date();
-  d.setHours(h, min, 0, 0);
-  return Math.floor(d.getTime() / 60000);
-}
-
-/** epoch minutes → HH:mm (local). */
-function fmtClock(m: number): string {
-  const d = new Date(m * 60000);
-  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
-}
-
-/** "H:MM" or bare minutes → minutes. */
-function parseBudget(v: string): number | undefined {
-  const t = v.trim();
-  if (!t) return undefined;
-  const m = /^(\d{1,2}):(\d{2})$/.exec(t);
-  if (m) return Number(m[1]) * 60 + Number(m[2]);
-  if (/^\d+$/.test(t)) return Number(t);
-  return undefined;
-}
-
-/** minutes → "HH:MM". */
-function fmtBudget(mins: number): string {
-  const h = Math.floor(mins / 60);
-  const m = mins % 60;
-  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`;
-}
-
-/** The creation table (§3.6), derived live. */
+/** The creation table (§3.6), derived live from the day-aware epoch trio. */
 function deriveTiming(start?: number, end?: number, budget?: number): TimingType {
   if (start !== undefined && (end !== undefined || budget !== undefined)) return "fixed";
   if (end !== undefined && budget !== undefined) return "fixed";
@@ -89,48 +61,93 @@ function deriveTiming(start?: number, end?: number, budget?: number): TimingType
   return "unscheduled";
 }
 
-/** Pure §3.6 field derivation. Given the three field strings and which one the
- * user just changed, return the new trio (+ any hard-block error). The changed
- * field is authoritative and never overwritten; overnight end wraps +1 day.
- * All-three rules: Start→End, Budget→End, End→Budget (start outranks budget). */
-function derive(
-  changed: "start" | "end" | "budget",
-  sStr: string,
-  eStr: string,
-  bStr: string,
-): { start: string; end: string; budget: string; err: string | null } {
-  const s = sStr ? parseClock(sStr) : undefined;
-  let e = eStr ? parseClock(eStr) : undefined;
-  const b = bStr ? parseBudget(bStr) : undefined;
-  if (s !== undefined && e !== undefined && e <= s) e += 1440;
+interface Adjustment {
+  field: string;
+  message: string;
+}
+interface DeriveResult {
+  startMin: number | undefined;
+  endMin: number | undefined;
+  budgetMin: number | undefined;
+  adjustments: Adjustment[];
+  /** A one-click "did you mean tomorrow?" offer for a past-time anchor. */
+  tomorrow: { field: "start" | "end"; toMin: number } | undefined;
+  err: string | null;
+}
 
-  const out = {
-    start: sStr,
-    end: eStr,
-    budget: b !== undefined ? fmtBudget(b) : bStr, // normalize bare minutes
-    err: null as string | null,
-  };
+/**
+ * §3.6 field derivation over the day-aware epoch trio (values already absolute
+ * epoch minutes / duration minutes). The changed field is authoritative; a
+ * second present field derives the third. Collects §7.0.2 meaning-changes:
+ * past-time snapped forward (+ a "tomorrow" offer), overnight wrap, and the
+ * MIN_FRAGMENT budget floor. Pure — `now`/`hour12` only shape the messages.
+ */
+function deriveDayAware(
+  changed: "start" | "end" | "budget",
+  trio: { startMin: number | undefined; endMin: number | undefined; budgetMin: number | undefined },
+  explicitDay: { start: boolean; end: boolean },
+  now: number,
+  minFragment: number,
+  fmtT: (m: number) => string,
+): DeriveResult {
+  let { startMin: s, endMin: e, budgetMin: b } = trio;
+  const adjustments: Adjustment[] = [];
+  let tomorrow: DeriveResult["tomorrow"];
+  let err: string | null = null;
+
+  // Past-time on the CHANGED anchor with no explicit day: keep today, snap
+  // forward to a legal instant, notify, and offer tomorrow (§7.0.2 decision).
+  if (changed === "start" && s !== undefined && s < now && !explicitDay.start) {
+    const orig = s;
+    s = now;
+    adjustments.push({ field: "start", message: `Start was in the past — moved to ${fmtT(s)} today` });
+    tomorrow = { field: "start", toMin: orig + MIN_PER_DAY };
+  }
+  if (changed === "end" && e !== undefined && e < now && !explicitDay.end) {
+    const orig = e;
+    e = now + minFragment;
+    adjustments.push({ field: "end", message: `End was in the past — moved to ${fmtT(e)} today` });
+    tomorrow = { field: "end", toMin: orig + MIN_PER_DAY };
+  }
 
   if (changed === "start" && s !== undefined) {
-    if (b !== undefined) out.end = fmtClock(s + b);
-    else if (e !== undefined) out.budget = fmtBudget(e - s);
+    if (b !== undefined) e = s + b;
+    else if (e !== undefined) {
+      if (e <= s && !explicitDay.end) {
+        e += MIN_PER_DAY;
+        adjustments.push({ field: "end", message: "End was before start — wrapped to the next day" });
+      }
+      b = e - s;
+    }
   } else if (changed === "budget") {
     if (b !== undefined) {
-      if (s !== undefined) out.end = fmtClock(s + b);
-      else if (e !== undefined) out.start = fmtClock(e - b);
+      if (s !== undefined) e = s + b;
+      else if (e !== undefined) s = e - b;
     } else if (s !== undefined && e !== undefined) {
-      out.budget = fmtBudget(e - s); // cleared with both anchors: re-derive
+      b = e - s;
     }
   } else if (changed === "end" && e !== undefined) {
     if (s !== undefined) {
+      if (e <= s && !explicitDay.end) {
+        e += MIN_PER_DAY;
+        adjustments.push({ field: "end", message: "End was before start — wrapped to the next day" });
+      }
       const nb = e - s;
-      if (nb === 0) out.err = "Task duration cannot be zero";
-      else out.budget = fmtBudget(nb); // start outranks budget
+      if (nb === 0) err = "Task duration cannot be zero";
+      else b = nb;
     } else if (b !== undefined) {
-      out.start = fmtClock(e - b);
+      s = e - b;
     }
   }
-  return out;
+
+  // MIN_FRAGMENT floor (§7.0.2 snap-at-entry)
+  if (b !== undefined && b < minFragment) {
+    b = minFragment;
+    adjustments.push({ field: "budget", message: `Budget below the ${minFragment}-minute floor — raised to ${fmtDurUnits(minFragment)}` });
+    if (s !== undefined) e = s + b; // keep the trio coherent
+  }
+
+  return { startMin: s, endMin: e, budgetMin: b, adjustments, tomorrow, err };
 }
 
 const ALL_TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
@@ -149,8 +166,9 @@ const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget
 
 export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
   const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
-  const { presetDefaults } = useSettings();
-  useEscClose(onClose);
+  const { presetDefaults, timeFormat } = useSettings();
+  const hour12 = timeFormat === "12h";
+  const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
   // Head-suggester should only ever propose PLANNABLE heads (never the system
   // built-ins Wasted Time / Lost Hours). Feed it a registry filtered to those.
   const plannableRegistry = useMemo(
@@ -169,19 +187,32 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // Starts empty — no static default; only the ML suggestion or the user fills it.
   const [newHeadChoice, setNewHeadChoice] = useState("");
   const [newHeadTouched, setNewHeadTouched] = useState(false);
-  // default on open: budgeted @ 00:30 (SPEC VI pre-fills)
+  // Time fields are day-aware: the epoch `Min` values are the source of truth
+  // (§1.6), the *Str buffers are what the user types/sees (formatted per the
+  // 12h/24h setting after a commit). default on open: budgeted @ 30m.
   const [startStr, setStartStr] = useState("");
   const [endStr, setEndStr] = useState("");
-  const [budgetStr, setBudgetStr] = useState(fmtBudget(DEFAULT_BUDGET));
+  const [budgetStr, setBudgetStr] = useState(fmtDurUnits(DEFAULT_BUDGET));
+  const [startMin, setStartMin] = useState<number | undefined>(undefined);
+  const [endMin, setEndMin] = useState<number | undefined>(undefined);
+  const [budgetMin, setBudgetMin] = useState<number | undefined>(DEFAULT_BUDGET);
   const [ommf, setOmmf] = useState(false);
   // §2.9: Sleep/Nap is an EXPLICIT declaration at logging, never inferred — set
   // by the preset pill (not a free-form control).
   const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(undefined);
   const [flags, setFlags] = useState<{ slideable?: boolean; breakable?: boolean }>({});
   const [error, setError] = useState<string | null>(null);
-  // §7.0.2 snap-at-entry: a quiet inline note when a field value was corrected
-  // in place (e.g. budget raised to MIN_FRAGMENT). Distinct from a hard error.
-  const [warning, setWarning] = useState<string | null>(null);
+  // §7.0.2 universal snap-notify: every meaning-changing adjustment made on a
+  // commit (past-time moved, overnight wrap, budget floored) is listed here.
+  const [adjustments, setAdjustments] = useState<Adjustment[]>([]);
+  // A one-click "did you mean tomorrow?" offer for a past-time anchor (§1.6).
+  const [tomorrowOffer, setTomorrowOffer] = useState<{ field: "start" | "end"; toMin: number } | null>(null);
+  // Which field the far-date calendar (min = now+2) is open for, if any.
+  const [calendarField, setCalendarField] = useState<"start" | "end" | null>(null);
+
+  // Back-navigation stack (innermost first): Esc closes the calendar if open,
+  // otherwise closes the drawer. One routed handler — never two stacked hooks.
+  useEscClose(calendarField ? () => setCalendarField(null) : onClose);
 
   // §2.9 preset pills (Sleep / Nap / Food). activePreset locks a bundle of
   // fields; presetSnapshot restores them on deselect; presetTouched silences ML
@@ -265,10 +296,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headSuggestion, newHeadTouched]);
 
-  const start = startStr ? parseClock(startStr) : undefined;
-  const end = endStr ? parseClock(endStr) : undefined;
-  const budget = budgetStr ? parseBudget(budgetStr) : undefined;
-  const timing = useMemo(() => deriveTiming(start, end, budget), [start, end, budget]);
+  const timing = useMemo(() => deriveTiming(startMin, endMin, budgetMin), [startMin, endMin, budgetMin]);
 
   // §2.5: flags derive from type; user overrides live in `flags`, clamped by the
   // validity matrix (fixed → never slideable; budgeted → always slideable;
@@ -277,67 +305,119 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // §2.9: an active preset locks breakable OFF regardless of timing.
   const breakable = activePreset ? false : timing === "budgeted" && !ommf ? (flags.breakable ?? true) : false;
 
-  /** §7.0.2 snap-at-entry: a committed budget below MIN_FRAGMENT is corrected in
-   * the field itself (never accepted-then-rejected). Returns the snapped string
-   * and sets the inline warning. */
-  const snapBudgetStr = (bStr: string): string => {
-    const b = bStr ? parseBudget(bStr) : undefined;
-    if (b !== undefined && b < minFragment) {
-      setWarning(`Budget below the ${minFragment}-minute floor — raised to ${fmtBudget(minFragment)}`);
-      return fmtBudget(minFragment);
-    }
-    return bStr;
+  /** Push a computed trio into state: set epoch truth + reformat the buffers per
+   * the 12h/24h setting, and surface the §7.0.2 adjustments + tomorrow offer. */
+  const commitTrio = (r: DeriveResult): void => {
+    setStartMin(r.startMin);
+    setEndMin(r.endMin);
+    setBudgetMin(r.budgetMin);
+    setStartStr(r.startMin !== undefined ? fmtT(r.startMin) : "");
+    setEndStr(r.endMin !== undefined ? fmtT(r.endMin) : "");
+    setBudgetStr(r.budgetMin !== undefined ? fmtDurUnits(r.budgetMin) : "");
+    setAdjustments(r.adjustments);
+    setTomorrowOffer(r.tomorrow ?? null);
+    setError(r.err);
   };
 
-  /** §3.6 derivation applied to explicit field strings (no stale closure): the
-   * changed field is authoritative; a second present field derives the third;
-   * all three present → edit Start→End, Budget→End, End→Budget. */
-  const applyDerive = (
-    changed: "start" | "end" | "budget",
-    sStr: string,
-    eStr: string,
-    bStr: string,
-  ): void => {
-    const r = derive(changed, sStr, eStr, bStr);
-    setWarning(null);
-    setStartStr(r.start);
-    setEndStr(r.end);
-    setBudgetStr(snapBudgetStr(r.budget)); // §7.0.2 correct-at-the-boundary
-    setError(r.err);
+  /** Flow (§1.6): casual-parse the changed buffer → §3.6 derive + snap-notify.
+   * The changed field is authoritative; a second present field derives the third. */
+  const commitField = (changed: "start" | "end" | "budget"): void => {
+    let s = startMin;
+    let e = endMin;
+    let b = budgetMin;
+    const explicitDay = { start: false, end: false };
+    let parseFailed = false;
+
+    if (changed === "start") {
+      if (!startStr.trim()) s = undefined;
+      else {
+        const p = parseCasualTime(startStr, now);
+        if (p.value === undefined) parseFailed = true;
+        else { s = p.value; explicitDay.start = p.explicitDay; }
+      }
+    } else if (changed === "end") {
+      if (!endStr.trim()) e = undefined;
+      else {
+        const p = parseCasualTime(endStr, now);
+        if (p.value === undefined) parseFailed = true;
+        else { e = p.value; explicitDay.end = p.explicitDay; }
+      }
+    } else {
+      if (!budgetStr.trim()) b = undefined;
+      else {
+        const p = parseCasualDuration(budgetStr);
+        if (p === undefined) parseFailed = true;
+        else b = p;
+      }
+    }
+
+    if (parseFailed) {
+      // Never silently discard — keep the buffer, tell the user it wasn't read.
+      setAdjustments([{ field: changed, message: `Couldn't read "${(changed === "budget" ? budgetStr : changed === "start" ? startStr : endStr).trim()}" — leaving it as typed` }]);
+      return;
+    }
+    commitTrio(deriveDayAware(changed, { startMin: s, endMin: e, budgetMin: b }, explicitDay, now, minFragment, fmtT));
   };
 
   /** Tapping a chip pre-fills its fields (the app never says no — SPEC VI). */
   const shapeTo = (t: TimingType): void => {
     setError(null);
     setFlags({});
-    if (t === "unscheduled") { setStartStr(""); setEndStr(""); setBudgetStr(""); }
-    else if (t === "budgeted") { setStartStr(""); setEndStr(""); setBudgetStr(fmtBudget(DEFAULT_BUDGET)); }
-    else if (t === "semi-head") { setStartStr(fmtClock(now)); setEndStr(""); setBudgetStr(""); }
-    else if (t === "semi-tail") { setStartStr(""); setEndStr(fmtClock(now + DEFAULT_BUDGET)); setBudgetStr(""); }
-    else { setStartStr(fmtClock(now)); setEndStr(fmtClock(now + DEFAULT_BUDGET)); setBudgetStr(fmtBudget(DEFAULT_BUDGET)); }
+    setAdjustments([]);
+    setTomorrowOffer(null);
+    let s: number | undefined;
+    let e: number | undefined;
+    let b: number | undefined;
+    if (t === "budgeted") b = DEFAULT_BUDGET;
+    else if (t === "semi-head") s = now;
+    else if (t === "semi-tail") e = now + DEFAULT_BUDGET;
+    else if (t === "fixed") { s = now; e = now + DEFAULT_BUDGET; b = DEFAULT_BUDGET; }
+    setStartMin(s);
+    setEndMin(e);
+    setBudgetMin(b);
+    setStartStr(s !== undefined ? fmtT(s) : "");
+    setEndStr(e !== undefined ? fmtT(e) : "");
+    setBudgetStr(b !== undefined ? fmtDurUnits(b) : "");
   };
 
-  /** ±5-min stepper on a clock or budget field; derives from the NEW value. */
+  /** ±5-min stepper on a clock or budget field; re-derives from the NEW value. */
   const step = (field: "start" | "end" | "budget", dir: 1 | -1): void => {
-    let sStr = startStr;
-    let eStr = endStr;
-    let bStr = budgetStr;
-    if (field === "budget") {
-      const cur = budgetStr ? parseBudget(budgetStr) ?? 0 : 0;
-      bStr = fmtBudget(Math.max(minFragment, cur + dir * 5)); // §7.0.2 floor
-    } else {
-      const str = field === "start" ? startStr : endStr;
-      const cur = str ? parseClock(str) : undefined;
-      const nv = fmtClock((cur ?? now) + dir * 5);
-      if (field === "start") sStr = nv; else eStr = nv;
-    }
-    applyDerive(field, sStr, eStr, bStr);
+    let s = startMin;
+    let e = endMin;
+    let b = budgetMin;
+    if (field === "budget") b = Math.max(minFragment, (budgetMin ?? 0) + dir * 5); // §7.0.2 floor
+    else if (field === "start") s = (startMin ?? now) + dir * 5;
+    else e = (endMin ?? now) + dir * 5;
+    // A stepper edit carries the field's existing day, so treat it as explicit
+    // (no past-time bump from nudging an already-placed value).
+    commitTrio(deriveDayAware(field, { startMin: s, endMin: e, budgetMin: b }, { start: true, end: true }, now, minFragment, fmtT));
+  };
+
+  /** Apply the "did you mean tomorrow?" offer for a past-time anchor (§1.6). */
+  const applyTomorrow = (): void => {
+    if (!tomorrowOffer) return;
+    const { field, toMin } = tomorrowOffer;
+    const s = field === "start" ? toMin : startMin;
+    const e = field === "end" ? toMin : endMin;
+    commitTrio(deriveDayAware(field, { startMin: s, endMin: e, budgetMin }, { start: true, end: true }, now, minFragment, fmtT));
+  };
+
+  /** Far-date calendar pick (min = now+2): set that anchor to the chosen day,
+   * keeping the current time-of-day. */
+  const applyCalendar = (field: "start" | "end", dayMin: number): void => {
+    const cur = field === "start" ? startMin : endMin;
+    const tod = cur !== undefined ? ((cur % 1440) + 1440) % 1440 : 9 * 60; // keep time, default 09:00
+    const chosen = dayMin + tod;
+    const s = field === "start" ? chosen : startMin;
+    const e = field === "end" ? chosen : endMin;
+    setCalendarField(null);
+    commitTrio(deriveDayAware(field, { startMin: s, endMin: e, budgetMin }, { start: true, end: true }, now, minFragment, fmtT));
   };
 
   /* ------------------------- §2.9 preset pills --------------------------- */
 
   const captureFields = (): FieldSnapshot => ({
-    title, activity, subheadSource, startStr, endStr, budgetStr, ommf, flags, sleepKind, newHeadChoice, newHeadTouched,
+    title, activity, subheadSource, startStr, endStr, budgetStr, startMin, endMin, budgetMin, ommf, flags, sleepKind, newHeadChoice, newHeadTouched,
   });
   const restoreFields = (snap: FieldSnapshot, keepTitle: boolean): void => {
     if (!keepTitle) setTitle(snap.title);
@@ -346,13 +426,17 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     setStartStr(snap.startStr);
     setEndStr(snap.endStr);
     setBudgetStr(snap.budgetStr);
+    setStartMin(snap.startMin);
+    setEndMin(snap.endMin);
+    setBudgetMin(snap.budgetMin);
     setOmmf(snap.ommf);
     setFlags(snap.flags);
     setSleepKind(snap.sleepKind);
     setNewHeadChoice(snap.newHeadChoice);
     setNewHeadTouched(snap.newHeadTouched);
     setError(null);
-    setWarning(null);
+    setAdjustments([]);
+    setTomorrowOffer(null);
   };
   /** Fill the locked/seeded fields for a preset. Sleep/Nap force the title;
    * Food (editable title) only seeds it when empty, so a matching typed title
@@ -412,9 +496,9 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     if (!title.trim()) { setError("Title is required"); return null; }
     const finalHead = derivedHead ?? (isNewActivity ? newHeadChoice.trim() : "");
     if (!activity.trim() || !finalHead) { setError("Pick or create a sub-head and its head"); return null; }
-    let anchorStart = start;
-    let anchorEnd = end;
-    let bud = budget;
+    let anchorStart = startMin;
+    let anchorEnd = endMin;
+    let bud = budgetMin;
     if (anchorStart !== undefined && anchorEnd !== undefined && anchorEnd <= anchorStart)
       anchorEnd += 1440;
     if (timing === "fixed") {
@@ -469,7 +553,9 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     placeholder: string,
   ): JSX.Element => (
     <div className={`field role-${roles[field].replace(" ", "-")}`}>
-      <label data-tip={`For the ${timing} type this field is ${roles[field]}`}>
+      <label data-tip={field === "budget"
+        ? `For the ${timing} type this field is ${roles[field]}`
+        : `For the ${timing} type this field is ${roles[field]}. Type casually ("3pm", "tom 7am", "1500") — it formats on blur.`}>
         {name}
         {roles[field] === "required" && <span className="req-dot" aria-label="required">•</span>}
       </label>
@@ -477,10 +563,21 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
         <input
           value={value}
           onChange={(e) => set(e.target.value)}
-          onBlur={() => applyDerive(field, startStr, endStr, budgetStr)}
+          onBlur={() => commitField(field)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitField(field); } }}
           placeholder={placeholder}
           className="num"
         />
+        {field !== "budget" && (
+          <button
+            type="button"
+            tabIndex={-1}
+            className="cal-btn"
+            aria-label={`Pick a far date for ${name}`}
+            data-tip="Pick a date (day after tomorrow onward). Today & tomorrow: just type them."
+            onClick={() => setCalendarField(field)}
+          >📅</button>
+        )}
         <div className="time-stepper-btns">
           <button type="button" tabIndex={-1} aria-label={`Increase ${name}`} onClick={() => step(field, 1)}>▴</button>
           <button type="button" tabIndex={-1} aria-label={`Decrease ${name}`} onClick={() => step(field, -1)}>▾</button>
@@ -632,9 +729,9 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
               </div>
             )}
           </div>
-          {timeField("Start", "start", startStr, setStartStr, "15:50")}
-          {timeField("End", "end", endStr, setEndStr, "16:20")}
-          {timeField("Budget", "budget", budgetStr, setBudgetStr, "00:30")}
+          {timeField("Start", "start", startStr, setStartStr, "e.g. 3pm, tom 7am")}
+          {timeField("End", "end", endStr, setEndStr, "e.g. 16:20, tomorrow 9am")}
+          {timeField("Budget", "budget", budgetStr, setBudgetStr, "e.g. 1h30, 45m")}
           <div className="field">
             <div className="hint-row">
               <div className="flag-row">
@@ -670,9 +767,27 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
               <span className="hint-glyph" tabIndex={0} aria-label="Flags help" data-tip="Flags derive from the timing type; editable within the validity rules">ⓘ</span>
             </div>
           </div>
-          {warning && <div className="form-warning" role="status">{warning}</div>}
+          {adjustments.length > 0 && (
+            <div className="form-warning" role="status">
+              {adjustments.map((a, i) => (
+                <div key={i}>{a.message}</div>
+              ))}
+              {tomorrowOffer && (
+                <button type="button" className="ml-choice-value" onClick={applyTomorrow} data-tip="Move this to tomorrow instead">
+                  Did you mean {fmtT(tomorrowOffer.toMin)}? →
+                </button>
+              )}
+            </div>
+          )}
           {error && <div className="form-error" role="alert">{error}</div>}
         </div>
+        {calendarField && (
+          <DatePicker
+            now={now}
+            onPick={(dayMin) => applyCalendar(calendarField, dayMin)}
+            onClose={() => setCalendarField(null)}
+          />
+        )}
         <div className="drawer-footer">
           <button className="primary" onClick={() => add(false)}>Add</button>
           <button className="start-accent" onClick={() => add(true)}>Add &amp; start now ⚡</button>

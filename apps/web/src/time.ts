@@ -36,6 +36,40 @@ export function fmtAbs(m: Min, opts: { now?: Min; hour12?: boolean } = {}): stri
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${hhmm}`;
 }
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+/** Day-aware time label for the drawer's Start/End fields (§06): today shows
+ *  just the clock ("03:00PM"); tomorrow shows "Tomorrow, 03:00PM"; anything
+ *  from the day after onward shows a dated label ("Wed Jul 22, 03:00PM"). */
+export function fmtDayTime(m: Min, now: Min, hour12: boolean): string {
+  const d = toDate(m);
+  const clock = fmtClock(d, hour12);
+  const dayOf = (x: Date): number =>
+    Math.floor(new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime() / 86400000);
+  const delta = dayOf(d) - dayOf(toDate(now));
+  if (delta === 0) return clock;
+  if (delta === 1) return `Tomorrow, ${clock}`;
+  if (delta === -1) return `Yesterday, ${clock}`;
+  return `${WEEKDAYS[d.getDay()]} ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${clock}`;
+}
+
+/** Duration in unit form "Nd Nh Nm" (§06): drops zero units, always shows at
+ *  least minutes. 1590 → "1d 2h 30m" · 1500 → "1d 1h" · 90 → "1h 30m" · 30 →
+ *  "30m" · 0 → "0m". */
+export function fmtDurUnits(minutes: Dur): string {
+  let rest = Math.max(0, Math.round(minutes));
+  const d = Math.floor(rest / (24 * 60));
+  rest -= d * 24 * 60;
+  const h = Math.floor(rest / 60);
+  const m = rest - h * 60;
+  const parts: string[] = [];
+  if (d > 0) parts.push(`${d}d`);
+  if (h > 0) parts.push(`${h}h`);
+  if (m > 0) parts.push(`${m}m`);
+  return parts.length ? parts.join(" ") : "0m";
+}
+
 /** Duration: MM:WW:DD:HH:MM — months/weeks/days only when non-zero (SPEC VI).
  *  90 → "01:30" · 8d2h → "01:01:02:00" (1w 1d 2h 0m). */
 export function fmtDur(minutes: Dur): string {
