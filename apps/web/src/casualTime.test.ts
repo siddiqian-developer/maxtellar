@@ -123,6 +123,14 @@ describe("resolvePastTime — history/back-log mirror (direction is caller-owned
     expect(r.notes).toEqual([]);
   });
 
+  it("short yesterday aliases resolve to the day before ('yes 3 am' → yesterday 03:00)", () => {
+    for (const s of ["yes 3 am", "yst 3am", "ytd 3:00"]) {
+      const r = resolvePastTime(s, NOW);
+      expect(dayOffsetOf(r.value!, NOW), s).toBe(-1);
+      expect(r.value, s).toBe(dayStartMin(NOW) - 1440 + 3 * 60);
+    }
+  });
+
   it("a year-less explicit date resolves to the PAST, not next year (pastBias)", () => {
     // NOW = Jul 15 2026; "jul 1" must mean Jul 1 2026 (past), not Jul 1 2027.
     const r = resolvePastTime("jul 1 8am", NOW);

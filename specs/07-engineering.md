@@ -272,6 +272,11 @@ error-prevention. The reducer's `snapTask`/physics snap is the backstop; the fie
   model itself is a late stage (cloud/AI only late, always local fallback, **never
   load-bearing** — the app works fully with ML off). Time fields store **absolute epoch
   minutes** (multi-day capable); display honors the 12h/24h setting.
+  - **The seam is WIRED (2026-07-15):** on a grammar miss `parseCasualTime` hands the WHOLE raw
+    input to `fallbackParse` before giving up — a failure is never silently "left as typed"
+    without the ML try (null today; live when the model lands). Relative-day tokens are
+    misspelling- and abbreviation-tolerant, incl. short forms **`yes`/`yst`/`ytd`** for yesterday
+    (so "yes 3 am" → "Yesterday, 03:00 AM"); `fmtDayTime` labels past/today/tomorrow/further days.
 - **Notify scope — meaning-changes only.** Announce: past-time snapped forward (with a
   one-tap "tomorrow" offer), overnight wrap, MIN_FRAGMENT floor. Pure reformatting
   (`3pm`→`3:00 PM`) is silent (expected, not a correction).
@@ -345,6 +350,30 @@ just plumbing. Writing a component from scratch is the exception, taken only wit
 
 This reconciles the existing bespoke components (DatePicker, drawers, etc.): they predate this
 ruling and stay, but **new** UI work starts from "what package does this?" first.
+
+### 7.0.5 UI symmetry — same semantic input, same powers everywhere (LAW, 2026-07-15)
+**Binding, future-facing (grilled 2026-07-15 — "make the app symmetrical").** A given *semantic
+input type* must behave **identically on every surface** it appears — the planning drawer, gap-fill,
+the history editor, week-plan templates, off-period dialogs, and anything built later. No surface
+gets a "lean" version that silently drops powers the drawer has. Concretely:
+
+1. **Every date/time/duration input** inherits the smart-input pipeline (§7.0.2: casual parse →
+   snap → snap-notify) **AND a calendar (📅) affordance** to pick the *date* (the time is still
+   typed). The picker is **direction-aware**: planning/future fields open a future picker (earliest
+   = now+2, today/tomorrow typed); history/back-log/past fields open a **past** picker. **Exemption:**
+   a *time-of-day-only* input (a recurring weekly anchor — a "9am" that repeats, not a calendar date)
+   carries smart-input but **no** calendar, because it has no date. Duration inputs carry smart-input
+   (no calendar — a duration has no date).
+2. **Every sub-head input** carries the **title → sub-head ML suggestion** (§7.0.1: autofill when
+   empty/app-sourced, a one-click "Use this" chip when the user has typed something else, intent-
+   protected so an accepted/typed value is never overwritten). **Every new-head input** carries the
+   **sub-head → head ML suggestion**. ML is never load-bearing (deterministic entry always works).
+
+**Enforcement:** these live in the *shared* field components (`SubheadField`, the smart date/time
+field, `DatePicker`), so adopting them yields symmetry by construction; a bespoke one-off input is a
+bug. When adding ANY new input, reach for the shared component — never hand-roll a raw `<input>` for
+a time/date/duration/head/sub-head. (Ties to §7.0.4 buy-over-build: reuse the shared field, don't
+re-invent it.)
 
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly

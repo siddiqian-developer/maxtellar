@@ -16,11 +16,12 @@ import { useMemo, useState } from "react";
 import type { Channels, Event, HistoryEntry, HistoryOutcome } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
-import { resolvePastTime, fitPastInterval } from "../casualTime";
+import { resolvePastTime, fitPastInterval, dayStartMin } from "../casualTime";
 import { fmtDayTime, fmtDur } from "../time";
 
 import { useEscClose } from "../useEscClose";
 import { SubheadField } from "./SubheadField";
+import { DatePicker } from "./DatePicker";
 
 interface Props {
   /** The entry to edit, or null for a fresh back-logged entry. */
@@ -44,7 +45,6 @@ const OUTCOME_LABEL: Record<HistoryOutcome, string> = {
 };
 
 export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClose }: Props): JSX.Element {
-  useEscClose(onClose);
   const { timeFormat } = useSettings();
   const hour12 = timeFormat === "12h";
   const { addActivity } = useHeads();
@@ -64,6 +64,9 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
   const [outcome, setOutcome] = useState<HistoryOutcome>(entry?.outcome ?? "completed");
   const [sleepKind, setSleepKind] = useState<HistoryEntry["sleepKind"]>(entry?.sleepKind);
   const [notes, setNotes] = useState<string[]>([]);
+  const [calField, setCalField] = useState<"start" | "end" | null>(null);
+  // Esc closes the calendar first, then the drawer (back-navigation stack).
+  useEscClose(calField ? () => setCalField(null) : onClose);
 
   const span = Math.max(0, endMin - startMin);
 
@@ -97,6 +100,22 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
       setEndStr(fmtT(v));
     }
     setNotes(localNotes);
+  };
+
+  // §7.0.5 calendar affordance (past): keep the typed time-of-day, set the DATE.
+  const pickDay = (dayMin: number): void => {
+    const field = calField;
+    if (!field) return;
+    const cur = field === "start" ? startMin : endMin;
+    const tod = ((cur % 1440) + 1440) % 1440;
+    let v = dayMin + tod;
+    const localNotes: string[] = [];
+    if (v > now) { v = now; localNotes.push("Clamped to now — history can't cross into the future"); }
+    if (field === "start" && v < floor) { v = floor; localNotes.push(`Start earlier than the editable window (the last day-start) — moved to ${fmtT(floor)}`); }
+    if (field === "start") { setStartMin(v); setStartStr(fmtT(v)); }
+    else { setEndMin(v); setEndStr(fmtT(v)); }
+    setNotes(localNotes);
+    setCalField(null);
   };
 
   // A Sleep/Nap tag also names the sub-head (Recharge auto-derives, §2.9).
@@ -195,14 +214,19 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
       <label data-tip='Type casually ("2pm", "yesterday 10pm", "1500") — it formats on blur, into the past.'>
         {name} <span className="req-dot" aria-label="required">•</span>
       </label>
-      <input
-        value={value}
-        aria-label={name}
-        onChange={(e) => set(e.target.value)}
-        onBlur={() => commitTime(field, value)}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitTime(field, value); } }}
-        className="num"
-      />
+      <div className="time-stepper">
+        <input
+          value={value}
+          aria-label={name}
+          onChange={(e) => set(e.target.value)}
+          onBlur={() => commitTime(field, value)}
+          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitTime(field, value); } }}
+          className="num"
+        />
+        <button type="button" tabIndex={-1} className="cal-btn" aria-label={`Pick a date for ${name}`}
+          data-tip="Pick a past date (up to today). The time stays as typed."
+          onClick={() => setCalField(field)}>📅</button>
+      </div>
     </div>
   );
 
@@ -222,7 +246,7 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
           </div>
           <div className="field">
             <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} />
+            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} title={title} />
           </div>
           {timeField("Start", "start", startStr, setStartStr)}
           {timeField("End", "end", endStr, setEndStr)}
@@ -282,6 +306,9 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
             <button className="cancel-accent delete-btn" onClick={remove} data-tip="Delete this entry">Delete</button>
           )}
         </div>
+        {calField && (
+          <DatePicker now={now} direction="past" earliest={dayStartMin(floor)} onPick={pickDay} onClose={() => setCalField(null)} />
+        )}
       </div>
     </div>
   );

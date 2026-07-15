@@ -10,8 +10,9 @@ import { useState } from "react";
 import type { Event, State } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
-import { parseCasualTime } from "../casualTime";
+import { parseCasualTime, parseTimeOfDay } from "../casualTime";
 import { fmtDayTime } from "../time";
+import { DatePicker } from "./DatePicker";
 
 interface Props {
   state: State;
@@ -48,7 +49,6 @@ function OffDialog({
   dispatch: (e: Event) => void;
   onClose: () => void;
 }): JSX.Element {
-  useEscClose(onClose);
   const { timeFormat } = useSettings();
   const hour12 = timeFormat === "12h";
   const [title, setTitle] = useState("");
@@ -56,6 +56,20 @@ function OffDialog({
   const [endStr, setEndStr] = useState("");
   const [endMin, setEndMin] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [calOpen, setCalOpen] = useState(false);
+  // Esc closes the calendar first, then the dialog (back-navigation stack).
+  useEscClose(calOpen ? () => setCalOpen(false) : onClose);
+
+  // §7.0.5: the calendar sets the DATE; the typed time-of-day is kept (default 5pm).
+  const pickDay = (dayMin: number): void => {
+    const cur = endMin !== null ? ((endMin % 1440) + 1440) % 1440 : (() => { const t = parseTimeOfDay(endStr); return t ? t.hour * 60 + t.min : 17 * 60; })();
+    const v = dayMin + cur;
+    setKnown(true);
+    setEndMin(v);
+    setEndStr(fmtDayTime(v, now, hour12));
+    setErr(null);
+    setCalOpen(false);
+  };
 
   const commitEnd = (raw: string): void => {
     if (!raw.trim()) { setEndMin(null); return; }
@@ -106,15 +120,21 @@ function OffDialog({
           {known && (
             <div className="field">
               <label>Ends at</label>
-              <input value={endStr} className="num" aria-label="Ends at"
-                onChange={(e) => setEndStr(e.target.value)}
-                onBlur={() => commitEnd(endStr)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitEnd(endStr); } }}
-                placeholder="e.g. 5pm, tomorrow 9am" />
+              <div className="time-stepper">
+                <input value={endStr} className="num" aria-label="Ends at"
+                  onChange={(e) => setEndStr(e.target.value)}
+                  onBlur={() => commitEnd(endStr)}
+                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitEnd(endStr); } }}
+                  placeholder="e.g. 5pm, tomorrow 9am" />
+                <button type="button" tabIndex={-1} className="cal-btn" aria-label="Pick an end date"
+                  data-tip="Pick a date (day after tomorrow onward). Today & tomorrow: just type them."
+                  onClick={() => setCalOpen(true)}>📅</button>
+              </div>
             </div>
           )}
           {err && <div className="form-warning" role="status">{err}</div>}
         </div>
+        {calOpen && <DatePicker now={now} direction="future" onPick={pickDay} onClose={() => setCalOpen(false)} />}
         <div className="drawer-footer">
           <button className="primary" onClick={start}>Start off-period</button>
           <button className="cancel-accent" onClick={onClose}>Cancel</button>

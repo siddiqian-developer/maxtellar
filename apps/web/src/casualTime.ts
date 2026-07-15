@@ -50,7 +50,7 @@ function matchDayWord(word: string): number | null {
   const w = word.toLowerCase();
   if (["today", "tdy", "tod"].includes(w)) return 0;
   if (["tomorrow", "tom", "tmrw", "tmr", "tmw", "tomo", "tomm"].includes(w)) return 1;
-  if (["yesterday", "yest", "yday"].includes(w)) return -1;
+  if (["yesterday", "yest", "yday", "yes", "yst", "ytd"].includes(w)) return -1;
   // fuzzy for genuine misspellings ("tmorow", "tomorow", "yesterdy")
   if (w.length >= 4) {
     if (editDistance(w, "tomorrow") <= 2) return 1;
@@ -172,7 +172,15 @@ export function parseCasualTime(
   }
 
   const tod = parseTimeOfDay(rest);
-  if (!tod) return { value: undefined, dayOffset, explicitDay };
+  if (!tod) {
+    // §7.0.2 two-staged parser: the deterministic grammar failed → hand the
+    // WHOLE raw input to the ML fallback seam (biased toward ML when the grammar
+    // is unsure). Null today (the model lands in the late ML stage), but the seam
+    // is live so a failure is never silently "left as typed" without a try.
+    const fb = fallbackParse(raw, now);
+    if (fb) return fb;
+    return { value: undefined, dayOffset, explicitDay };
+  }
 
   const base = dayStartMin(now) + dayOffset * MIN_PER_DAY;
   return { value: base + tod.hour * 60 + tod.min, dayOffset, explicitDay };

@@ -93,6 +93,10 @@ is a button (`pointer-events` on, unlike the global clock): click opens a popove
 (paper-raised, hairline border, 8px radius, below the clock) holding the **Tick** chip row
 (10s…60m single steps) and the **Run** chip row (10s/1s…10m/1s rates + Stop) — chips reuse
 `.type-chip` styling with `data-status="budgeted"`; the active running rate stays `active`.
+A third **Jump to day** chip row (Sun…Sat, `data-status="semi-tail"`; the current weekday
+stays `active`) advances the logical clock forward to the next occurrence of that weekday at
+the same time-of-day — the clock is monotonic (R11), so picking today's weekday lands on next
+week. Lets dev land on an OFF day to exercise weekday-gated flows (§4.4 planning window).
 While an accelerated rate is running (anything above the 1s/1s default) the time line
 gains a subtle pulse (opacity 1→0.75, 1s ease alternate) as the "fast-forwarding" cue.
 

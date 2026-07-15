@@ -105,7 +105,7 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
           </div>
           <div className="field">
             <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} />
+            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} title={title} />
           </div>
         </div>
         {/* Footer order consistent with the New Task drawer: primary first

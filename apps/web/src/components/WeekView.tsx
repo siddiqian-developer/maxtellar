@@ -27,7 +27,7 @@ interface Props {
   onBack: () => void;
 }
 
-const WD = ["Su", "Mo", "Tu", "We", "Th", "Fr", "Sa"];
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const TIMINGS: TimingType[] = ["budgeted", "fixed", "semi-head", "semi-tail", "unscheduled"];
 const TIMING_LABEL: Record<TimingType, string> = {
   budgeted: "Budgeted",
@@ -302,7 +302,7 @@ function TemplateEditor({
           </div>
           <div className="field">
             <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} />
+            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} title={title} />
           </div>
           <div className="field">
             <label>Timing</label>

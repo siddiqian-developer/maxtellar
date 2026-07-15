@@ -39,6 +39,8 @@ const RUN_RATES: { label: string; sec: number }[] = [
   { label: "10m/1s", sec: 600 },
 ];
 
+const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+
 export function DevClock({ now, dispatch }: Props): JSX.Element {
   const { timeFormat } = useSettings();
   const hour12 = timeFormat === "12h";
@@ -61,6 +63,20 @@ export function DevClock({ now, dispatch }: Props): JSX.Element {
   };
   const advanceRef = useRef(advance);
   advanceRef.current = advance;
+
+  // Jump the logical clock forward to the next occurrence of a weekday (same
+  // time-of-day) — the clock is monotonic (R11), so we can only go forward;
+  // picking the current weekday lands on next week. Lets dev land on an OFF day
+  // to exercise weekday-gated flows (§4.4 planning window).
+  const jumpToWeekday = (wd: number): void => {
+    const d = toDate(now);
+    let add = (wd - d.getDay() + 7) % 7;
+    if (add === 0) add = 7;
+    const target = new Date(d);
+    target.setDate(d.getDate() + add);
+    setSec(0);
+    dispatch({ type: "TICK", to: Math.floor(target.getTime() / 60000) });
+  };
 
   useEffect(() => {
     const perSec = rate ?? 1;
@@ -139,6 +155,21 @@ export function DevClock({ now, dispatch }: Props): JSX.Element {
             >
               Stop
             </button>
+          </div>
+          <span className="dev-clock-row-label">Jump to day</span>
+          <div className="type-chips">
+            {WEEKDAYS.map((w, i) => (
+              <button
+                key={w}
+                type="button"
+                className={`type-chip${i === toDate(now).getDay() ? " active" : ""}`}
+                data-status="semi-tail"
+                onClick={() => jumpToWeekday(i)}
+                title={`Jump forward to the next ${w} (same time of day)`}
+              >
+                {w}
+              </button>
+            ))}
           </div>
         </div>
       )}
