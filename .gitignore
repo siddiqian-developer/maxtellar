@@ -49,3 +49,6 @@ desktop.ini
 # Temporary
 tmp/
 temp/
+
+# browser-cli verification artifacts (screenshots per session)
+.claude/tools/browser-cli/sessions/

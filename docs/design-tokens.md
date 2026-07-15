@@ -81,6 +81,21 @@ Stacked column: date line (above) — 13px, `ink-faint`, short format (weekday, 
 time line (below) — serif, 600 weight, 18px, tabular-nums, `ink`, includes seconds. Format
 (12h/24h) reads from the app-wide setting (below), not a local default.
 
+## Dev clock (topbar, dev sandbox only)
+
+Sits at **3/4 of the topbar width** (`left: 75%; transform: translate(-50%, -50%)`,
+vertically centered like the global clock), visible only while the Dev sandbox setting is
+on; hidden below 720px
+with the global clock. Same stacked column (date over time-with-seconds, same sizes) but
+**budgeted-hue** (`--st-budgeted`) time line and a `DEV` micro-label (9px, uppercase,
+wide-tracked, budgeted hue) above the date, so it can never be mistaken for wall time. It
+is a button (`pointer-events` on, unlike the global clock): click opens a popover card
+(paper-raised, hairline border, 8px radius, below the clock) holding the **Tick** chip row
+(10s…60m single steps) and the **Run** chip row (10s/1s…10m/1s rates + Stop) — chips reuse
+`.type-chip` styling with `data-status="budgeted"`; the active running rate stays `active`.
+While an accelerated rate is running (anything above the 1s/1s default) the time line
+gains a subtle pulse (opacity 1→0.75, 1s ease alternate) as the "fast-forwarding" cue.
+
 ## Time format setting (app-wide)
 
 One setting — `12h` (default, AM/PM) or `24h` — in `apps/web/src/settings.tsx`
@@ -194,6 +209,72 @@ Outline (not filled) for non-primary actions so they stay present next to a soli
 without competing. Drawer footer order (settled 2026-07-10):
 `Add(primary) · Add & start now ⚡(accent outline) · [flex space] · Cancel(danger outline)`.
 
+## Pipeline task card (spec VI "card anatomy", 2026-07-12)
+
+Class `.card` in the pipeline, column layout, `gap: 8px`, padding `10px 12px`; the
+header row (`.card .row`) is a flex row with `gap: 6px` (compacted 2026-07-12).
+
+- **Left state bar:** `border-left: 3px solid <state-hue>` — running `--accent`, overrun
+  `--danger`, unstarted its timing hue (`--st-unscheduled/-budgeted/-semi/-fixed`; both
+  semis share `--st-semi`); rest of the border stays `hairline`. The running card keeps
+  its `accent-soft` fill.
+- **Index badge** (`.pipe-idx`): 12px, weight 700, `ink-faint`, tabular-nums, `#N`.
+- **Live dot** (`.live-dot`): 7px circle, `--accent` (`.overrun` → `--danger`), subtle
+  matching `box-shadow: 0 0 6px`; `::after` ripple ring animates `scale 0.7→2.4` /
+  `opacity 0.9→0` over 1.5s infinite; `display: none` under `prefers-reduced-motion`.
+  Sits inline just before the index badge, only on the running card.
+- **Timing-type pill** (2026-07-12, on EVERY card): the existing `.card .badge[data-timing]`
+  style — `--st-*`-filled pill, white text, uppercase, compacted to 9px in the card row,
+  `flex-shrink: 0` — content the timing-type label, placed just before the status
+  capsule in the header row. The running card reads its
+  timing from `RunningTask.timing` (carried over at START_TASK); a paused remainder shows
+  its recomputed remainder timing.
+- **Status capsule** (`.state-capsule`): pill (`border-radius: 999px`, padding `2px 7px`,
+  inner gap 4px — compacted 2026-07-12 from `2px 9px`/5px for the packed header row),
+  background `color-mix(<state-hue> 10%, transparent)`, border
+  `color-mix(<state-hue> 35%, transparent)`; category span 9.5px 500 uppercase
+  `ink-faint`, `•` bullet, substate span 9.5px 700 uppercase in the state hue.
+  **Lifecycle-only (2026-07-12):** `Started • Running/Overrun/Paused`, or single-segment
+  `Unstarted` (no substate — the timing moved to the timing pill). Substate→hue: running
+  `accent`, overrun `danger`, paused (remainder) `ink-soft` on a plain hairline capsule
+  (deliberately hue-less — calm, no new amber token). The unstarted capsule keeps its
+  timing hue (`data-hue` = the timing's hue key) so the card still color-agrees.
+- **Head badge:** the existing neutral `.badge` pill, content `Head · Sub-head`
+  (sub-head omitted when empty). Never hued — color is reserved for state.
+  **Lives in the header row next to the title (2026-07-12)** — no own row. The title
+  drops its `flex: 1` and ellipsizes (`min-width: 0; overflow: hidden; text-overflow:
+  ellipsis; white-space: nowrap`); the capsule takes `margin-left: auto` to stay
+  right-pinned; the badge gets the same ellipsis treatment plus `flex-shrink: 20` so a
+  long `Head · Sub-head` collapses before the title does. The timing pill and capsule
+  are `flex-shrink: 0` — text truncates, pills never do.
+- **Fields row** (`.card-fields`): a single flex row (2026-07-12, was a 3-col grid) —
+  `display: flex; gap: 10px`, each `.cf-group` a column with `flex: 1 1 auto` and
+  min-width left **auto** (= min-content): cells size to their VALUE's content, share
+  leftover space, and an over-full row squeezes a long value into wrapping at its
+  spaces — but no cell ever shrinks below its longest word, so `00:30` can never wrap.
+  Five cells, six on a paused remainder, always one field-row. Label (`.cf-label`):
+  9.5px, 600, uppercase, `letter-spacing: 0.04em`, `ink-faint`, plus `width: 0;
+  min-width: 100%; overflow: hidden; text-overflow: ellipsis` — the label does NOT
+  drive its cell's width (the value does); it stretches to the value's width and
+  truncates (`REMAINING` may read `REM…`, never overlapping the next cell). Value
+  (`.cf-value`): 12px, tabular-nums, `ink`, `overflow-wrap: break-word` (a long value
+  like `~tomorrow 12:01 AM` wraps at spaces, mid-token only as a last resort). Presumed
+  (will-reflow) times: `.cf-floating` → italic with a leading `~` in the markup (same
+  edge language as the timeline); anchored values upright; absent → `—` in `ink-faint`.
+  Every card carries `Start(ed)/End(s)/Budget/Spent/Remaining` (2026-07-12); a paused
+  remainder's first field is labelled **Restart** (no "start" — the resume moment) and
+  it adds a live **Paused** field as the sixth cell. The former `Resumes at` pill
+  (`.resume-pill`) is **removed** (2026-07-12) — redundant with the Restart field.
+- **Lock icon** (`.lock-icon`, 2026-07-13): inline padlock SVG shown only when
+  `isSlideable = false`, immediately after the title in the header row. 11×11px,
+  `stroke: var(--ink-faint)` (neutral — never a state hue), `stroke-width: 1.5`,
+  no fill, `flex-shrink: 0`, `title="Not slideable"`. Absence = slideable.
+- **Wasted badge** (`.wasted-badge`): quiet neutral pill — hairline border, transparent
+  bg, 11px `ink-soft`, the duration in `<strong>` `ink`; never hued.
+- Footer buttons keep the semantic action-button law but are **compact (2026-07-12)**:
+  `.card .actions button` → `padding: 2px 10px; font-size: 12.5px`. Meta line (`.meta`)
+  unchanged.
+
 ## Task drawer size
 
 `.drawer`: `width: 100%; max-width: 450px` (widened 2026-07-11 from 440px, +25%), full height,
@@ -226,10 +307,48 @@ rather than moving to the next line (`overflow-wrap: anywhere` breaks a single o
 place). **Note:** the brand tint is a deliberate, user-directed exception to the "accent is
 reserved for living elements only" usage rule below.
 
+## Topbar navigation menu (2026-07-12)
+
+`.nav-menu`: flex row, `gap: 2px`, sits directly after the wordmark. Each `.nav-btn` is
+the house quiet icon button (28px square, transparent, `ink-faint`, monoline 16px SVG,
+hover → `ink`), with a `data-tip` tooltip (Day / History / Analytics). Active screen:
+`.nav-btn.active` → `color: ink; opacity: 1` plus a 2px `ink-soft` underline bar
+(`::after`, `left/right: 6px; bottom: 2px; border-radius: 1px`). Never accent — the menu
+is chrome, not a living element.
+
+## History screen (full page, 2026-07-12)
+
+Same full-page chrome as the Heads config screen (`.config-screen`: `grid-column: 1/-1;
+grid-row: 2/3` under the topbar, which stays visible), scrollable, `max-width: 640px`
+centered body. Day group: `.history-day` heading — 14px serif-weight 600 `ink`, hairline
+`border-bottom`, `padding-bottom: 6px`, `margin: 18px 0 10px`. Row (`.history-row`): flex,
+`gap: 10px`, `align-items: center`, `padding: 8px 4px`, hairline bottom border between
+rows; time range `.hr-range` 12px tabular-nums `ink-soft` `width: 130px` upright (history
+is fact); title `.hr-title` 13px 600 `ink` `flex: 1`; the neutral head badge (reuses
+`.badge.head-badge`); outcome pill `.outcome-pill` (same shape as `.state-capsule`, 9.5px
+700 uppercase): completed → accent tint, soft-ended → hue-less hairline, cancelled →
+danger tint, skipped → hue-less + `opacity 0.6` + line-through title; duration `.hr-dur`
+12px tabular-nums `ink`.
+Ordering is **oldest-first** (days and rows, 2026-07-13). **Gap row** (`.history-gap`,
+2026-07-13): a `.history-row` with only range / "gap" title / duration (no badge, no
+outcome pill); whole row `opacity: 0.55`; title italic 400 `ink-soft`.
+
+## Analytics screen (full page, 2026-07-12)
+
+Same full-page chrome, `max-width: 720px`. Hero row (`.ledger-hero`): 3 stat cells
+(`.stat`), each a column — label 10px uppercase `ink-faint` over a 20px serif tabular
+value in `ink`; Wasted/Lost values take `--danger` only when non-zero. Tables
+(`.ledger-table`): full-width, hairline row borders, 13px; header cells 10px uppercase
+`ink-faint`; numeric cells tabular-nums right-aligned; per-head rows plain `ink`; totals
+row 600 weight with a `ink-soft` top border. Durations only, `fmtDur`. Section headings
+match the config screen's (14px, `ink-soft`).
+
 ## Heads & Sub-heads config screen (full page)
 
-Not a modal — replaces the timeline+pipeline grid area entirely (`grid-column: 1/3;
-grid-row: 1/3`), scrollable, `max-width: 640px` centered body. Sticky header (`back`
+Not a modal — replaces the timeline+pipeline grid area entirely (`grid-column: 1/-1;
+grid-row: 2/3` — **below the topbar, which stays visible** since the nav menu lives
+there; corrected 2026-07-12, the old `1/3` span shoved the topbar into an implicit bottom
+row), scrollable, `max-width: 640px` centered body. Sticky header (`back`
 chevron + title) matches the topbar's height/border-bottom for visual continuity. Section
 headings are small (`14px`, `ink-soft`) — this screen is data-entry-first, no fancy chrome
 needed since it's visited rarely. Head delete (×) sits inline with the head name

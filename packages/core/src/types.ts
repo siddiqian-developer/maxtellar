@@ -107,6 +107,8 @@ export interface RunningTask {
   rank: string;
   tier: Tier;
   ommf: boolean;
+  /** the started task's timing type, carried over so views can show it. */
+  timing: TimingType;
   startedAt: Min;
   /** countdown when budget set; stopwatch otherwise. */
   budget?: Dur;

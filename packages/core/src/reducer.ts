@@ -87,16 +87,39 @@ export function runningView(s: State): RunningView | null {
 const totalChannels = (c: Channels): Dur => c.spent + c.wasted + c.managed + c.breaks;
 
 function resettle(s: State): State {
-  return {
-    ...s,
-    placements: settle({
-      plan: s.plan,
-      cursor: cursorOf(s),
-      minFragment: s.minFragment,
-      openExtentCap: s.openExtentCap,
-      semiTailFloor: s.semiTailFloor,
-    }),
-  };
+  const placements = settle({
+    plan: s.plan,
+    cursor: cursorOf(s),
+    minFragment: s.minFragment,
+    openExtentCap: s.openExtentCap,
+    semiTailFloor: s.semiTailFloor,
+  });
+  // G28: slide = MOVING (§3.2) — a slid task's anchor coordinate moves WITH
+  // the ride, every settle. The stored anchor always equals the placed edge,
+  // so views read it as an exact, upright fact (never ~italic) and there is
+  // no "commit" moment. Idempotent: re-deriving the wall from the moved
+  // anchor reproduces the same placement.
+  let changed = false;
+  const plan = s.plan.map((i) => {
+    if (i.kind !== "task" || !i.slideable || i.timing === "fixed") return i;
+    const p = placements.find((pl) => pl.itemId === i.id);
+    if (!p || p.parts.length === 0) return i;
+    if (i.timing === "semi-tail") {
+      const end = p.parts[p.parts.length - 1]!.end;
+      if (i.anchorEnd !== undefined && end !== i.anchorEnd) {
+        changed = true;
+        return { ...i, anchorEnd: end };
+      }
+    } else if (i.timing === "semi-head") {
+      const start = p.parts[0]!.start;
+      if (i.anchorStart !== undefined && start !== i.anchorStart) {
+        changed = true;
+        return { ...i, anchorStart: start };
+      }
+    }
+    return i;
+  });
+  return changed ? { ...s, plan, placements } : { ...s, placements };
 }
 
 /** Record (or extend) the amputated head of an anchored task as zero-occupancy
@@ -109,6 +132,14 @@ function applyAmputations(s: State): State {
 
   for (const item of state.plan) {
     if (item.kind !== "task") {
+      surviving.push(item);
+      continue;
+    }
+    // G28: a slideable anchored task is NEVER amputated — under any pressure
+    // (bare now, a runner's span, overrun) settle rides it ahead of the
+    // cursor instead; its moment never silently passes. Fixed is never
+    // slideable; R4 amputation is non-slideable business only.
+    if (item.slideable && item.timing !== "fixed") {
       surviving.push(item);
       continue;
     }
@@ -155,7 +186,8 @@ function applyAmputations(s: State): State {
     }
     if (floorInvaded) {
       const skipId = `skip-${item.id}`;
-      const start = anchoredEnd! - (item.budget ?? state.minFragment);
+      // open semi-tail dies at its floor span (G27), not MIN_FRAGMENT
+      const start = anchoredEnd! - (item.budget ?? Math.max(state.minFragment, state.semiTailFloor));
       if (!history.find((h) => h.id === skipId)) {
         history = [
           ...history,
@@ -283,9 +315,14 @@ export function reduce(state: State, event: Event): State {
       const plan = s.plan.filter((i) => i.rank >= target.rank && i.id !== target.id);
 
       // 3. Start (explicit human act — the only way anything runs, G11).
+      // An anchored END is a contract that survives starting: fixed AND
+      // semi-tail run a countdown to their anchor (late start runs the
+      // remainder; the anchor outranks a stored budget). Never a stopwatch
+      // that erases the end.
       const budget =
-        target.timing === "fixed"
-          ? Math.max(s.minFragment, target.anchorEnd! - s.now) // late start runs the remainder
+        (target.timing === "fixed" || target.timing === "semi-tail") &&
+        target.anchorEnd !== undefined
+          ? Math.max(s.minFragment, target.anchorEnd - s.now)
           : target.budget;
       const running = {
         id: target.id,
@@ -295,6 +332,7 @@ export function reduce(state: State, event: Event): State {
         rank: target.rank,
         tier: target.tier,
         ommf: target.ommf,
+        timing: target.timing,
         startedAt: s.now,
         ...(budget !== undefined ? { budget } : {}),
         channels: emptyChannels(),

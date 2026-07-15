@@ -21,8 +21,9 @@ interface Settings {
   /** Timeline sub-hour graduation marks; 0 = don't show (default). */
   gridGranularity: GridGranularity;
   setGridGranularity: (g: GridGranularity) => void;
-  /** Dev sandbox (§7): testing affordances — e.g. speed-up on the running
-   * task. Never changes scheduler semantics, only exposes extra controls. */
+  /** Dev sandbox (§7): testing affordances — e.g. the topbar dev clock that
+   * ticks/fast-forwards logical `now`. Never changes scheduler semantics,
+   * only exposes extra controls. */
   devSandbox: boolean;
   setDevSandbox: (v: boolean) => void;
 }

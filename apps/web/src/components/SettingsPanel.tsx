@@ -108,7 +108,7 @@ export function SettingsPanel({ openExtentCap, semiTailFloor, dispatch, onClose,
             <button onClick={onOpenHeadsConfig}>Manage heads &amp; sub-heads →</button>
           </div>
           <div className="field">
-            <label className="flag" data-tip="Testing affordances — adds a speed-up control to the running task. Never changes scheduler behavior.">
+            <label className="flag" data-tip="Testing affordances — shows a dev clock beside the global clock that ticks/fast-forwards logical time. Never changes scheduler behavior.">
               <input
                 type="checkbox"
                 checked={devSandbox}

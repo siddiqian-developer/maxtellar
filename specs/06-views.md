@@ -1,6 +1,17 @@
 # PART VI — VIEWS
 
 One spine, multiple projections.
+
+**Screen navigation (2026-07-12):** the app has four screens — **Day** (timeline +
+pipeline, the default), **History**, **Analytics**, and **Heads & Sub-heads config**
+(reached via Settings, not the menu). History and Analytics are **full screens** like the
+config screen: they replace the timeline+pipeline grid area entirely (real navigation, no
+overlay/scrim). A **topbar navigation menu** sits directly after the wordmark: three quiet
+icon-only buttons (Day / History / Analytics — house floating-icon-button style, custom
+tooltips, monoline SVG). The **active screen's icon reads full `ink`** with a small
+underline bar; inactive ones stay `ink-faint`-quiet. Esc / the back (‹) affordance follow
+the back-navigation stack rule below — History/Analytics opened from the menu return to
+**Day**.
 1. **Active timeline (MAIN):** Google-Calendar day view; **pinned now-seam** (~35% height, day
    flows upward through it); left time axis; box heights ∝ duration; ticks every minute; strong
    seam duality; gently-witnessed reflow. Gaps = hatched empty space. Overrun = box tail past a
@@ -22,8 +33,11 @@ One spine, multiple projections.
    an anchored coordinate reads at a glance.
    **Every task box whispers its start/end clock time (2026-07-12):** the start (top) and end
    (bottom) timestamp is shown aligned to that edge in the time gutter, smaller than an hour tick
-   so it never competes, and joined to the axis by a short **graduation line** (a ruler-style tick
-   from the number out to the axis). It reads in the main `ink` (readable, not dimmed). Its style
+   so it never competes, and joined by a short **graduation line** — a ruler-style tick drawn on
+   the **RIGHT side of the axis** (2026-07-12), reaching from the axis toward the block edge it
+   labels (stopping at the block inset). Each tick points at what it belongs to: task times belong
+   to blocks (right of the axis), hour marks belong to the ruler labels (left gutter).
+   It reads in the main `ink` (readable, not dimmed). Its style
    **follows the edge's border**: an **anchored** edge (solid — a pinned coordinate) reads
    **upright**; a **floating** edge (dashed — presumed by the scheduler, reflows) reads **italic**
    with a leading **"~"** ("≈, will move"). So `fixed` → both upright; `semi-head` → upright start,
@@ -38,11 +52,11 @@ One spine, multiple projections.
    to its true edge on the axis (so the label clears the hour but still reads as belonging to that
    edge). Up to **two** such labels stack under one hour (each a step lower); a rare third stays at
    its edge without a leader rather than piling up. The offset label drops its own graduation tick
-   (the leader replaces it).
+   (the leader replaces it, terminating in the same short right-side tick past the axis).
    **Always-on hour graduation tick (2026-07-12):** every labelled hour also carries a short
-   **solid** tick on the axis, extending right off the axis line (stopping at the block inset so it
-   never touches a box). This is independent of the opt-in sub-hour grid below — hours always show
-   their tick.
+   **solid** tick on the axis, extending **LEFT off the axis line toward its hour label** in the
+   gutter (swapped from right, same day — task-time ticks own the right side; see above). This is
+   independent of the opt-in sub-hour grid below — hours always show their tick.
    **Sub-hour ruler graduation is OPT-IN (2026-07-12):** between the labelled hours the timeline
    can show minor graduation ticks, controlled by **Settings → Timeline grid** with granularity
    **Off / 5 / 10 / 15 / 30 min** and **defaulting to Off**. When on, ticks are drawn off the axis
@@ -62,6 +76,69 @@ One spine, multiple projections.
    to the end in rank order.
    **Unstarted-card Cancel buttons carry the danger accent** (2026-07-11, per the semantic
    action-button color law — outline `--danger`, same as the drawer's Cancel).
+   **Card anatomy (2026-07-12):** every pipeline card is built from these elements, top to
+   bottom (exact values in `docs/design-tokens.md` "pipeline task card"):
+   - **State-hued left bar** (3px): the card's left border carries the state hue — running =
+     `accent`, overrun = `danger`, unstarted = its timing-type hue (the §"State-hue pills"
+     palette). The rest of the border stays hairline.
+   - **Header row:** pipeline **index badge** `#N` (time-order position, tabular-nums; the
+     running card takes `#1` and the unstarted list continues from `#2`) — on the running
+     card the index is joined by a **live ripple dot** (accent; danger when overrun; the
+     ripple is an "ON" lamp, suppressed under `prefers-reduced-motion`); the **title**
+     (static text — editing stays in the drawer/fork, never inline on the card); a quiet
+     `OMMF` pill when set; a **timing-type pill on EVERY card (2026-07-12)** — the
+     task's timing type (Fixed/Semi-head/Semi-tail/Budgeted/Unscheduled) as a small
+     pill filled with its `--st-*` hue (the drawer type-chip look), sitting just before
+     the capsule; the running card carries its timing from START_TASK, a paused
+     remainder shows its recomputed remainder timing — and the **status capsule**,
+     now **lifecycle-only (2026-07-12)**: `Started • Running`, `Started • Overrun`,
+     `Started • Paused` (a paused remainder, `remainderOf` set), or single-segment
+     `Unstarted` (its former timing substate moved to the timing pill — nothing reads
+     twice). **Paused is never Unstarted (2026-07-12):** work on a remainder has begun;
+     it is the continuation, not a fresh task. Substate text takes the state hue; the
+     capsule background is a soft tint of the same hue.
+     **The head badge lives in the header row too (2026-07-12):** the neutral pill
+     `Head · Sub-head` sits directly **next to the title** (colorless — hue is reserved
+     for STATE, same law as the timeline; it shrinks/ellipsizes before the title does);
+     the capsule stays pinned to the row's right edge. The badge's former own row is gone
+     — the card is one row shorter.
+     **Lock icon on non-slideable cards (2026-07-13):** when `isSlideable = false`, a small
+     muted padlock (inline SVG, text-sized, neutral — never a state hue) sits in the header
+     row immediately after the title. Absence = slideable: the common case stays quiet, only
+     the immovable card is marked. Pipeline cards only for now (timeline blocks may follow
+     later). Exact size/color in `docs/design-tokens.md` "pipeline task card".
+   - **Fields row** (labelled, read-only): tiny uppercase labels over tabular-nums values,
+     **all packed in a SINGLE row (2026-07-12)** — five cells (six on a paused remainder),
+     never wrapping to a second line.
+     **Every card shows Spent and Remaining (2026-07-12)**, not just the running one:
+     `Start(ed) / End(s) / Budget / Spent / Remaining` on every card. Fresh unstarted:
+     Spent `00:00`, Remaining = budget. Running countdown: live Spent/Remaining. Running
+     open (stopwatch): Ends `—`, Budget `open`, Remaining `—`, Spent ticks (it IS the
+     elapsed meter). A **paused remainder** additionally: its Spent sums the prior
+     segments' history (walking the `remainderOf` chain), its Budget shows the **original
+     total** (spent + remaining — so `remaining = budget − spent` reads true, matching
+     every other card), Remaining = its own stored budget, and it carries a sixth field —
+     **Paused (2026-07-12, always shown on the paused part)**: live minutes since the
+     pause moment (`now −` the last segment's history end), ticking. Absolute times
+     follow the
+     timeline's edge language: an **anchored** coordinate reads upright; a **presumed**
+     (scheduler-placed, will reflow) one reads *~italic*; unplaced shows `—`. The running
+     card's projected end is always presumed (~italic).
+     **A paused remainder has no "start time" (2026-07-12):** its first time field is
+     labelled **Restart** (the scheduler-placed resume moment — ~italic unless anchored);
+     the earlier separate `Resumes at <time>` pill is **removed** as redundant with it.
+   - **Wasted badge:** the running card shows a quiet `Wasted <dur>` pill when its
+     `channels.wasted` > 0.
+   - **Footer actions** (unchanged semantics, **compact height 2026-07-12** — see
+     design-tokens): running → Pause (neutral) + Complete (primary); unstarted → Start
+     (primary) + Cancel (danger outline). (The dev-sandbox ⏩ speed-ups that used to sit
+     here moved to the topbar dev clock, 2026-07-12.) A meta line notes
+     splits (`N parts`) and squeeze (`squeezed Nm`).
+   Explicitly **not** on the card (rejected from the reference): inline field editing /
+   steppers (drawer's job), calendar-provenance tags (no external calendar in MVP),
+   re-open/refine-timing corrections, drag-to-reorder, twin spent/remaining split cards
+   (a pause = history entry + one remainder card), done/locked states (pipeline never
+   shows finished work).
    **The split is user-resizable (2026-07-11):** a 6px drag handle between the columns
    (hairline at rest, accent-soft on hover/drag) sets the pipeline width — clamped
    240px…60% of the window, persisted locally (`pipelineWidth`), default 340px. The new-task
@@ -76,6 +153,14 @@ One spine, multiple projections.
    - **Weekly report:** per-head weekly target vs achieved vs remaining, plus the aggregate
      rows (Sleeping / Waking / Work / OTW-Productive / Total-Productive / Wasted / Lost Hours).
    - Time-blind on start/end times; totals only; Skipped = 0m; persistent deficit badges.
+   - **First slice shipped (2026-07-12), a full screen via the topbar menu:** two sections.
+     **Today** — the elapsed-day ledger: hero row `Accounted / Wasted / Lost` (wall elapsed
+     = accounted + lost; wasted is the sum of `channels.wasted`), then a per-head table of
+     achieved minutes (occupancy history + the running task's live spend), zero-sum against
+     the accounted total. **This week** — per-head × last-7-days grid of achieved minutes
+     with row/column totals. Durations only (time-blind), `fmtDur`. **Target/Remaining
+     columns arrive with quotas (§5.1)** — omitted until quotas exist, not shown empty.
+     Days are calendar days for now; sleep-cycle days land with the §4 ceremonies.
    - **Sheet mapping (reference):** sheet "heads" (Main Work, Self-Management, Health, Job,
      Core Work, Self-Learning, Kitchen Work, Sleep, Rest, Meditation, …, Time-Wasted subtree)
      → app **Heads**; sheet per-day columns → app **days (sleep-cycles)**; sheet Budgeting
@@ -84,6 +169,19 @@ One spine, multiple projections.
      Sleepless-Bedtime/…) confirms **Wasted Time** needs user-defined sub-activities.
 4. **History:** exact as-happened flow; history editor for pre-SOD edits (no-overlap enforced;
    end ≤ now wall). Cloud-offload provision (e.g. Drive) for unbounded growth.
+   **First slice shipped (2026-07-12), a full screen via the topbar menu — read-only** (the
+   editor is a later slice): entries **grouped by day, oldest day first**, day heading with a
+   hairline underline; within a day, rows **oldest-first** (top-to-bottom = chronological, the
+   screen reads like the day happened; reversed from the first slice, 2026-07-13). **Idle time
+   between two consecutive finished runs renders as a quiet gap row** between them (dimmed, no
+   pills: just "gap" + its duration via `fmtDur`); zero idle → no row. **Only between two
+   finished runs:** no trailing gap row from the last run to `now` (still forming — Lost Hours
+   in analytics owns it), none before the day's first run. A gap spanning midnight splits at
+   the day heading, each day showing its portion. Each row: absolute start–end range
+   (upright — history is fact, never ~italic), title, neutral `Head · Sub-head` pill, an
+   **outcome pill** (Completed / Soft-ended / Cancelled / Skipped — outcome is state, so these
+   take a hue: completed = accent, soft-ended = hue-less, cancelled/skipped = danger-tinted /
+   dimmed), and the duration (`fmtDur`; skipped = `00:00` zero-occupancy marker).
 
 **Task entry:** FAB → drawer (Title / Sub-head / Start / End / Budget), live type-morph
 chip, inline physics-snapping, `[Start now ⚡]`. Title accepts deterministic shorthand tokens
@@ -185,9 +283,27 @@ Holds the **Timeline grid** setting (2026-07-12, persisted `gridGranularity`): t
 graduation granularity — chips **Off / 5 / 10 / 15 / 30 min**, **default Off** — a display-only
 preference (localStorage, not event-sourced, like Clock format).
 Holds a **Dev sandbox** toggle (2026-07-11, persisted `devSandbox`): testing affordances
-only, never a semantics change — when on, the running task's pipeline card gains **⏩ +5m /
-+15m speed-up buttons** (budgeted-hue outline) that fast-forward logical `now` via a batch
-`TICK` to `now + n`; wall-clock ticks resume once real time catches up.
+only, never a semantics change. When on, a **dev clock** appears in the topbar at **3/4 of
+the topbar width** (left: 75%, right of the centered global clock; 2026-07-12 — this
+supersedes the running card's ⏩ +5m/+15m
+speed-up buttons, removed as redundant): same stacked date-over-time layout as the global
+clock but rendered in the budgeted hue, showing **logical `now`** (the scheduler clock)
+plus a locally-held seconds remainder — sub-minute ticks accumulate in the component and
+dispatch a batch `TICK` only when a whole-minute boundary is crossed (domain time stays
+integer minutes; the event log never sees seconds). Clicking the dev clock opens a small
+popover (Esc/outside-click closes it — top-level panel per the back-navigation rule) with
+two chip rows:
+- **Tick** — one click advances dev `now` by that step: **10s · 15s · 30s · 1m · 5m ·
+  10m · 15m · 30m · 60m**.
+- **Run** — auto-advance at a dev-time-per-real-second rate: **10s/1s · 30s/1s · 1m/1s ·
+  5m/1s · 10m/1s**. **With no rate selected the dev clock still runs at the default
+  1s/1s** (real pace — it is never frozen); clicking a rate accelerates it, clicking the
+  active rate again (or the Stop chip) returns to the 1s/1s default. Only one rate runs
+  at a time, and toggling Dev sandbox off removes the clock entirely.
+Because the timeline (blocks, ticks, now-seam), pipeline cards, and hero metric all render
+from logical `now`, they follow the dev clock as soon as it is used — no separate display
+plumbing. Real wall-clock ticks are no-ops until wall time catches up with the
+fast-forwarded `now` (monotonic clock, R11), after which normal minute ticking resumes.
 Holds the app-wide **clock format** (12h/24h) as its first setting, applied uniformly to the
 global clock, timeline tick labels, and pipeline card times — a single source, not
 per-component toggles. Also links out to the Heads & Sub-heads screen below. Extend this

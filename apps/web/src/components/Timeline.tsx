@@ -76,11 +76,13 @@ export function Timeline({ state }: { state: State }): JSX.Element {
     const item = planItems.get(p.itemId);
     if (!item || item.kind !== "task" || p.parts.length === 0) continue;
     const open = isOpen(p.itemId);
-    const topAnchored = item.timing === "fixed" || item.timing === "semi-head";
-    // An open task's end is a presumed cap — always floating, regardless of timing.
-    const bottomAnchored = (item.timing === "fixed" || item.timing === "semi-tail") && !open;
     const first = p.parts[0];
     const last = p.parts[p.parts.length - 1];
+    const topAnchored = item.timing === "fixed" || item.timing === "semi-head";
+    // An open task's end is a presumed cap — always floating, regardless of timing.
+    // A riding semi-tail needs no case here: slide MOVES the anchor (G28), so
+    // the anchored edge is always the live, exact coordinate.
+    const bottomAnchored = (item.timing === "fixed" || item.timing === "semi-tail") && !open;
     if (first) putEdge(first.start, topAnchored, true);
     if (last) putEdge(last.end, bottomAnchored, false);
   }
@@ -218,12 +220,13 @@ export function Timeline({ state }: { state: State }): JSX.Element {
           >
             {renderedEdges.filter((e) => e.offset).map((e) => (
               // gutter coords: SVG x=0 is the gutter's left, x=64 is the axis. The
-              // leader runs from the timestamp's right end up to the edge, then a
-              // short horizontal tick into the axis (matching the graduation line).
+              // leader runs from the timestamp's right end up to the edge on the
+              // axis, then crosses it into the same short right-side tick the
+              // non-offset graduation line uses (overflow is visible).
               <polyline
                 key={`l${e.min}-${e.isStart ? "s" : "e"}`}
                 className="edge-leader"
-                points={`45,${e.tsY} 56,${e.edgeY} 64,${e.edgeY}`}
+                points={`45,${e.tsY} 64,${e.edgeY} 72,${e.edgeY}`}
                 fill="none"
               />
             ))}

@@ -61,7 +61,13 @@ function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur, tailFloor: Dur
       // Start anchored; tail floats. Budget-less → reserve the capped presumed
       // extent (§3.9, clamped later to the next wall); budgeted → its budget.
       const extent = t.budget ?? openCap;
-      return { itemId: t.id, start: t.anchorStart!, end: t.anchorStart! + extent, soft: isOpen(t) };
+      return {
+        itemId: t.id,
+        start: t.anchorStart!,
+        end: t.anchorStart! + extent,
+        slideable: t.slideable,
+        soft: isOpen(t),
+      };
     }
     case "semi-tail": {
       const budget = t.budget ?? openCap;
@@ -72,8 +78,9 @@ function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur, tailFloor: Dur
         itemId: t.id,
         start: t.anchorEnd! - budget,
         end: t.anchorEnd!,
+        slideable: t.slideable,
         ...(isOpen(t)
-          ? { compressibleTo: t.anchorEnd! - Math.max(minFragment, tailFloor), slideable: t.slideable }
+          ? { compressibleTo: t.anchorEnd! - Math.max(minFragment, tailFloor) }
           : {}),
         soft: isOpen(t),
       };
@@ -151,7 +158,21 @@ export function settle({
   }
 
   const walls: Wall[] = [];
+  const runnerSlid: Wall[] = []; // G28: slideable walls displaced by runner pressure
   for (const w of rawWalls) {
+    // G28: a slideable wall under ANY cursor pressure — bare now, a runner's
+    // span, or overrun — SLIDES later instead of being consumed: it rides just
+    // ahead of the cursor, live per tick. An open semi-tail first deflates to
+    // its floor (the clip below IS that deflation, end fixed); only past the
+    // floor does the whole floor-span ride. A budgeted semi-tail / semi-head
+    // rides whole (definite need, never compressed). Non-slideable walls keep
+    // the old clip/amputate physics (R4) — slideable is never crushed.
+    if (w.slideable && cursor > (w.compressibleTo ?? w.start)) {
+      const span = w.compressibleTo !== undefined ? w.end - w.compressibleTo : w.end - w.start;
+      const { compressibleTo: _dropped, ...rest } = w;
+      runnerSlid.push({ ...rest, start: cursor, end: cursor + span });
+      continue;
+    }
     // Cursor pressure clips a wall's head (amputation/compression — the reducer
     // records the skipped time; settle shows the surviving remainder). The
     // arithmetic is uniform: overflow = extent − placed (conservation-exact).
@@ -169,6 +190,27 @@ export function settle({
     if (start < w.end) walls.push({ ...w, start });
   }
   walls.sort((a, b) => a.start - b.start || a.end - b.end);
+  // Land each runner-slid wall in the first free space at/after its slid
+  // start, hopping over settled walls (a slid task never overlaps — no-overlap
+  // is inviolable). Anchored end has yielded: overflowDeficit stays 0.
+  for (const w of runnerSlid) {
+    const span = w.end - w.start;
+    let start = w.start;
+    for (const other of walls) {
+      if (other.end <= start) continue;
+      if (other.start < start + span) start = other.end;
+      else break;
+    }
+    const placed: Wall = { ...w, start, end: start + span };
+    placements.set(w.itemId, {
+      itemId: w.itemId,
+      parts: [{ start: placed.start, end: placed.end }],
+      squeezedDeficit: 0,
+      overflowDeficit: 0,
+    });
+    walls.push(placed);
+    walls.sort((a, b) => a.start - b.start || a.end - b.end);
+  }
 
   // ---- 2. Fill flexible items by rank into inter-wall space -----------------
   // Free space is traversed with a monotone pointer; walls are skipped over.

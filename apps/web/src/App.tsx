@@ -5,12 +5,16 @@ import { Timeline } from "./components/Timeline";
 import { Pipeline } from "./components/Pipeline";
 import { TaskDrawer } from "./components/TaskDrawer";
 import { GlobalClock } from "./components/GlobalClock";
+import { DevClock } from "./components/DevClock";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { HeadsConfigScreen } from "./components/HeadsConfigScreen";
+import { HistoryScreen } from "./components/HistoryScreen";
+import { AnalyticsScreen } from "./components/AnalyticsScreen";
 import { fmtDur } from "./time";
+import { useSettings } from "./settings";
 
 type Theme = "light" | "dark" | "system";
-type View = "main" | "headsConfig";
+type View = "main" | "headsConfig" | "history" | "analytics";
 
 /** Splash screen (SPEC VI): serif wordmark + the now-seam motif (hairline with
  * a sweeping accent dot) + tagline. Held for a minimum of 3s from first paint
@@ -33,6 +37,7 @@ const SPLASH_FADE_MS = 450;
 export function App(): JSX.Element {
   const { ready, persistent, state, dispatch, error } = useStore();
   const { addActivity } = useHeads();
+  const { devSandbox } = useSettings();
   const [drawerOpen, setDrawerOpen] = useState(false);
   // Resizable timeline/pipeline split: pipeline width in px, persisted.
   const [pipelineWidth, setPipelineWidth] = useState<number>(() => {
@@ -158,11 +163,47 @@ export function App(): JSX.Element {
     <div className="app" style={{ gridTemplateColumns: `1fr 6px ${pipelineWidth}px` }}>
       <div className="topbar">
         <h1>maxtellar</h1>
+        {/* Screen navigation (SPEC VI): quiet icon menu — Day / History / Analytics */}
+        <nav className="nav-menu" aria-label="Screens">
+          <button
+            className={`nav-btn${view === "main" ? " active" : ""}`}
+            onClick={() => setView("main")}
+            data-tip="Day"
+            aria-label="Day"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="3" y="4" width="18" height="17" rx="2" />
+              <path d="M3 9h18M8 2v4M16 2v4" />
+            </svg>
+          </button>
+          <button
+            className={`nav-btn${view === "history" ? " active" : ""}`}
+            onClick={() => setView("history")}
+            data-tip="History"
+            aria-label="History"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 12a9 9 0 1 0 3-6.7L3 8" />
+              <path d="M3 3v5h5M12 7v5l3 3" />
+            </svg>
+          </button>
+          <button
+            className={`nav-btn${view === "analytics" ? " active" : ""}`}
+            onClick={() => setView("analytics")}
+            data-tip="Analytics"
+            aria-label="Analytics"
+          >
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M4 20V10M10 20V4M16 20v-7M21 20H3" />
+            </svg>
+          </button>
+        </nav>
         <span className="meta num" title="Time Accounted vs Unaccounted — the hero metric">
           accounted {fmtDur(accounted)} · lost {fmtDur(lost)}
         </span>
         <span className="spacer" />
         <GlobalClock />
+        {devSandbox && <DevClock now={state.now} dispatch={(e) => void dispatch(e)} />}
         <span className="spacer" />
         {!persistent && <span className="warn">memory mode — data will not survive reload</span>}
         <button
@@ -188,6 +229,10 @@ export function App(): JSX.Element {
 
       {view === "headsConfig" ? (
         <HeadsConfigScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => { setView("main"); setSettingsOpen(true); }} />
+      ) : view === "history" ? (
+        <HistoryScreen state={state} onBack={() => setView("main")} />
+      ) : view === "analytics" ? (
+        <AnalyticsScreen state={state} onBack={() => setView("main")} />
       ) : (
         <>
           <Timeline state={state} />

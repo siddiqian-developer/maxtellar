@@ -12,6 +12,26 @@ doesn't require writing a fresh Node script each time.
 Lives at `.claude/tools/browser-cli/` (survives `/delete-code` — it's
 under `.claude/`, not app code).
 
+## Token discipline: screenshots are rationed, not banned (2026-07-13)
+
+Reading a full-page PNG costs ~1.1–1.5k tokens; an `eval` probe costs ~50.
+Screenshots taken but never Read cost nothing — the discipline is in reading.
+
+1. **Assert with `eval` first**: element presence, classes, text, counts —
+   e.g. `eval JSON.stringify({locks: document.querySelectorAll('.lock-icon').length})`.
+2. **Read at most ONE decisive screenshot per flow**, and only when (a) an
+   eval result contradicts expectations, or (b) the change is visual by
+   nature (layout, hue, typography) and only eyes can pass it.
+3. **Prefer `screenshot-element`** (crop to `.card`, `.history-row`, …) over
+   full-page — fewer image tokens, higher effective resolution on the target.
+4. **Pure-logic changes get zero screenshots** — unit tests + eval probes
+   carry reducer/settle math; screenshots enter only when a view changed.
+
+Never ban screenshots outright: eval only checks what you thought to ask.
+A real case (2026-07-13): the probe said `{"bAlive":true}` — pass — while
+the screenshot showed the task had been created as FIXED instead of
+semi-tail, invalidating the whole flow.
+
 ## Prerequisites
 
 - Dev server running first (see `run-timekeeper` skill —

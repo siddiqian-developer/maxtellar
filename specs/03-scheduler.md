@@ -66,8 +66,32 @@ The scheduler realizes user intent; it never compresses-to-fit or reorders to op
   beyond the obstacle.
 - **Overrun:** a Running task past budget keeps occupying and squeezes/wraps everything below,
   live; running past a fixed task amputates it (zero-occupancy) — legal per §3.1.
-- **At the floor:** an anchored/unscheduled task compressed to MIN_FRAGMENT under continued
-  pressure behaves like fixed → **amputates in place** (R4).
+- **Overrun vs the task below — G28 (settled 2026-07-13):** overrun is just another *pressure
+  from above* and reuses the **same slide mechanics as the tick** (one mechanic, never a bespoke
+  overrun path). **`isSlideable = true` → the task below SLIDES later**, never consumed —
+  **under ANY pressure front: bare `now` on a regular tick, a running task's span, or overrun
+  (corrected 2026-07-13: slideable is never crushed; a slideable task's moment never silently
+  passes — it rides until the user starts or cancels something).** An open semi-tail first
+  deflates from its floating start down to its floor (§3.9.1), then rides **as a whole**
+  (floor-span preserved); a budgeted semi-tail / slideable semi-head rides whole immediately
+  (definite need, never compressed). **The ride IS a move (§3.2): the anchor coordinate moves
+  with it, live, every tick** — the stored anchor always equals the placed edge, so the end is
+  an **exact fact and reads upright** (never `~italic`; ~ is reserved for scheduler-presumed
+  values, and a moved anchor is not a presumption). There is **no commit moment**: when the
+  pressure stops (runner ends, or the user acts), the anchor simply rests where it moved — no
+  re-balloon, no spring-back (no backward motion; the user may edit it back). Example
+  (now = 7 PM, runner in overrun, slideable open semi-tail at floor 7–8 PM anchored 8 PM): each
+  overrun minute pushes it 1 min later; runner ended at 8:40 PM → semi-tail 8:40–9:40 PM,
+  anchor now 9:40 PM. **`isSlideable = false` (ANY task — fixed, floor-pinned, unslideable
+  semi-tail, …) → overrun CONSUMES it completely**: progressive amputation as `now` advances
+  through it; fully covered → one zero-occupancy **Skipped** history entry, **no remainder**
+  (record-is-certain: never silently deleted, never resurrected — its moment passed under real
+  time). No wrap, no frogleap: overrun is elapsed reality, not a plan-time contest, so G27's
+  wrap/frogleap obstacle branch does **not** apply (generalizes §3.7's "running past a fixed
+  task amputates it" and R4's floor-pinned amputation).
+- **At the floor:** a **non-slideable** anchored/unscheduled task compressed to MIN_FRAGMENT
+  under continued pressure behaves like fixed → **amputates in place** (R4). *(A slideable one
+  never reaches this — it rides instead, G28.)*
 - **MIN_FRAGMENT:** global setting, default **5 min**, **settable in Settings**. **No task's
   budget — nor any fragment — may ever be below MIN_FRAGMENT.** All checks, validations, and
   physics-snaps enforce this floor at creation, edit, split, and compression. (Per-task
@@ -156,6 +180,10 @@ the unstarted chunk, inheriting the parent's priority rank. Analytics see one id
 - **Starting rules (locked from sheet study):**
   - **Start-over-running default = PAUSE the running task** (remainder survives, resumable);
     ending it instead stays one tap away. (Gentler than the sheet's SOFT_TERMINATE.)
+  - **An anchored END survives starting (2026-07-13):** starting a task with an anchored end
+    (fixed OR semi-tail) runs a **countdown to that anchor** — `budget = anchorEnd − now`
+    (≥ MIN_FRAGMENT; a late start runs the remainder; the anchor outranks a stored budget).
+    Never a stopwatch that erases the end.
   - **Starting a mid-queue task CANCELS all unstarted tasks above it** (sheet behavior kept —
     8-yr muscle memory): they become Cancelled (strikethrough), moving to the history chunk, so
     the two-chunk invariant holds. Deliberate skip-over = a decision that those tasks' moment
