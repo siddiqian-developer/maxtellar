@@ -93,6 +93,19 @@ describe("parseCasualTime — day-aware", () => {
     expect(dayOffsetOf(r.value!, NOW)).toBe(0);
     expect(r.value! < NOW).toBe(true);
   });
+
+  it("round-trips fmtDayTime's far-date output (weekday label ignored)", () => {
+    // The calendar affordance sets the field to fmtDayTime's own string; blur
+    // re-parses it, so the display MUST parse back (§7.0.2). "Sun Jul 19,
+    // 02:01 AM" → Jul 19 02:01, the "Sun" label ignored.
+    const target = Math.floor(new Date(2026, 6, 19, 2, 1).getTime() / 60000);
+    const r = parseCasualTime("Sun Jul 19, 02:01 AM", NOW);
+    expect(r.explicitDay).toBe(true);
+    expect(r.value).toBe(target);
+    // And the true round-trip through fmtDayTime for any far date.
+    const roundTrip = parseCasualTime(fmtDayTime(target, NOW, true), NOW);
+    expect(roundTrip.value).toBe(target);
+  });
 });
 
 describe("resolvePastTime — history/back-log mirror (direction is caller-owned)", () => {

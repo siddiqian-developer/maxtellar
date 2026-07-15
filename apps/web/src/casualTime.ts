@@ -60,6 +60,17 @@ function matchDayWord(word: string): number | null {
   return null;
 }
 
+/** Weekday NAME tokens (labels, not relative offsets). `fmtDayTime` prefixes a
+ * far date with one ("Wed Jul 22, …"); the parser strips it so the display
+ * round-trips. Distinct from matchDayWord's today/tom/yesterday offsets. */
+const WEEKDAY_NAMES = new Set([
+  "sun", "mon", "tue", "tues", "wed", "weds", "thu", "thur", "thurs", "fri", "sat",
+  "sunday", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday",
+]);
+function isWeekdayName(token: string): boolean {
+  return WEEKDAY_NAMES.has(token.toLowerCase().replace(/\.$/, ""));
+}
+
 /* ---------------------------- time-of-day -------------------------------- */
 
 interface TimeOfDay {
@@ -147,7 +158,13 @@ export function parseCasualTime(
   now: Min,
   opts: { pastBias?: boolean } = {},
 ): CasualTime {
-  const raw = input.trim();
+  const trimmed = input.trim();
+  if (!trimmed) return { value: undefined, dayOffset: 0, explicitDay: false };
+  // Strip ignorable weekday-NAME tokens ("Sun", "Wednesday") — human labels that
+  // fmtDayTime emits for far dates ("Wed Jul 22, 03:00 PM"), redundant with the
+  // absolute date and NOT relative-day offsets. Keeps the reformatted display
+  // round-trippable through this parser (a smart-input requirement, §7.0.2).
+  const raw = trimmed.split(/[\s,]+/).filter(Boolean).filter((t) => !isWeekdayName(t)).join(" ");
   if (!raw) return { value: undefined, dayOffset: 0, explicitDay: false };
 
   let dayOffset = 0;
