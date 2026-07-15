@@ -1,9 +1,9 @@
 # PART XI — TIME BUDGETING & THE CATEGORY TIER (design, 2026-07-15)
 
-> **Status: designed, not yet built.** Locked via two grill rounds (2026-07-15). This part
-> **REVISES §5.1** (which framed quotas as *weekly totals* with at-least/at-most + redistribution).
-> The model below replaces that with a **per-day, zero-sum, hard-balanced day-shape**. The new chat
-> must reconcile §5.1 against this before building. Naming of two Categories is still open (§11.10).
+> **Status: fully designed, not yet built.** Locked via two grill rounds (2026-07-15); the six
+> §11.10 micro-items resolved by grilling 2026-07-16. This part **REVISES §5.1** (which framed
+> quotas as *weekly totals* with at-least/at-most + redistribution) — §5.1 has been rewritten to
+> defer to this model with a **per-day, zero-sum, hard-balanced day-shape**.
 
 ## 11.0 Philosophy — zero-based budgeting for time
 A day is a fixed 24-hour envelope that cannot be expanded. As money is envelope-budgeted (every
@@ -15,17 +15,17 @@ so the cost of overhead stays visible in the one number that matters. See [01-ph
 
 ## 11.1 The Category tier (3-level hierarchy)
 Introduce a level **above** heads: **Category → Head → Sub-head** (was Head → Sub-head).
-- Categories seen so far: **Core Work**, **Supportive Work**, **Not Work**, **Time Wasted**
-  (last two names tentative — §11.10).
+- Categories: **Core Work**, **Maintenance** (was "Supportive Work"), **Not Work**, **Time
+  Wasted** (names locked 2026-07-16).
 - **Identity is the PATH, not the name.** The same activity name may live under two Categories with
-  different meaning — e.g. *Socialization* under Supportive Work (regenerative) vs under Time Wasted
+  different meaning — e.g. *Socialization* under Maintenance (regenerative) vs under Time Wasted
   (indulgent). A sub-head is `(category, head, sub-head)`, not a global string. This confirms the
   tree is load-bearing, and the head registry (`heads.tsx`, §2.1) grows a Category parent.
 - Example tree the user gave (Category / Head / Sub-head), for fixtures:
   - **Core Work** → Self-Management (Strategy & Planning, Personal Philosophy) · Health · Job (Core
     Work, Fundraising, Job Search) · Self-Learning (English-Speaking Practice, Public Speaking,
     Investor Hunting, Networking) · Other Work #1 · Other Work #2
-  - **Supportive Work** → Food (Kitchen work) · Cleaning · Plantcare · Clothes Work · Regenerative
+  - **Maintenance** → Food (Kitchen work) · Cleaning · Plantcare · Clothes Work · Regenerative
     (Machine Maintenance, Nap, Rest, Meditation, Break, Exercise, Socialization)
   - **Not Work** → Social Media · Sports
   - **Time Wasted** → Social Media · Socialization
@@ -47,6 +47,15 @@ R1        = R0 − Σ(all ABSOLUTE non-core head budgets)     // obligations, up
 netCore   = R1 − Self-Management                            // Self-Management is absolute, no %
 percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Core Work head h
 ```
+- **% is literally "% of netCore"** (locked 2026-07-16). Absolute Core Work heads are **not**
+  subtracted before the split; they claim hours from the same netCore envelope. The **hard-fit
+  constraint** is:
+  `Σ(absolute Core head hours) + Σ(pct)/100 × netCore === netCore` — exactly, snap-enforced
+  (same discipline as the 24h wall: the last-edited entry snaps back to the value that restores
+  the fit, notify + highlight). In the pure-% case this degenerates to **Σpct === 100**.
+  With the constraint held, the day balances **by construction** as overhead changes.
+  - Example (netCore = 10h, absolute core Job = 2h): the % heads may only sum to 80% —
+    Deep Work 50% → 5h, Learning 30% → 3h; core total = 2+5+3 = 10h ✓.
 - The **%-value is live-elastic**: hours reflow automatically as overhead (sleep, obligations,
   Self-Management) changes; **the % text always stays shown** (never replaced/hidden by the hours).
 - A Core Work head *may* still be absolute; % is simply the option only Core Work gets.
@@ -55,7 +64,8 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 ## 11.4 Sleep — the head of the day
 - Sleep is a first-class head with an **absolute** budget, part of the 24h sum ("sleep is the head
   of the day"). Editable in **both** weekly planning and Settings, **synced** (one source of truth).
-- Default: same value each planned day unless varied per-weekday (§11.10 open).
+- **One global value, no per-weekday variance** (locked 2026-07-16): every planned day carries the
+  same Sleep budget; editing it from either surface updates the single shared value.
 
 ## 11.5 Timing, pinned vs ranked, and the rank mechanism
 - A weekly head's timing is **`fixed`** (clock-anchored) or **`budgeted`** (flexible fill) **only** —
@@ -63,8 +73,9 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 - **Pinned** (not jostled): **Sleep** (day-head), any **fixed**-timing head (sits at its clock),
   **Self-Management** (protected overhead, subtracted first).
 - **Ranked**: every remaining **budgeted** head carries a **user-set rank** that drives fill order at
-  SOD, **independent of list position**. A reorder affordance is required (drag or up/down) plus a
-  **collapse-all**.
+  SOD, **independent of list position**. Reorder affordance (locked 2026-07-16): **both** a drag
+  handle (⋮⋮) **and** up/down arrows on each ranked row; a single **collapse-all / expand-all**
+  toggle lives in the outliner pane's header bar.
 
 ## 11.6 Category targets — roll-up by default, hard-fit on explicit entry
 - By default a Category's budget is **just the sum (roll-up) of its heads** — displayed, not
@@ -99,12 +110,19 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 - A weekly-plan validity selector: `Σ === 24h` (gate), per-Category explicit-target fits, live
   netCore + %→hours projection. All pure/event-sourced; the 24h + % math belongs in `packages/core`.
 
-## 11.10 Open micro-items (confirm in the build chat)
-1. **Category names**: *Supportive Work* → Upkeep / Maintenance / Sustaining Work; *Not Work* →
-   Leisure / Living / Recreation. (Core Work, Time Wasted keep their names.) — user to pick.
-2. **Sleep per-weekday** variance vs one global value.
-3. **Multiple %-core heads**: they split netCore by their percentages — do they have to sum to
-   100% of netCore, or can they under/over-subscribe it (and does the 24h gate catch that)?
-4. **Absolute Core Work heads** interaction with netCore (subtract before %-split, presumably).
-5. **Reorder affordance** (drag vs up/down) and **collapse-all** placement.
-6. **Snap UX** exact wording/animation on the 24h breach and Category-target breach.
+## 11.10 Micro-items — RESOLVED (grilled 2026-07-16)
+1. **Category names**: *Supportive Work* → **Maintenance**; *Not Work* → **keeps its name**.
+   (Core Work, Time Wasted unchanged.)
+2. **Sleep**: **one global value**, settable from both Weekly Planning and Settings, synced;
+   no per-weekday variance (§11.4).
+3. **Multiple %-core heads**: percentages are **literally % of netCore**; the hard fit is
+   `Σ(absolute core) + Σ(pct)/100 × netCore === netCore`. Pure-% case ⇒ Σpct === 100.
+   Enforced by snap at the % layer (not left to the 24h gate) so the culprit entry is named.
+4. **Absolute Core Work heads**: draw from the same netCore envelope (NOT subtracted before the
+   %-split); see the constraint above and the worked example in §11.3.
+5. **Reorder**: **both drag handle and up/down arrows**; **collapse-all** toggle in the outliner
+   pane header (§11.5).
+6. **Snap UX**: the **standard snap-notify law** (§7 smart-input) — snap at the boundary to the
+   value restoring the fit, toast names head + rule ("Snapped Health to 2h — day must equal
+   exactly 24h" / "… Maintenance must total 5h"), and the offending 24h-bar segment + head row +
+   its Category row **flash-highlight** briefly. No modal, no new mechanism.

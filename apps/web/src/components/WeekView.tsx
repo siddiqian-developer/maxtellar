@@ -184,7 +184,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
             <path d="M15 18l-6-6 6-6" />
           </svg>
         </button>
-        <h2>{mode === "week" ? "Week Plan" : "Calendar"}</h2>
+        <h2>{mode === "week" ? "Weekly Planning" : "Calendar"}</h2>
         <div className="wk-mode-toggle" role="tablist" aria-label="View">
           <button role="tab" aria-selected={mode === "week"} className={`wk-mode${mode === "week" ? " active" : ""}`} onClick={() => setMode("week")}>Week Plan</button>
           <button role="tab" aria-selected={mode === "calendar"} className={`wk-mode${mode === "calendar" ? " active" : ""}`} onClick={() => setMode("calendar")}>Calendar</button>

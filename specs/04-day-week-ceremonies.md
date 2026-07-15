@@ -201,7 +201,8 @@ warning naming the day. Dates **beyond** the coming week are stored and shown on
 inject at their own SOD (they are not placed on the live spine early).
 
 **Navigation.** The grid screen hosts a segmented **`[ Week Plan | Calendar ]`** toggle (same grid
-chrome, seamless): *Week Plan* = recurring, coming-week, heading "Week Plan"; *Calendar* = the dated
+chrome, seamless): *Week Plan* = recurring, coming-week, heading **"Weekly Planning"** (toggle label stays "Week
+Plan"; heading renamed 2026-07-16); *Calendar* = the dated
 view with **‹ prev / next ›** week arrows and a date header over each column, heading "Calendar".
 Both are reachable from the **main-screen nav**.
 
