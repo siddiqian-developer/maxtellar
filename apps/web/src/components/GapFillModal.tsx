@@ -29,7 +29,7 @@ interface Props {
 
 export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.Element {
   useEscClose(onClose);
-  const { timeFormat } = useSettings();
+  const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
   const { addActivity } = useHeads();
 
@@ -82,8 +82,8 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
         </div>
         <div className="drawer-body">
           <p className="field-desc">
-            Unaccounted time — <strong className="num">{fmtDayTime(from, now, hour12)}</strong> to{" "}
-            <strong className="num">{fmtDayTime(to, now, hour12)}</strong> ({fmtDur(span)}).
+            Unaccounted time — <strong className="num">{fmtDayTime(from, now, hour12, showWeekday)}</strong> to{" "}
+            <strong className="num">{fmtDayTime(to, now, hour12, showWeekday)}</strong> ({fmtDur(span)}).
           </p>
 
           {/* Quick single-tap fills */}

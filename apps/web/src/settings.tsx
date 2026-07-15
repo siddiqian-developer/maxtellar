@@ -55,6 +55,14 @@ const AI_LEVEL_VALUES: AiLevel[] = ["deterministic", "lightweight", "full"];
 interface Settings {
   timeFormat: TimeFormat;
   setTimeFormat: (f: TimeFormat) => void;
+  /** §7.0.2: show the weekday label on far-date times ("Sun, Jul 19, 02:01 AM"
+   * vs "Jul 19, 02:01 AM"). Default on. The parser ignores the label either way. */
+  showWeekday: boolean;
+  setShowWeekday: (v: boolean) => void;
+  /** §4.4a: which weekdays are the cultural "weekend" (0=Sun…6=Sat). Default
+   * Sat+Sun; ≥1. Presentational + a seed; the planner enforces weekend ⊆ offDays. */
+  weekendDays: number[];
+  setWeekendDays: (days: number[]) => void;
   /** Timeline sub-hour graduation marks; 0 = don't show (default). */
   gridGranularity: GridGranularity;
   setGridGranularity: (g: GridGranularity) => void;
@@ -87,6 +95,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
     return (GRID_VALUES as number[]).includes(stored) ? (stored as GridGranularity) : 0;
   });
   const [devSandbox, setDevSandbox] = useState<boolean>(() => localStorage.getItem("devSandbox") === "1");
+  const [showWeekday, setShowWeekday] = useState<boolean>(() => localStorage.getItem("showWeekday") !== "0");
+  const [weekendDays, setWeekendDaysRaw] = useState<number[]>(() => {
+    try {
+      const stored = JSON.parse(localStorage.getItem("weekendDays") ?? "null");
+      if (Array.isArray(stored)) {
+        const days = [...new Set(stored.filter((d) => Number.isInteger(d) && d >= 0 && d <= 6))].sort();
+        if (days.length >= 1) return days;
+      }
+    } catch {
+      // fall through
+    }
+    return [0, 6];
+  });
+  // §4.4a: at least one weekend day always.
+  const setWeekendDays = (days: number[]): void => {
+    const clean = [...new Set(days.filter((d) => d >= 0 && d <= 6))].sort();
+    if (clean.length >= 1) setWeekendDaysRaw(clean);
+  };
   const [aiLevels, setAiLevels] = useState<AiLevels>(() => {
     try {
       const stored = JSON.parse(localStorage.getItem("aiLevels") ?? "null");
@@ -145,13 +171,19 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
     localStorage.setItem("devSandbox", devSandbox ? "1" : "0");
   }, [devSandbox]);
   useEffect(() => {
+    localStorage.setItem("showWeekday", showWeekday ? "1" : "0");
+  }, [showWeekday]);
+  useEffect(() => {
+    localStorage.setItem("weekendDays", JSON.stringify(weekendDays));
+  }, [weekendDays]);
+  useEffect(() => {
     localStorage.setItem("presetDefaults", JSON.stringify(presetDefaults));
   }, [presetDefaults]);
   useEffect(() => {
     localStorage.setItem("aiLevels", JSON.stringify(aiLevels));
   }, [aiLevels]);
   return (
-    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel }}>
+    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel }}>
       {children}
     </SettingsContext.Provider>
   );

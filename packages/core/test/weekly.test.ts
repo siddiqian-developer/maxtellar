@@ -189,6 +189,77 @@ describe("off-periods (§4.5)", () => {
   });
 });
 
+describe("§4.6 dated override layer", () => {
+  const base = [
+    tpl({ title: "Standup", timing: "fixed", anchorStartTod: 9 * H, anchorEndTod: 9 * H + 30, budget: 30, weekdays: [MON], rank: "a" }),
+    tpl({ title: "Gym", budget: 60, weekdays: [MON], rank: "b" }),
+  ];
+
+  it("SET_DATED assigns ids/ranks and drops an empty entry", () => {
+    let s = initialState(DAY0);
+    s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [], adds: [
+      { title: "Dentist", headId: "Health", activityId: "Dentist", timing: "fixed", tier: "normal", ommf: false, slideable: false, breakable: false, anchorStartTod: 14 * H, anchorEndTod: 15 * H, budget: 60 },
+    ] });
+    expect(s.dated).toHaveLength(1);
+    expect(s.dated[0]!.adds[0]!.id).toBeTruthy();
+    expect(s.dated[0]!.adds[0]!.rank).toBeTruthy();
+    // clearing it back to empty removes the entry
+    s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [], adds: [] });
+    expect(s.dated).toHaveLength(0);
+  });
+
+  it("injection ADDS a dated one-off below the day's templates", () => {
+    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
+    s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [], adds: [
+      { title: "Dentist", headId: "Health", activityId: "Dentist", timing: "budgeted", tier: "normal", ommf: false, slideable: true, breakable: true, budget: 60 },
+    ] });
+    let n = 0;
+    const out = injectToday(s, DAY0, MON, () => `inj-${++n}`, (prev) => rankAfter(prev));
+    expect(out.map((t) => t.title)).toEqual(["Standup", "Gym", "Dentist"]);
+    expect(out[2]!.rank > out[1]!.rank).toBe(true); // add sits below templates
+  });
+
+  it("injection SKIPS a suppressed template for that date only", () => {
+    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
+    s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [base[1]!.id], overrides: [], adds: [] });
+    let n = 0;
+    expect(injectToday(s, DAY0, MON, () => `s-${++n}`, (prev) => rankAfter(prev)).map((t) => t.title)).toEqual(["Standup"]);
+    // a DIFFERENT date is unaffected
+    expect(injectToday(s, DAY0 + 1440, MON, () => `s2-${++n}`, (prev) => rankAfter(prev)).map((t) => t.title)).toEqual(["Standup", "Gym"]);
+  });
+
+  it("injection applies a per-date anchor OVERRIDE", () => {
+    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: base } };
+    s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [{ templateId: base[0]!.id, anchorStartTod: 11 * H, anchorEndTod: 11 * H + 30 }], adds: [] });
+    let n = 0;
+    const out = injectToday(s, DAY0, MON, () => `o-${++n}`, (prev) => rankAfter(prev));
+    const standup = out.find((t) => t.title === "Standup")!;
+    expect(standup.anchorStart).toBe(DAY0 + 11 * H); // moved from 9:00 → 11:00
+  });
+
+  it("an OFF day skips templates but STILL injects dated adds", () => {
+    let s = { ...initialState(DAY0), week: { startedAt: DAY0, firstWeekday: MON, offDays: [SUN], templates: [tpl({ title: "Rest-day chore", budget: 30, weekdays: [SUN], rank: "a" })] } };
+    s = reduce(s, { type: "SET_DATED", date: DAY0, skips: [], overrides: [], adds: [
+      { title: "Wedding", headId: "Social", activityId: "Wedding", timing: "budgeted", tier: "normal", ommf: false, slideable: true, breakable: true, budget: 120 },
+    ] });
+    let n = 0;
+    const out = injectToday(s, DAY0, SUN, () => `off-${++n}`, (prev) => rankAfter(prev));
+    expect(out.map((t) => t.title)).toEqual(["Wedding"]); // template skipped, add kept
+  });
+
+  it("replays deterministically (SET_DATED)", () => {
+    const events: Event[] = [
+      { type: "SET_WEEK_PLAN", templates: base, weekday: SUN },
+      { type: "START_WEEK", firstWeekday: MON, startedAt: DAY0 },
+      { type: "SET_DATED", date: DAY0, skips: [base[1]!.id], overrides: [{ templateId: base[0]!.id, budget: 45 }], adds: [
+        { title: "Dentist", headId: "Health", activityId: "Dentist", timing: "budgeted", tier: "normal", ommf: false, slideable: true, breakable: true, budget: 60 },
+      ] },
+    ];
+    const run = (): State => events.reduce(reduce, initialState(DAY0 + 8 * H));
+    expect(JSON.stringify(run())).toBe(JSON.stringify(run()));
+  });
+});
+
 describe("replay idempotence (week + off-period)", () => {
   it("same event log → identical state", () => {
     const events: Event[] = [

@@ -46,6 +46,7 @@ export class EventStore {
       if (state.days === undefined) state.days = [];
       if (state.week === undefined)
         state.week = { startedAt: null, firstWeekday: null, offDays: [0], templates: [] };
+      if (state.dated === undefined) state.dated = [];
       from = snap.uptoSeq;
     } else {
       // The log must FULLY determine state (event-sourcing): state always

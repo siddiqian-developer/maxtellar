@@ -12,6 +12,7 @@
 
 import type {
   Channels,
+  DatedTask,
   DayRecord,
   Dur,
   Event,
@@ -53,6 +54,7 @@ export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT):
     ceremony: null,
     days: [],
     week: { startedAt: null, firstWeekday: null, offDays: [0], templates: [] },
+    dated: [],
     seq: 0,
   };
 }
@@ -977,6 +979,51 @@ export function reduce(state: State, event: Event): State {
         };
       });
       return { ...s, week: { ...s.week, templates } };
+    }
+
+    case "SET_DATED": {
+      // §4.6: replace the override entry for one calendar date. Assign ids/ranks
+      // to new adds in order; drop the entry entirely if it ends up empty. Always
+      // allowed — a specific date is never structurally locked (unlike the week).
+      let s = state;
+      let prev: string | null = null;
+      const adds: DatedTask[] = event.adds.map((a) => {
+        let id = a.id;
+        if (!id) {
+          const [nid, ns] = nextId(s, "dtl");
+          id = nid;
+          s = ns;
+        }
+        const rank = a.rank ?? rankAfter(prev);
+        prev = rank;
+        return {
+          id,
+          rank,
+          title: a.title,
+          headId: a.headId,
+          activityId: a.activityId,
+          timing: a.timing,
+          tier: a.tier,
+          ommf: a.ommf,
+          slideable: a.slideable,
+          breakable: a.breakable,
+          ...(a.budget !== undefined ? { budget: a.budget } : {}),
+          ...(a.anchorStartTod !== undefined ? { anchorStartTod: a.anchorStartTod } : {}),
+          ...(a.anchorEndTod !== undefined ? { anchorEndTod: a.anchorEndTod } : {}),
+          ...(a.sleepKind !== undefined ? { sleepKind: a.sleepKind } : {}),
+        };
+      });
+      const skips = [...new Set(event.skips)];
+      const overrides = event.overrides.map((o) => ({
+        templateId: o.templateId,
+        ...(o.anchorStartTod !== undefined ? { anchorStartTod: o.anchorStartTod } : {}),
+        ...(o.anchorEndTod !== undefined ? { anchorEndTod: o.anchorEndTod } : {}),
+        ...(o.budget !== undefined ? { budget: o.budget } : {}),
+      }));
+      const others = s.dated.filter((e) => e.date !== event.date);
+      const empty = adds.length === 0 && skips.length === 0 && overrides.length === 0;
+      const dated = empty ? others : [...others, { date: event.date, adds, skips, overrides }].sort((a, b) => a.date - b.date);
+      return { ...s, dated };
     }
 
     case "START_WEEK": {

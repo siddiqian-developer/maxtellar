@@ -187,12 +187,10 @@ export interface RunningTask {
   isOff?: boolean;
 }
 
-/** §4.4 weekly planning (G19). A reusable task template that SOD injection
- * instantiates onto matching weekdays. Anchored coordinates are stored as
- * MINUTES-INTO-THE-DAY [0,1440) (a "9am meeting"), converted to an absolute
- * epoch for today at injection. Recurrence = the weekday set it fires on. */
-export interface WeekTemplate {
-  id: string;
+/** §4.4/§4.6: the schedulable shape shared by a recurring template and a dated
+ * one-off. Anchored coordinates are MINUTES-INTO-THE-DAY [0,1440) (a "9am
+ * meeting"), converted to an absolute epoch for the target day at injection. */
+export interface TaskSpec {
   title: string;
   headId: string;
   activityId: string;
@@ -207,6 +205,12 @@ export interface WeekTemplate {
   anchorStartTod?: number;
   anchorEndTod?: number;
   sleepKind?: SleepKind;
+}
+
+/** §4.4 weekly planning (G19). A reusable task template that SOD injection
+ * instantiates onto matching weekdays. Recurrence = the weekday set it fires on. */
+export interface WeekTemplate extends TaskSpec {
+  id: string;
   /** Recurrence: weekdays it instantiates on (0=Sun … 6=Sat). daily = all 7,
    * weekend = [0,6]. One-time/ranged is a future extension (§4.4). */
   weekdays: number[];
@@ -214,10 +218,41 @@ export interface WeekTemplate {
   rank: string;
 }
 
+/** §4.6 dated overrides (G28): a one-off task pinned to a specific calendar date
+ * (not a weekday recurrence). Injected at that date's SOD, ranked below the
+ * day's surviving leftovers and its recurring templates. */
+export interface DatedTask extends TaskSpec {
+  id: string;
+  /** LexoRank among a date's adds — injection preserves this relative order. */
+  rank: string;
+}
+
+/** §4.6: a per-date tweak to a recurring template — move its anchor and/or
+ * resize its budget on this date only. Undefined fields inherit the template. */
+export interface TemplateOverride {
+  templateId: string;
+  anchorStartTod?: number;
+  anchorEndTod?: number;
+  budget?: Dur;
+}
+
+/** §4.6 the dated override layer for one calendar date. `date` is that date's
+ * LOCAL-MIDNIGHT epoch-minute (web-computed; core stays Date-free), the same key
+ * SOD injection uses. An entry with empty adds/skips/overrides is dropped. */
+export interface DatedEntry {
+  date: Min;
+  /** Extra one-off tasks that fire only on this date. */
+  adds: DatedTask[];
+  /** templateIds whose recurring injection is suppressed on this date. */
+  skips: string[];
+  /** Per-template anchor/budget tweaks applied on this date. */
+  overrides: TemplateOverride[];
+}
+
 /** §4.4: the week commitment. `templates` is the structural plan; `startedAt`
  * marks the current week's rollover (START_WEEK); `firstWeekday` is the declared
  * First Weekday; `offDays` are the planning/OFF weekdays (default Sunday) that
- * also open the mid-week planning lock (§4.4). */
+ * also open the mid-week planning lock (§4.4) AND skip recurring injection. */
 export interface WeekPlan {
   startedAt: Min | null;
   firstWeekday: number | null;
@@ -253,6 +288,10 @@ export interface State {
   days: DayRecord[];
   /** §4.4: the weekly plan (templates + week boundary). Event-sourced. */
   week: WeekPlan;
+  /** §4.6: the dated override layer — one entry per calendar date that has any
+   * add/skip/override. SOD injection consults the entry for the injection date.
+   * Future dates are PARKED here until their own SOD (open-item 11). */
+  dated: DatedEntry[];
   /** Monotonic counter for deterministic ids. */
   seq: number;
   /** Transient UI notice (§7.0.2 snap-notify) — set when the scheduler moves a
@@ -318,6 +357,11 @@ export type Event =
   // (the week is a commitment): accepted only before the first week starts, on
   // an OFF day, or with the `urgent` bypass; otherwise a no-op.
   | { type: "SET_WEEK_PLAN"; templates: (Omit<WeekTemplate, "id" | "rank"> & { id?: string; rank?: string })[]; weekday?: number; urgent?: boolean }
+  // §4.6 SET_DATED — replace the whole override entry for one calendar `date`
+  // (local-midnight epoch-minute). Adds may omit id/rank (assigned in order).
+  // An entry that ends up empty (no adds/skips/overrides) is dropped. Dated
+  // edits are always allowed (a specific future date is never "locked").
+  | { type: "SET_DATED"; date: Min; adds: (Omit<DatedTask, "id" | "rank"> & { id?: string; rank?: string })[]; skips: string[]; overrides: TemplateOverride[] }
   // §4.4 START_WEEK — explicit week rollover; marks the boundary + First Weekday
   // + OFF days. Daily SOD injection does the instantiating (three realities:
   // planned / no-plan-yet / no-plan-ever all just start).

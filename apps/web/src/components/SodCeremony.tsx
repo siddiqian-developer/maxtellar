@@ -34,10 +34,10 @@ interface Props {
 
 export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX.Element {
   useEscClose(onClose);
-  const { timeFormat } = useSettings();
+  const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
   const now = state.now;
-  const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
+  const fmtT = (m: number): string => fmtDayTime(m, now, hour12, showWeekday);
 
   const phase: "sweep" | "pruning" | "planning" = state.ceremony?.phase ?? "sweep";
 

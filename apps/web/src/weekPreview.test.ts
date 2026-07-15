@@ -1,9 +1,14 @@
 import { describe, it, expect } from "vitest";
-import type { WeekTemplate } from "@maxtellar/core";
-import { weekPreview, WEEK_DAY_START } from "./weekPreview";
+import type { DatedEntry, WeekTemplate } from "@maxtellar/core";
+import { weekPreview, WEEK_DAY_START, type WeekColumn } from "./weekPreview";
 
 const MON = 1;
 const TUE = 2;
+// Synthetic columns: date = weekday*1440 (relative preview; blocks are reported
+// relative to each column's date, so anchors read as minutes-into-day).
+const COLS: WeekColumn[] = Array.from({ length: 7 }, (_, d) => ({ date: d * 1440, weekday: d }));
+const run = (templates: WeekTemplate[], dated: DatedEntry[] = [], offDays: number[] = []) =>
+  weekPreview(templates, dated, COLS, offDays, 5, 600, 60);
 
 function tpl(o: Partial<WeekTemplate> & { title: string; weekdays: number[]; rank: string }): WeekTemplate {
   return {
@@ -21,34 +26,53 @@ function tpl(o: Partial<WeekTemplate> & { title: string; weekdays: number[]; ran
 
 describe("weekPreview", () => {
   it("pins anchored tasks at their time and fills budgeted by rank from the day-start", () => {
-    const templates = [
+    const p = run([
       tpl({ title: "Gym", budget: 60, weekdays: [MON], rank: "a" }),
       tpl({ title: "Standup", timing: "fixed", anchorStartTod: 9 * 60, anchorEndTod: 9 * 60 + 30, budget: 30, weekdays: [MON], rank: "b" }),
-    ];
-    const p = weekPreview(templates, 5, 600, 60);
+    ]);
     const mon = p.days.find((d) => d.weekday === MON)!;
     const gym = mon.blocks.find((b) => b.title === "Gym")!;
     const standup = mon.blocks.find((b) => b.title === "Standup")!;
-    // budgeted Gym fills from the day-start cursor
     expect(gym.start).toBe(WEEK_DAY_START);
     expect(gym.end).toBe(WEEK_DAY_START + 60);
-    // fixed Standup pins at its time
     expect(standup.start).toBe(9 * 60);
     expect(standup.end).toBe(9 * 60 + 30);
-    // other days empty
     expect(p.days.find((d) => d.weekday === TUE)!.blocks).toHaveLength(0);
   });
 
   it("orders budgeted tasks by rank (contiguous fill, no overlap)", () => {
-    const templates = [
+    const p = run([
       tpl({ title: "First", budget: 60, weekdays: [MON], rank: "a" }),
       tpl({ title: "Second", budget: 30, weekdays: [MON], rank: "b" }),
-    ];
-    const p = weekPreview(templates, 5, 600, 60);
+    ]);
     const mon = p.days.find((d) => d.weekday === MON)!;
     const first = mon.blocks.find((b) => b.title === "First")!;
     const second = mon.blocks.find((b) => b.title === "Second")!;
     expect(first.start).toBe(WEEK_DAY_START);
-    expect(second.start).toBeGreaterThanOrEqual(first.end); // ranked below, no overlap
+    expect(second.start).toBeGreaterThanOrEqual(first.end);
+  });
+
+  it("§4.6: an OFF day clears templates but still shows dated adds", () => {
+    const templates = [tpl({ title: "Standup", budget: 30, weekdays: [MON], rank: "a" })];
+    const dated: DatedEntry[] = [{
+      date: MON * 1440, skips: [], overrides: [],
+      adds: [{ id: "d1", rank: "m", title: "Dentist", headId: "Health", activityId: "Dentist", timing: "budgeted", tier: "normal", ommf: false, slideable: true, breakable: true, budget: 60 }],
+    }];
+    const p = weekPreview(templates, dated, COLS, [MON], 5, 600, 60);
+    const mon = p.days.find((d) => d.weekday === MON)!;
+    expect(mon.isOff).toBe(true);
+    expect(mon.blocks.map((b) => b.title)).toEqual(["Dentist"]); // template skipped, dated add kept
+    expect(mon.blocks[0]!.dated).toBe(true);
+  });
+
+  it("§4.6: a dated add colliding with a fixed template raises a conflict", () => {
+    const templates = [tpl({ title: "Meeting", timing: "fixed", anchorStartTod: 9 * 60, anchorEndTod: 17 * 60, budget: 8 * 60, weekdays: [MON], rank: "a" })];
+    const dated: DatedEntry[] = [{
+      date: MON * 1440, skips: [], overrides: [],
+      adds: [{ id: "d1", rank: "m", title: "Appt", headId: "Health", activityId: "Appt", timing: "fixed", tier: "normal", ommf: false, slideable: false, breakable: false, anchorStartTod: 10 * 60, anchorEndTod: 11 * 60, budget: 60 }],
+    }];
+    const p = weekPreview(templates, dated, COLS, [], 5, 600, 60);
+    expect(p.conflicts.length).toBeGreaterThan(0);
+    expect(p.days.find((d) => d.weekday === MON)!.conflict).toBeTruthy();
   });
 });

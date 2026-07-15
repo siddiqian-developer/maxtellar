@@ -30,7 +30,12 @@ const PRESET_ROWS: { id: PresetId; label: string }[] = [
 ];
 
 export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
-  const { timeFormat, setTimeFormat, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode } = useSettings();
+  const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode } = useSettings();
+  const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const toggleWeekend = (d: number): void => {
+    const next = weekendDays.includes(d) ? weekendDays.filter((x) => x !== d) : [...weekendDays, d].sort();
+    setWeekendDays(next); // setter enforces ≥1
+  };
   const gridOptions = [0, 5, 10, 15, 30] as const;
   useEscClose(onCancel);
   const capHours = Math.round((openExtentCap / 60) * 10) / 10;
@@ -63,6 +68,27 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, dispa
               >
                 24h
               </button>
+            </div>
+          </div>
+          <div className="field">
+            <label data-tip="Show the weekday name on far-date times, e.g. 'Sun, Jul 19, 02:01 AM' vs 'Jul 19, 02:01 AM'. Either way the label is ignored when re-reading what you typed.">
+              Show weekday on dates
+            </label>
+            <div className="type-chips" role="radiogroup" aria-label="Show weekday on dates">
+              <button type="button" className={`type-chip${showWeekday ? " active" : ""}`} data-status="fixed" onClick={() => setShowWeekday(true)}>Show — Sun, Jul 19</button>
+              <button type="button" className={`type-chip${!showWeekday ? " active" : ""}`} data-status="unscheduled" onClick={() => setShowWeekday(false)}>Hide — Jul 19</button>
+            </div>
+          </div>
+          <div className="field">
+            <label data-tip="Which days are your cultural 'weekend' (default Sat + Sun; at least one). Weekend days get the shaded column and are always OFF days in the week planner; you can add more OFF days there to lengthen the weekend.">
+              Weekend days
+            </label>
+            <div className="type-chips" role="group" aria-label="Weekend days">
+              {WD.map((w, d) => (
+                <button key={d} type="button" className={`type-chip${weekendDays.includes(d) ? " active" : ""}`} data-status="semi-tail" onClick={() => toggleWeekend(d)}>
+                  {w}
+                </button>
+              ))}
             </div>
           </div>
           <div className="field">

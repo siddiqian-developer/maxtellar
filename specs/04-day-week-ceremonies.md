@@ -156,4 +156,53 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
 - **Weekend OFF day ≠ abrupt off-period:** resumption from a weekend expects weekly planning
   (a hidden urgent bypass exists). Off-periods are pausable and OMMF-capable.
 
+### 4.4a Weekend vs OFF day (feedback 2026-07-15)
+Two distinct concepts, deliberately not merged:
+- **Weekend days** — a *cultural marker* (which days your week rests on). **Configurable; default
+  Sat + Sun; ≥1 required.** A **web setting** (`weekendDays`, localStorage) — purely presentational
+  + a seed. It drives the special **weekend column background** and forces those days OFF.
+- **OFF days** — the *functional* set (`week.offDays`, core, event-sourced). An OFF day (a) opens
+  the mid-week structural-planning lock (§4.4) and (b) **skips recurring injection** (rest: no
+  templates instantiate at that day's SOD; **dated one-offs still fire**, §4.6).
+- **Invariant `weekend ⊆ offDays`.** Every weekend day is always an OFF day (you cannot mark a day
+  "weekend" yet have it inject). OFF days may **exceed** the weekend — the user pre/post-pends extra
+  OFF days to **lengthen the weekend** (Fri off before a Sat/Sun weekend). In the planner, weekend
+  chips are OFF and **locked-on**; non-weekend days toggle freely; the set can never drop below the
+  weekend or below one OFF day. Toggling OFF a day **clears that column's placement in the preview**
+  but **preserves the templates** (re-enabling the day restores them — nothing is deleted).
+
+### 4.6 Dated override layer — the Calendar screen — G28 (feedback 2026-07-15)
+The Week Plan is the **recurring** structure for the **coming week only**. Alongside it, a
+**Calendar** view attaches activities to a **specific calendar date** (navigable across weeks). It is
+a **dated override layer** on top of the recurring plan — three powers per date:
+- **Add** a one-off `DatedTask` (a `TaskSpec` pinned to a date, not a weekday) — e.g. a dentist appt.
+- **Skip** a recurring template on that date only (skip Friday standup this once).
+- **Override** a template's anchor/budget on that date only (gym at 11 instead of 9 this Thursday).
+
+**Model.** `State.dated: DatedEntry[]`, one entry per date that has any add/skip/override, keyed by
+that date's **local-midnight epoch-minute** (`date`) — the same key SOD injection uses (core stays
+Date-free; the web computes it). **`SET_DATED { date, adds, skips, overrides }`** replaces the whole
+entry for one date (adds get ids/ranks assigned in order); an entry that ends up empty is dropped.
+Dated edits are **always allowed** — a specific date is never structurally "locked" the way the
+recurring week is.
+
+**Injection (`injectToday`).** For the injection date it consults the day's `DatedEntry`: recurring
+templates fire on their weekday **unless** the day is OFF or the template is skipped; matched
+templates apply their per-date override; then the date's **adds** are appended, ranked **below** the
+templates (and both below surviving leftovers). One instantiation path (`templateToTask` over the
+shared `TaskSpec`) serves templates and dated one-offs alike.
+
+**Placement horizon (feedback 2026-07-15).** A dated activity that **falls within the coming week is
+shown placed in the weekly-planning preview at its time** — not merely parked. `weekPreview` is
+**date-aware**: each column maps to an **actual date** of the coming week, applies that date's
+adds/skips/overrides, and settles. **Conflicts are surfaced (notify the user)** — a dated add that
+collides with the recurring plan (a fixed-anchor overlap or a squeezed placement) raises a preview
+warning naming the day. Dates **beyond** the coming week are stored and shown on the Calendar, and
+inject at their own SOD (they are not placed on the live spine early).
+
+**Navigation.** The grid screen hosts a segmented **`[ Week Plan | Calendar ]`** toggle (same grid
+chrome, seamless): *Week Plan* = recurring, coming-week, heading "Week Plan"; *Calendar* = the dated
+view with **‹ prev / next ›** week arrows and a date header over each column, heading "Calendar".
+Both are reachable from the **main-screen nav**.
+
 ---

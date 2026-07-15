@@ -42,8 +42,11 @@ const MONTHS_SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "S
 
 /** Day-aware time label for the drawer's Start/End fields (§06): today shows
  *  just the clock ("03:00PM"); tomorrow shows "Tomorrow, 03:00PM"; anything
- *  from the day after onward shows a dated label ("Wed Jul 22, 03:00PM"). */
-export function fmtDayTime(m: Min, now: Min, hour12: boolean): string {
+ *  from the day after onward shows a dated label. `showWeekday` (default on,
+ *  the `showWeekday` setting) prefixes the weekday: "Sun, Jul 19, 03:00PM" vs
+ *  "Jul 19, 03:00PM". The casual parser ignores the weekday token either way,
+ *  so both round-trip (§7.0.2). */
+export function fmtDayTime(m: Min, now: Min, hour12: boolean, showWeekday = true): string {
   const d = toDate(m);
   const clock = fmtClock(d, hour12);
   const dayOf = (x: Date): number =>
@@ -52,7 +55,8 @@ export function fmtDayTime(m: Min, now: Min, hour12: boolean): string {
   if (delta === 0) return clock;
   if (delta === 1) return `Tomorrow, ${clock}`;
   if (delta === -1) return `Yesterday, ${clock}`;
-  return `${WEEKDAYS[d.getDay()]} ${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${clock}`;
+  const date = `${MONTHS_SHORT[d.getMonth()]} ${d.getDate()}, ${clock}`;
+  return showWeekday ? `${WEEKDAYS[d.getDay()]}, ${date}` : date;
 }
 
 /** Duration in unit form "Nd Nh Nm" (§06): drops zero units, always shows at

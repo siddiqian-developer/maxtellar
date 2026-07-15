@@ -6,9 +6,23 @@
  * Core stays Date-free: the caller passes today's local-midnight + weekday.
  */
 
-import type { Min, State, UnstartedTask, WeekTemplate } from "./types.js";
+import type { Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekTemplate } from "./types.js";
 
 const MIN_PER_DAY = 1440;
+
+const byRank = (a: { rank: string }, b: { rank: string }): number =>
+  a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0;
+
+/** §4.6: apply a per-date override to a template (anchor move / budget resize).
+ * Undefined override fields inherit the template. */
+function applyOverride(t: WeekTemplate, o: TemplateOverride): WeekTemplate {
+  return {
+    ...t,
+    ...(o.anchorStartTod !== undefined ? { anchorStartTod: o.anchorStartTod } : {}),
+    ...(o.anchorEndTod !== undefined ? { anchorEndTod: o.anchorEndTod } : {}),
+    ...(o.budget !== undefined ? { budget: o.budget } : {}),
+  };
+}
 
 /** Whether structural weekly planning is allowed right now (§4.4). Locked
  * mid-week; open before the first week starts, on an OFF weekday, or via the
@@ -35,25 +49,43 @@ export function injectToday(
   nextId: () => string,
   rankBelow: (prev: string | null) => string,
 ): UnstartedTask[] {
-  const due = s.week.templates
-    .filter((t) => t.weekdays.includes(weekday))
-    .slice()
-    .sort((a, b) => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0));
+  // §4.6: the dated override layer for THIS date (keyed by local-midnight).
+  const entry = s.dated.find((e) => e.date === midnight);
+  const skips = new Set(entry?.skips ?? []);
+  const overrides = new Map((entry?.overrides ?? []).map((o) => [o.templateId, o] as const));
+
+  // Recurring templates fire on their weekday — unless today is an OFF day
+  // (rest: no recurring injection) or the template is skipped for this date.
+  const isOff = s.week.offDays.includes(weekday);
+  const due = isOff
+    ? []
+    : s.week.templates.filter((t) => t.weekdays.includes(weekday) && !skips.has(t.id)).slice().sort(byRank);
+  // Dated one-offs fire regardless of OFF (you explicitly pinned them here),
+  // ranked below the recurring templates, preserving their own order.
+  const adds = (entry?.adds ?? []).slice().sort(byRank);
+
   const out: UnstartedTask[] = [];
   let prevRank: string | null = null;
   for (const t of due) {
     const rank = rankBelow(prevRank);
     prevRank = rank;
-    out.push(templateToTask(t, midnight, nextId(), rank));
+    const ov = overrides.get(t.id);
+    out.push(templateToTask(ov ? applyOverride(t, ov) : t, midnight, nextId(), rank));
+  }
+  for (const d of adds) {
+    const rank = rankBelow(prevRank);
+    prevRank = rank;
+    out.push(templateToTask(d, midnight, nextId(), rank));
   }
   return out;
 }
 
-/** Instantiate one template onto the day at `midnight`. Time-of-day anchors
- * (0..1439) become absolute; a `tod` past 1440 (overnight) is clamped inside
- * the day. */
+/** Instantiate one template/dated-task onto the day at `midnight`. Time-of-day
+ * anchors (0..1439) become absolute; a `tod` past 1440 (overnight) is clamped
+ * inside the day. Reads only the shared TaskSpec fields, so a WeekTemplate and a
+ * DatedTask instantiate through the identical path. */
 export function templateToTask(
-  t: WeekTemplate,
+  t: TaskSpec,
   midnight: Min,
   id: string,
   rank: string,

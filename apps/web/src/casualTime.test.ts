@@ -79,7 +79,7 @@ describe("parseCasualTime — day-aware", () => {
     const r = parseCasualTime("jul 22, 9am", NOW);
     expect(r.explicitDay).toBe(true);
     expect(r.dayOffset).toBe(7);
-    expect(fmtDayTime(r.value!, NOW, true)).toBe("Wed Jul 22, 09:00 AM");
+    expect(fmtDayTime(r.value!, NOW, true)).toBe("Wed, Jul 22, 09:00 AM");
   });
 
   it("value composes onto the right calendar day", () => {
@@ -99,7 +99,7 @@ describe("parseCasualTime — day-aware", () => {
     // re-parses it, so the display MUST parse back (§7.0.2). "Sun Jul 19,
     // 02:01 AM" → Jul 19 02:01, the "Sun" label ignored.
     const target = Math.floor(new Date(2026, 6, 19, 2, 1).getTime() / 60000);
-    const r = parseCasualTime("Sun Jul 19, 02:01 AM", NOW);
+    const r = parseCasualTime("Sun, Jul 19, 02:01 AM", NOW);
     expect(r.explicitDay).toBe(true);
     expect(r.value).toBe(target);
     // And the true round-trip through fmtDayTime for any far date.

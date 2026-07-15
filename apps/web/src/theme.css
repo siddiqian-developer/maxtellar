@@ -1591,17 +1591,34 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .off-urgent { display: inline-flex; align-items: center; gap: 6px; font-size: 12px; margin-top: 6px; cursor: pointer; }
 
 /* Week grid — the placed-week preview (§4.4) */
-.wk-grid-scroll { overflow-x: auto; margin-top: 4px; }
-.wk-grid { display: grid; grid-template-columns: 46px repeat(7, minmax(74px, 1fr)); gap: 4px; min-width: 640px; }
+/* §4.4/§4.6 week+calendar grid — 7 columns share the width (NO horizontal
+   scroll), full 24h axis with hourly graduations, dates over each column. */
+.wk-mode-toggle { display: inline-flex; border: 1px solid var(--hairline); border-radius: 8px; overflow: hidden; margin-left: 12px; }
+.wk-mode { border: none; background: transparent; color: var(--ink-soft); padding: 5px 12px; cursor: pointer; font: inherit; font-size: 13px; }
+.wk-mode.active { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.wk-cal-nav { display: flex; align-items: center; gap: 14px; margin-bottom: 8px; font-size: 15px; }
+.wk-cal-nav .link-btn { font-size: 22px; line-height: 1; padding: 0 6px; }
+.wk-cal-nav .wk-today { font-size: 12px; }
+
+.wk-grid { display: grid; grid-template-columns: 46px repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 4px; align-items: start; }
+.wk-axis-col { display: flex; flex-direction: column; }
+.wk-axis-head { border-bottom: 1px solid var(--hairline); min-height: 34px; }
 .wk-axis { position: relative; }
-.wk-axis-label { position: absolute; right: 4px; transform: translateY(-50%); font-size: 10px; color: var(--ink-faint); }
-.wk-col { display: flex; flex-direction: column; }
-.wk-col-head { text-align: center; font-size: 11px; font-weight: 600; color: var(--ink-soft); padding: 4px 0; border-bottom: 1px solid var(--hairline); }
-.wk-col-head.off { color: var(--accent); }
+.wk-axis-label { position: absolute; right: 4px; transform: translateY(-50%); font-size: 9px; color: var(--ink-faint); white-space: nowrap; }
+.wk-col { display: flex; flex-direction: column; min-width: 0; border-radius: 6px; }
+.wk-col.weekend { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+.wk-col-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 3px 0; border-bottom: 1px solid var(--hairline); min-height: 34px; }
+.wk-col-wd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
+.wk-col-date { font-size: 13px; font-weight: 600; color: var(--ink); }
+.wk-col.weekend .wk-col-wd { color: var(--accent); }
 .wk-col-head.today { background: var(--accent-soft); border-radius: 6px 6px 0 0; }
-.wk-col-body { position: relative; background: var(--paper-raised); border-radius: 6px; overflow: hidden; }
+.wk-col-head.today .wk-col-date { color: var(--accent); }
+.wk-col-add { position: absolute; right: 2px; top: 2px; border: none; background: transparent; color: var(--ink-faint); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 4px; }
+.wk-col-add:hover { background: var(--accent-soft); color: var(--accent); }
+.wk-col-body { position: relative; background: var(--paper-raised); border-radius: 0 0 6px 6px; overflow: hidden; }
+.wk-col.off .wk-col-body { background: color-mix(in srgb, var(--ink-faint) 9%, var(--paper-raised)); }
 .wk-hourline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--hairline); opacity: 0.5; }
-.wk-col-empty { position: absolute; top: 10px; left: 0; right: 0; text-align: center; color: var(--ink-faint); font-size: 12px; }
+.wk-col-empty { position: absolute; top: 8px; left: 0; right: 0; text-align: center; color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
 .wk-block {
   position: absolute; left: 2px; right: 2px;
   border: none; border-left: 3px solid var(--st-budgeted);
@@ -1613,5 +1630,9 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .wk-block[data-timing="unscheduled"] { border-left-color: var(--st-unscheduled); background: color-mix(in srgb, var(--st-unscheduled) 14%, var(--paper)); }
 .wk-block[data-timing="semi-head"], .wk-block[data-timing="semi-tail"] { border-left-color: var(--st-semi); background: color-mix(in srgb, var(--st-semi) 14%, var(--paper)); }
 .wk-block[data-timing="fixed"] { border-left-color: var(--st-fixed); background: color-mix(in srgb, var(--st-fixed) 14%, var(--paper)); }
+/* §4.6 dated one-off: doubled left edge + a faint frame to read as "pinned". */
+.wk-block.dated { border-left-style: double; border-left-width: 5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
+.wk-block.squeezed { outline: 1px dashed var(--accent); outline-offset: -1px; }
 .wk-block-title { font-size: 10px; font-weight: 600; color: var(--ink); line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .wk-block-time { font-size: 9px; color: var(--ink-soft); }
+.type-chip.locked { cursor: default; }

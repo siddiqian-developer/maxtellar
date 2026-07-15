@@ -45,7 +45,7 @@ const OUTCOME_LABEL: Record<HistoryOutcome, string> = {
 };
 
 export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClose }: Props): JSX.Element {
-  const { timeFormat } = useSettings();
+  const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
   const { addActivity } = useHeads();
 
@@ -59,8 +59,8 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
   const [head, setHead] = useState<string | undefined>(entry?.headId);
   const [startMin, setStartMin] = useState<number>(seedStart);
   const [endMin, setEndMin] = useState<number>(seedEnd);
-  const [startStr, setStartStr] = useState(fmtDayTime(seedStart, now, hour12));
-  const [endStr, setEndStr] = useState(fmtDayTime(seedEnd, now, hour12));
+  const [startStr, setStartStr] = useState(fmtDayTime(seedStart, now, hour12, showWeekday));
+  const [endStr, setEndStr] = useState(fmtDayTime(seedEnd, now, hour12, showWeekday));
   const [outcome, setOutcome] = useState<HistoryOutcome>(entry?.outcome ?? "completed");
   const [sleepKind, setSleepKind] = useState<HistoryEntry["sleepKind"]>(entry?.sleepKind);
   const [notes, setNotes] = useState<string[]>([]);
@@ -72,7 +72,7 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
 
   // Editable-window floor = the last day-start (§4.2 day records; passed in).
   // Sealed days are locked; the forming day is editable.
-  const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
+  const fmtT = (m: number): string => fmtDayTime(m, now, hour12, showWeekday);
   // Existing occupancy the fit must not overlap (self excluded when editing).
   const others = history
     .filter((h) => h.kind === "occupancy" && h.id !== entry?.id)

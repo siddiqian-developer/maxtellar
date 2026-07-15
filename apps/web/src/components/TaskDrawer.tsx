@@ -168,9 +168,9 @@ const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget
 
 export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
   const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
-  const { presetDefaults, timeFormat, aiLevels } = useSettings();
+  const { presetDefaults, timeFormat, aiLevels, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
-  const fmtT = (m: number): string => fmtDayTime(m, now, hour12);
+  const fmtT = (m: number): string => fmtDayTime(m, now, hour12, showWeekday);
   // Head-suggester should only ever propose PLANNABLE heads (never the system
   // built-ins Wasted Time / Lost Hours). Feed it a registry filtered to those.
   const plannableRegistry = useMemo(

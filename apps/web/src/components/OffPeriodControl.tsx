@@ -49,7 +49,7 @@ function OffDialog({
   dispatch: (e: Event) => void;
   onClose: () => void;
 }): JSX.Element {
-  const { timeFormat } = useSettings();
+  const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
   const [title, setTitle] = useState("");
   const [known, setKnown] = useState(false);
@@ -66,7 +66,7 @@ function OffDialog({
     const v = dayMin + cur;
     setKnown(true);
     setEndMin(v);
-    setEndStr(fmtDayTime(v, now, hour12));
+    setEndStr(fmtDayTime(v, now, hour12, showWeekday));
     setErr(null);
     setCalOpen(false);
   };
@@ -78,7 +78,7 @@ function OffDialog({
     let v = r.value;
     if (v <= now) v += 1440; // a past clock means the next occurrence (tomorrow)
     setEndMin(v);
-    setEndStr(fmtDayTime(v, now, hour12));
+    setEndStr(fmtDayTime(v, now, hour12, showWeekday));
     setErr(null);
   };
 
