@@ -21,3 +21,4 @@
 - [PART VIII — MVP BOUNDARY](08-mvp-boundary.md)
 - [PART IX — LEGACY SYSTEM FINDINGS (the 8-yr Sheet + AppScript, studied 2026-07-08)](09-legacy-findings.md)
 - [PART X — RESIDUAL OPEN ITEMS (safe to settle during build)](10-open-items.md)
+- [PART XI — TIME BUDGETING & THE CATEGORY TIER (designed 2026-07-15; revises §5.1)](11-time-budgeting.md)
