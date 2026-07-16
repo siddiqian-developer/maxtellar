@@ -416,7 +416,13 @@ gets a "lean" version that silently drops powers the drawer has. Concretely:
 field, `DatePicker`), so adopting them yields symmetry by construction; a bespoke one-off input is a
 bug. When adding ANY new input, reach for the shared component — never hand-roll a raw `<input>` for
 a time/date/duration/head/sub-head. (Ties to §7.0.4 buy-over-build: reuse the shared field, don't
-re-invent it.)
+re-invent it.) The same rule covers non-input shared mechanisms: the **snap-notify toast** is one
+component (`SnapToast` / `useSnapToast`), and a repo **guard test** (`snap-toast-guard.test.ts`)
+fails if a bespoke `notice-toast` element appears anywhere else — **reuse enforced by detection,
+not discipline** (the strong guarantee that a future edit can't silently re-hand-roll a shared
+piece). A running **inventory of shared primitives** lives at `docs/shared-primitives.md`; consult
+it before hand-rolling, and add a row when introducing a new one. Where duplication is likely,
+back a shared primitive with a guard test like the toast's.
 
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly

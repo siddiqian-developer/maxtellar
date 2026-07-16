@@ -36,6 +36,7 @@ import { useEscClose } from "../useEscClose";
 import { useHeads } from "../heads";
 import { parseCasualDuration } from "../casualTime";
 import { fmtDurUnits } from "../time";
+import { SnapToast, useSnapToast } from "../SnapToast";
 
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const QUOTA_LABEL: Record<QuotaType, string> = { atLeast: "at least", atMost: "at most", exact: "exact" };
@@ -60,18 +61,15 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
   const [selWd, setSelWd] = useState<number>(plannedDays.includes(todayWeekday) ? todayWeekday : (plannedDays[0] ?? 1));
   const [expanded, setExpanded] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, notify: showToast } = useSnapToast();
   const [flash, setFlash] = useState<{ headId: string; seq: number } | null>(null);
-  const toastTimer = useRef<number | null>(null);
   const dragId = useRef<string | null>(null);
 
   useEscClose(expanded ? () => setExpanded(null) : onBack);
 
   const notify = (text: string, headId: string): void => {
-    setToast(text);
+    showToast(text);
     setFlash((f) => ({ headId, seq: (f?.seq ?? 0) + 1 }));
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
   };
 
   const commit = (budgets: HeadBudget[], targets?: Record<string, number>): void => {
@@ -532,7 +530,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
         </div>
       </div>
 
-      {toast && <div className="notice-toast" role="status">{toast}</div>}
+      <SnapToast text={toast} />
     </div>
   );
 }

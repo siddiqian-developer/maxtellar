@@ -16,7 +16,7 @@
  * Esc → back one level (closes the overlay; ceremony state persists and the SOD
  * button re-opens mid-ceremony).
  */
-import { useRef, useState } from "react";
+import { useState } from "react";
 import type { Event, State, UnstartedTask } from "@maxtellar/core";
 import {
   LOST_HOURS,
@@ -32,6 +32,7 @@ import { useSettings } from "../settings";
 import { dayStartMin } from "../casualTime";
 import { fmtDayTime, fmtDur, fmtDurUnits, toDate } from "../time";
 import { DurInput } from "./BudgetPanel";
+import { SnapToast, useSnapToast } from "../SnapToast";
 
 interface Props {
   state: State;
@@ -89,17 +90,14 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
           })
           .filter((r) => r.eff > 0);
   const [trims, setTrims] = useState<Record<string, number>>({});
-  const [toast, setToast] = useState<string | null>(null);
+  const { toast, notify: showToast } = useSnapToast();
   // Bumped on every snap so the input remounts and reformats to the snapped
   // value even when the KEPT share didn't change (snap-at-entry: the field
   // must never keep displaying a rejected entry).
   const [snapSeq, setSnapSeq] = useState(0);
-  const toastTimer = useRef<number | null>(null);
   const notify = (text: string): void => {
-    setToast(text);
+    showToast(text);
     setSnapSeq((n) => n + 1);
-    if (toastTimer.current) window.clearTimeout(toastTimer.current);
-    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
   };
   // Snap-at-entry: a trim can only REDUCE today's share — over-entry snaps
   // back to the effective share (with the notify naming head + rule); an
@@ -239,7 +237,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
               </button>
               <span style={{ flex: 1 }} />
             </div>
-            {toast && <div className="notice-toast" role="status">{toast}</div>}
+            <SnapToast text={toast} />
           </div>
         )}
         {phase === "planning" && (

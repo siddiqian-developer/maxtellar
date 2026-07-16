@@ -15,6 +15,7 @@ import { SodCeremony } from "./components/SodCeremony";
 import { EodButton } from "./components/EodButton";
 import { OffPeriodControl } from "./components/OffPeriodControl";
 import { WeekView } from "./components/WeekView";
+import { SnapToast } from "./SnapToast";
 import { GapFillModal } from "./components/GapFillModal";
 import { LOST_HOURS, formingDayStart, sodPrecondition } from "@maxtellar/core";
 import { fmtDur } from "./time";
@@ -434,7 +435,7 @@ export function App(): JSX.Element {
         />
       )}
       {error && <div className="error-toast">{error}</div>}
-      {noticeToast && <div className="notice-toast" role="status">{noticeToast}</div>}
+      <SnapToast text={noticeToast} />
       {splashPhase !== "gone" && <Splash leaving={splashPhase === "leave"} />}
     </div>
   );

@@ -11,6 +11,7 @@
 import { useState } from "react";
 import type { Event, State } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
+import { SnapToast } from "../SnapToast";
 
 interface Props {
   state: State;
@@ -34,7 +35,7 @@ export function EodButton({ state, dispatch }: Props): JSX.Element {
       <button className="eod-btn" onClick={press} data-tip="End of day — a ritual close (work after is still fine)">
         End Day
       </button>
-      {acked && <div className="notice-toast" role="status">Day marked done — real rollover is the next Start of Day.</div>}
+      <SnapToast text={acked ? "Day marked done — real rollover is the next Start of Day." : null} />
       {open && state.running && (
         <EodModal
           title={state.running.title}
