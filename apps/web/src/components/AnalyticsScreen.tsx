@@ -13,8 +13,8 @@
  * reads on a fresh install.
  */
 
-import type { Dur, Min, State } from "@maxtellar/core";
-import { LOST_HOURS, SLEEP_HEAD, budgetEntries, trimDeficit, weekDayShape } from "@maxtellar/core";
+import type { Channels, Dur, Min, State } from "@maxtellar/core";
+import { LOST_HOURS, SELF_MANAGEMENT, SLEEP_HEAD, WASTED_TIME, budgetEntries, trimDeficit, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -74,12 +74,28 @@ function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, D
     if (mins <= 0) return;
     byHead.set(head, (byHead.get(head) ?? 0) + mins);
   };
+  // §2.6: a task's wall is spent + wasted + managed + breaks, and those minutes do
+  // not all belong to its own head — `wasted` rolls up into Wasted Time, `managed`
+  // is credited to Self-Management. `breaks` STAY with the task's head (§5.2: "a
+  // 60m task = 60m to the head, breaks included"). So the head keeps
+  // span − wasted − managed, and the split always re-sums to the clipped span.
+  const split = (head: string, start: Min, end: Min, ch: Channels): void => {
+    const clipped = overlap(start, end, winStart, winEnd);
+    if (clipped <= 0) return;
+    const span = end - start;
+    const frac = span > 0 ? clipped / span : 0; // partially-visible → pro rata
+    const wasted = Math.min(Math.round(ch.wasted * frac), clipped);
+    const managed = Math.min(Math.round(ch.managed * frac), clipped - wasted);
+    add(WASTED_TIME, wasted);
+    add(SELF_MANAGEMENT, managed);
+    add(head, clipped - wasted - managed); // remainder → conserves exactly
+  };
   for (const h of state.history) {
     if (h.kind !== "occupancy" || h.headId === LOST_HOURS) continue;
-    add(h.headId, overlap(h.start, h.end, winStart, winEnd));
+    split(h.headId, h.start, h.end, h.channels);
   }
   if (state.running) {
-    add(state.running.headId, overlap(state.running.startedAt, state.now, winStart, winEnd));
+    split(state.running.headId, state.running.startedAt, state.now, state.running.channels);
   }
   return byHead;
 }
@@ -110,11 +126,10 @@ function BudgetSection({ state, todayStart, todayEnd, todayByHead }: {
   // Weekly quotas: achieved since the week started (or the last 7 days when no
   // week is running — degrade gracefully, §4.4 reality 3).
   const winStart = week.startedAt ?? todayStart - 6 * DAY;
-  const weekAchieved = (headId: string): Dur =>
-    state.history
-      .filter((h) => h.kind === "occupancy" && h.headId === headId && h.headId !== LOST_HOURS)
-      .reduce((a, h) => a + overlap(h.start, h.end, winStart, state.now), 0) +
-    (state.running?.headId === headId ? overlap(state.running.startedAt, state.now, winStart, state.now) : 0);
+  // The SAME channel-aware split as the per-head table (§2.6) — otherwise a head's
+  // weekly quota would count wasted/managed minutes that the table doesn't.
+  const weekByHead = achievedByHead(state, winStart, state.now);
+  const weekAchieved = (headId: string): Dur => weekByHead.get(headId) ?? 0;
 
   const weeklies = entries.filter((b) => b.kind === "weekly");
 

@@ -81,7 +81,12 @@ a value that looks right, is never checked, and fails without an error.
 
 Swept clean: minted-id-vs-source lookups (the `pv-` class) — the three week-grid sites were the
 only instances; other `.find(x => x.id === …)` sites resolve real ids in real collections.
-- **GAP (found 2026-07-16 building R8): the per-head ledger is not channel-aware.** §2.6 says
+- ~~**GAP (found 2026-07-16 building R8): the per-head ledger is not channel-aware.**~~
+  **FIXED 2026-07-16** — both roll-ups now split by channel (head keeps `spent + breaks`;
+  `wasted` → Wasted Time; `managed` → Self-Management), pro rata for clipped entries and exactly
+  conserving. `breaks` needed no ruling after all: §5.2 already pins them to the task's head.
+  Browser-verified: a drawer session while running now shows `Self-Management 00:05` beside
+  `Recharge 00:05` with `Accounted 00:10`. Original report: §2.6 says
   per-task **wasted** "rolls up into the Wasted Time head" and **managed** "is credited to the
   Self-Management head". Neither happens: both roll-ups — core's `achievedByHead` (§5.1) and
   `AnalyticsScreen`'s — add a task's ENTIRE occupancy span to its own `headId` and never read

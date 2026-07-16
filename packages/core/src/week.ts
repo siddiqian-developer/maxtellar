@@ -7,6 +7,7 @@
  */
 
 import type { DatedTask, Dur, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
+import { SELF_MANAGEMENT, WASTED_TIME } from "./types.js";
 import {
   budgetEntries,
   redistributeOvershoot,
@@ -45,14 +46,44 @@ export function canPlanWeek(s: State, weekday: number | null, urgent = false): b
   return false;
 }
 
-/** §5.1: occupancy minutes per head within [start, end) (entries clipped). */
+/**
+ * §5.1: occupancy minutes per head within [start, end) (entries clipped),
+ * **split by channel** per the §2.6 accounting identity.
+ *
+ * A task's wall is `spent + wasted + managed + breaks`, and those minutes do NOT
+ * all belong to the task's own head:
+ *  - **wasted → Wasted Time** (§2.6: "per-task wasted rolls up into the Wasted
+ *    Time head"). Wasted is extra wall, not achievement — `end = start + budget +
+ *    wasted` (E1), so removing it leaves the head its real budget.
+ *  - **managed → Self-Management** (§2.6: the one sanctioned auto-log).
+ *  - **breaks STAY with the task's head** — §5.2 is explicit: "Quotas count the
+ *    whole pomodoro task (60m task = 60m to the head, breaks included)", and
+ *    breaks eat the task's budget.
+ * So the head keeps `span − wasted − managed` (= spent + breaks = its budget).
+ *
+ * Conservation: the three shares always re-sum to the clipped span (the head takes
+ * the remainder, so integer rounding can never leak or invent minutes).
+ */
 export function achievedByHead(history: HistoryEntry[], start: Min, end: Min): Record<string, Dur> {
   const out: Record<string, Dur> = {};
+  const add = (head: string, mins: Dur): void => {
+    if (mins <= 0) return;
+    out[head] = (out[head] ?? 0) + mins;
+  };
   for (const h of history) {
     if (h.kind !== "occupancy") continue;
     const a = Math.max(h.start, start);
     const b = Math.min(h.end, end);
-    if (b > a) out[h.headId] = (out[h.headId] ?? 0) + (b - a);
+    if (b <= a) continue;
+    const clipped = b - a;
+    const span = h.end - h.start;
+    // A partially-visible entry contributes its channels pro rata.
+    const frac = span > 0 ? clipped / span : 0;
+    const wasted = Math.min(Math.round(h.channels.wasted * frac), clipped);
+    const managed = Math.min(Math.round(h.channels.managed * frac), clipped - wasted);
+    add(WASTED_TIME, wasted);
+    add(SELF_MANAGEMENT, managed);
+    add(h.headId, clipped - wasted - managed); // the remainder — conserves exactly
   }
   return out;
 }

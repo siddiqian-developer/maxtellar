@@ -87,11 +87,16 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
     With **nothing running there is no managed channel** (it is a channel OF the running task) —
     that time is simply unaccounted and becomes Lost Hours at the next SOD. No Self-Management
     occupancy is invented for it.
-  - **ROLL-UP NOT BUILT (gap, §10).** Both `achievedByHead` roll-ups (core §5.1, and Analytics')
-    attribute a task's WHOLE occupancy span to its own head, ignoring channels — so today neither
-    `managed` reaches **Self-Management** nor `wasted` reaches **Wasted Time** in the per-head
-    ledger, despite the two rules above. Making the roll-up channel-aware changes §5.1 quota math
-    (achieved drives redistribution), so it is a deliberate separate decision.
+  - **ROLL-UP BUILT (2026-07-16).** Both `achievedByHead` roll-ups (core §5.1 and Analytics',
+    incl. Analytics' weekly-quota achieved) are **channel-aware**: a task's head keeps
+    `span − wasted − managed` (= `spent + breaks`), `wasted` → **Wasted Time**, `managed` →
+    **Self-Management**. **`breaks` stay with the task's head** — §5.2 is explicit ("Quotas count
+    the whole pomodoro task: 60m task = 60m to the head, breaks included") and breaks eat its
+    budget. A partially-visible entry contributes its channels **pro rata**; the head takes the
+    remainder, so the split always re-sums to the clipped span exactly (integer rounding can
+    neither leak nor invent a minute). This necessarily moves §5.1 quota math — wasted/managed
+    minutes no longer count as a head's achievement, which is precisely what the identity says.
+    Guarded by `channel-rollup.test.ts`.
 - **Channel set LOCKED (post sheet-study, §9.2):** `wall = spent + wasted + managed + breaks`
   is the complete task-level partition. The sheet's other buckets (Exclusion, Rest, Sleepless-
   Bedtime, Meditation, …) are heads/activities — day-level, handled by the spine — not task
