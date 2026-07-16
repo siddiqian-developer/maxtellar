@@ -33,3 +33,39 @@
   `templateId` through it. All three behaviors verified working in-browser (skip removes the block
   AND its cross-midnight tail; click→edit and Edit-template open the right template). Guarded by
   `weekPreviewSource.test.ts`, which fails if a block ever carries a minted id again.
+
+## Audit findings — the "silent no-op" class (2026-07-16)
+
+Two bugs (the `pv-` ids, the declared `firstWeekday`) were found **by accident** while porting the
+week grid; both were silent, user-facing, in features marked DONE, and untested. A deliberate sweep
+for the same class turned up two more, **both verified**, plus one by inspection. The common shape:
+a value that looks right, is never checked, and fails without an error.
+
+- **BUG (verified, 2026-07-16): toggling an OFF day RESTARTS THE WEEK and wipes the §5.1 ledger.**
+  `WeekView.toggleOffDay` dispatches **`START_WEEK`** — the week-**rollover** event ("marks the
+  boundary", §4.4) — merely to edit `offDays`. The reducer therefore also does
+  `startedAt: event.startedAt ?? state.now` and `quotaAdjust: []`. Proven in a reducer test:
+  `startedAt 5000 → 10000`, `quotaAdjust 1 → 0` from one chip click. Blast radius: `week.startedAt`
+  is the WEEK WINDOW for weekly quotas (`alarms.ts`) and Analytics' "this week"
+  (`AnalyticsScreen.tsx`), so both silently reset; every §5.1 redistribution + pruning trim is
+  discarded. Fix direction: a dedicated event (e.g. `SET_OFF_DAYS { offDays, firstWeekday? }`) that
+  changes ONLY the OFF set — `START_WEEK` should stay the rollover.
+- **BUG (verified, 2026-07-16): marking a day "weekend" in Settings does not make it OFF —
+  §4.4a's `weekend ⊆ offDays` invariant is broken.** `SettingsPanel.toggleWeekend` calls
+  `setWeekendDays` (web/localStorage) only; it never syncs core's `week.offDays`, though the panel
+  already holds `dispatch`. Verified in-browser: marking Friday weekend leaves
+  `friWeekend: true, friOff: false, friBlocks: 1` — the day is tinted as weekend and drops its
+  working-day number (§4.4b), yet **still injects its recurring templates**. Exactly what §4.4a
+  forbids: "you cannot mark a day 'weekend' yet have it inject." The UI contradicts itself.
+  Needs a ruling first: syncing `offDays` is a STRUCTURAL change, and §4.4 locks those mid-week —
+  so does the weekend setting become OFF-day-gated, or does it only take effect at the next
+  `START_WEEK`?
+- **SUSPECTED (by inspection, unverified): toggling an OFF day is a silent no-op when budgets
+  don't balance.** `START_WEEK` gates on `weekBudgetValidity(probe).ok` and otherwise
+  `return state` (reducer.ts). The Start-Week button is disabled in that state; the OFF-day chips
+  are not, but dispatch the same event — so the chip would just not respond, with no feedback
+  (§7.0.2 snap-NOTIFY says a rejected input must say so). Same root as the first item; a dedicated
+  event resolves the coupling.
+
+Swept clean: minted-id-vs-source lookups (the `pv-` class) — the three week-grid sites were the
+only instances; other `.find(x => x.id === …)` sites resolve real ids in real collections.
