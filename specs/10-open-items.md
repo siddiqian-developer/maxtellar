@@ -12,6 +12,7 @@
 - Default pomodoro preset shipped.
 - ~~Injected-leftover relative priority default (assumed: injected ranks below leftovers).~~
   **RESOLVED (Stage 5):** injected weekly tasks rank strictly below surviving leftovers (§4.4);
-  user drags to re-rank. Recurrence is a weekday set (one-time/ranged deferred); mid-week planning
+  user drags to re-rank. Recurrence is a weekday set (one-time/ranged: deferral lifted 2026-07-16 —
+  template validity, see §4.4); mid-week planning
   is locked (open on OFF days / pre-week / urgent); off-periods book to a new built-in Off-Periods
   head. See §4.4/§4.5.

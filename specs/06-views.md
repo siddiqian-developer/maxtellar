@@ -277,7 +277,8 @@ Drawer behavior (see also `docs/drawer-reference.md`):
   (day after tomorrow onward — today/tomorrow are never in the calendar). Budget is a
   **casual duration** (`1h30`, `1days 2.5hr`, `45m`) shown as `Nd Nh Nm`, zero-units
   trimmed, always ≥ minutes (`90m`→`1h 30m`, `30m`→`30m`). ±5-min stepper chevrons on all
-  time fields (steppers skipped by tab order). Parser is deterministic-grammar-first with an
+  time **and duration** fields — on **every surface**, not only this drawer (ruled 2026-07-16,
+  §7.0.5 symmetry; steppers skipped by tab order). Parser is deterministic-grammar-first with an
   ML fallback seam (§7.0.2); never load-bearing.
 - **Preset pill row (directly under the timing-type chips).** Headed by a **`Presets` label** in
   the main view; the ⓘ glyph carries only the auto-select footnote. `Sleep · Nap · Food` — each a

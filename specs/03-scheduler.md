@@ -9,7 +9,11 @@ concurrency must be serialized (model over mess).
 ### 3.2 The four motions — G2/G3
 - **Slide** — a neighbor pushes a task along the timeline (= moving it).
 - **Wrap-around** — a *breakable* (budgeted) neighbor splits **itself** around an obstacle.
-  (Future: wrap-split parts can **rejoin** back into one task when the obstacle clears.)
+  **Rejoin (ruled in-scope 2026-07-16, was "future"):** when the obstacle that forced the wrap
+  is gone (cancelled, moved, or consumed) and the parts would sit adjacent with no wall between
+  them, the settle-pass **reunifies** them into the one original task — budget conserved
+  (Σ part budgets = original), placed at the earlier part's position (forward-only holds: rejoin
+  consumes no new space). Generalizes the existing part-1-below-MIN_FRAGMENT reunification (§3.7).
 - **Frogleap** — an *unbreakable* neighbor jumps **itself** wholesale over an obstacle.
 - **Amputation** — `now` consumes a task's elapsed head into a Skipped segment. *Amputation is
   not moving.*
@@ -149,11 +153,13 @@ task's greed is scaled to its neighbour's *need*, never to who outranks whom.
 - **Labeled "open", never a number** — same never-disguise rule as the ML tags. Pipeline cards
   show "open" where a budget would sit; the block shows its capped span, edge-styled as floating
   (§6), never as a committed duration.
-- **Scope note (partial, 2026-07-11):** implemented for **unscheduled** subjects (the demonstrated
-  cases: vs nothing / vs firm / split among unscheduled). Still TODO: a budget-less **semi-head**
-  as *subject* uses the older soft-wall clamp, not yet the 10 h/2 h/split rule; and a **semi-tail**
-  *below* is currently treated as firm (2 h) rather than an even split — its anchored-end geometry
-  needs its own pass. (A **firm task contesting an open semi-tail's claim** is settled — G27.)
+- **Scope note (partial, 2026-07-11; ruled to COMPLETE now, 2026-07-16 — no longer deferred):**
+  implemented for **unscheduled** subjects (the demonstrated cases: vs nothing / vs firm / split
+  among unscheduled). To finish: a budget-less **semi-head** as *subject* still uses the older
+  soft-wall clamp — it must use the same 10 h/2 h/split fair-share rule (its anchored start pins
+  the claim's start; the claim size follows the rule); and a **semi-tail** *below* is currently
+  treated as firm (2 h) — it is an **open peer** (indefinite claim) and belongs in the even split.
+  (A **firm task contesting an open semi-tail's claim** is settled — G27.)
 
 ### 3.9.1 Semi-tail compression floor & slide-at-floor — G27 (settled 2026-07-12)
 An **open semi-tail's** ballooned claim (start floats, end anchored) is **compressible from its

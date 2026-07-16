@@ -410,10 +410,26 @@ gets a "lean" version that silently drops powers the drawer has. Concretely:
    a *time-of-day-only* input (a recurring weekly anchor — a "9am" that repeats, not a calendar date)
    carries smart-input but **no** calendar, because it has no date. Duration inputs carry smart-input
    (no calendar — a duration has no date).
+   **Steppers are part of the symmetry (ruled 2026-07-16, violation found in audit):** the ±5-min
+   inc/dec chevrons (§6, tab-skipped) belong to **every time AND duration input on every surface**
+   — not just the task drawer. That includes the WeekView template/dated editors, GapFillModal,
+   BudgetPanel budget/share/quota fields, and Settings duration fields; and every future input.
 2. **Every sub-head input** carries the **title → sub-head ML suggestion** (§7.0.1: autofill when
    empty/app-sourced, a one-click "Use this" chip when the user has typed something else, intent-
    protected so an accepted/typed value is never overwritten). **Every new-head input** carries the
    **sub-head → head ML suggestion**. ML is never load-bearing (deterministic entry always works).
+3. **Full drawer option parity (ruled 2026-07-16, violation found in audit).** Every surface that
+   *creates or edits a task or task spec* — the New Task drawer, the history editor, GapFillModal,
+   the WeekView template editor, the dated-task (Calendar) editor, off-period dialogs, and anything
+   later — offers the **complete New-Task option set**: timing-type chips (live type-morph), the
+   preset pill row (Sleep/Nap/Food), the flags row (OMMF / slideable / breakable, §2.5
+   validity-matrix-guarded), the sub-head field with ML + head derivation, title shorthand grammar,
+   and smart-input fields (📅 where the field is dated). No surface ships a "lean" editor that
+   hardcodes flags or drops options (the WeekView editors hardcoding `slideable`/`breakable` was the
+   found breach). Where a field is *structurally meaningless* on a surface (e.g. an absolute date on
+   a recurring weekly anchor), it is exempt by structure, never by convenience — the §7.0.5 exemption
+   pattern. Enforced by construction: one shared task-options form section + the shared smart fields,
+   backed by a guard test in the style of `snap-toast-guard.test.ts`.
 
 **Enforcement:** these live in the *shared* field components (`SubheadField`, the smart date/time
 field, `DatePicker`), so adopting them yields symmetry by construction; a bespoke one-off input is a

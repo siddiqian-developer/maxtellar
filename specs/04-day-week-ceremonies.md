@@ -120,8 +120,14 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
   A **`WeekTemplate`** is a reusable task spec: title, head/activity, timing, tier, ommf,
   slideable, breakable, budget?, **anchor time-of-day** `anchorStartTod`/`anchorEndTod` (0..1439 —
   a "9am meeting", NOT an absolute epoch), sleepKind?, `weekdays: number[]` (0=Sun…6=Sat), and a
-  LexoRank. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged is a
-  future extension** (grilled 2026-07-15 — weekday-set for the MVP).
+  LexoRank. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
+  ruled IN scope (2026-07-16, supersedes the 2026-07-15 "future extension" deferral).** A template
+  gains an optional **validity**: **one-time** (fires on its next weekday occurrence, then retires —
+  never fires again; the retired template stays listed, marked, until deleted) or **ranged**
+  (`from`/`to` local-midnight dates, inclusive, bounding when the weekday set fires; either edge may
+  be open). `injectToday` filters templates by validity for the injection date; the WeekView
+  template editor gains the control (date fields are smart-input + 📅 per §7.0.5, future-direction).
+  Validity dates use the same local-midnight epoch-minute keys as the §4.6 dated layer.
 - **`SET_WEEK_PLAN { templates, weekday?, urgent? }`** replaces the template set. **LOCKED
   mid-week** (`canPlanWeek`): accepted only before the first week starts, when today's weekday is an
   **OFF day** (default Sunday; ≥1 required), or with the **urgent bypass**; otherwise a no-op. The
