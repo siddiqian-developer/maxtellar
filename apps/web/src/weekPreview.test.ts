@@ -76,3 +76,45 @@ describe("weekPreview", () => {
     expect(p.days.find((d) => d.weekday === MON)!.conflict).toBeTruthy();
   });
 });
+
+/**
+ * §4.4 an overnight task occupies hours on TWO days. Its minutes are attributed
+ * to each day they physically fall on — §11 budgets are per-day CAPACITY, so
+ * hours sitting in Tuesday must consume Tuesday's, or the user over-books it.
+ */
+describe("§4.4 overnight split", () => {
+  const sleep = tpl({
+    title: "Sleep", timing: "fixed", weekdays: [MON], rank: "a",
+    anchorStartTod: 23 * 60, anchorEndTod: 7 * 60, anchorEndDayOffset: 1, budget: 8 * 60,
+  });
+
+  it("keeps the evening slice on the day it starts, clipped at midnight", () => {
+    const mon = run([sleep]).days.find((d) => d.weekday === MON)!;
+    const b = mon.blocks.find((x) => x.title === "Sleep")!;
+    expect(b.start).toBe(23 * 60);
+    expect(b.end).toBe(1440); // never runs off the bottom of the column
+    expect(b.continued).toBeUndefined();
+  });
+
+  it("attributes the morning slice to the NEXT day, marked as continued", () => {
+    const tue = run([sleep]).days.find((d) => d.weekday === TUE)!;
+    const b = tue.blocks.find((x) => x.title === "Sleep")!;
+    expect(b.start).toBe(0);
+    expect(b.end).toBe(7 * 60); // Tuesday's morning is SPENT, not free
+    expect(b.continued).toBe(true);
+  });
+
+  it("stays ONE task — both slices carry the same source id", () => {
+    const p = run([sleep]);
+    const mon = p.days.find((d) => d.weekday === MON)!.blocks.find((x) => x.title === "Sleep")!;
+    const tue = p.days.find((d) => d.weekday === TUE)!.blocks.find((x) => x.title === "Sleep")!;
+    expect(tue.templateId).toBe(mon.templateId);
+    // The two slices re-sum to the whole span — no minutes invented or lost.
+    expect((mon.end - mon.start) + (tue.end - tue.start)).toBe(8 * 60);
+  });
+
+  it("leaves an ordinary same-day task on its own day", () => {
+    const p = run([tpl({ title: "Gym", budget: 60, weekdays: [MON], rank: "a" })]);
+    expect(p.days.find((d) => d.weekday === TUE)!.blocks).toHaveLength(0);
+  });
+});

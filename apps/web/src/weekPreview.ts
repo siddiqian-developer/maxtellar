@@ -37,10 +37,17 @@ export interface WeekBlock {
   headId: string;
   /** true when this block came from a §4.6 dated one-off add (not a template). */
   dated: boolean;
-  /** minutes-into-day [0,1440+) */
+  /** minutes-into-day [0,1440] — sliced at midnight, so never past the column. */
   start: number;
   end: number;
   squeezed: Dur;
+  /**
+   * §4.4 this block is the TAIL of an overnight task that began the previous day
+   * (11pm→7am sleep shows 23:00–24:00 on Mon and 00:00–07:00 on Tue). Still ONE
+   * task — same `templateId`, one budget, one completion; the slice is an
+   * accounting view, never a structural break (§2.5 `breakable` is unrelated).
+   */
+  continued?: boolean;
 }
 export interface WeekDayPreview {
   /** local-midnight epoch-minute of the column. */
@@ -103,6 +110,13 @@ export function weekPreview(
   // will. Columns run in date order, so retire fired once-templates in a working
   // copy as we advance (using the core's own firedOnceIds).
   let workTemplates = templates;
+  /**
+   * §4.4 overnight tails waiting for their column. An 11pm→7am task is ONE task
+   * occupying hours on TWO days, so its minutes are attributed to each day they
+   * physically fall on — otherwise Tuesday looks empty while its morning is
+   * already spent, and the user over-books it. Keyed by the date they land on.
+   */
+  const carryIn = new Map<number, WeekBlock[]>();
 
   for (const col of columns) {
     // A minimal State the pure injector reads (templates + offDays + dated layer).
@@ -145,18 +159,38 @@ export function weekPreview(
 
     const placements = settle({ plan: tasks as PlanItem[], cursor, minFragment, openExtentCap, semiTailFloor });
 
-    const blocks: WeekBlock[] = [];
+    // Yesterday's overnight tails occupy this column's morning before anything
+    // else — they are already-spent hours, not free space.
+    const blocks: WeekBlock[] = carryIn.get(col.date) ?? [];
+    for (const b of blocks) {
+      if (!full24) {
+        winStart = Math.min(winStart, b.start);
+        winEnd = Math.max(winEnd, b.end);
+      }
+    }
     let conflict: string | null = null;
     for (const p of placements) {
       const t = tasks.find((x) => x.id === p.itemId);
       if (!t || p.parts.length === 0) continue;
       const start = p.parts[0]!.start - col.date;
-      const end = p.parts[p.parts.length - 1]!.end - col.date;
+      const rawEnd = p.parts[p.parts.length - 1]!.end - col.date;
       const isDated = datedIds.has(t.id);
       // `t.id` is the injected task's MINTED id — map back to the template /
       // dated-task it was instantiated from, or the UI can never find it again.
       const sourceId = injected.sourceIds[t.id] ?? t.id;
+      // §4.4: slice at midnight — this column keeps the part that falls today,
+      // the remainder is attributed to tomorrow's column.
+      const end = Math.min(rawEnd, MIN_PER_DAY);
       blocks.push({ templateId: sourceId, title: t.title, timing: t.timing, headId: t.headId, dated: isDated, start, end, squeezed: p.squeezedDeficit });
+      if (rawEnd > MIN_PER_DAY) {
+        const nextDate = col.date + MIN_PER_DAY;
+        const tail: WeekBlock = {
+          templateId: sourceId, title: t.title, timing: t.timing, headId: t.headId,
+          dated: isDated, start: 0, end: Math.min(rawEnd - MIN_PER_DAY, MIN_PER_DAY),
+          squeezed: 0, continued: true,
+        };
+        carryIn.set(nextDate, [...(carryIn.get(nextDate) ?? []), tail]);
+      }
       if (!full24) {
         winStart = Math.min(winStart, start);
         winEnd = Math.max(winEnd, end);

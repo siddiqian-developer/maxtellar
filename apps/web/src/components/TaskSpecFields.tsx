@@ -309,8 +309,10 @@ export function AnchorEndField({ tod, dayOffset, onChange, hour12 }: {
     const carried: EndDayOffset = next >= 1440 ? 1 : next < 0 ? 0 : dayOffset;
     onChange({ tod: wrapped, dayOffset: carried });
   };
-  // Picking a day sets ONLY the day. With no time yet the field becomes
-  // "Next Day, " and waits — it never invents a time on the user's behalf.
+  // Picking a day sets ONLY the day — with no time yet the field becomes
+  // "Next Day, " and waits, never inventing a time. The pick is checked and
+  // snapped to the nearest possible day upstream (§7.0.2), so the field always
+  // reflects what actually took effect.
   const choose = (d: EndDayOffset): void => {
     setPick(false);
     onChange({ tod, dayOffset: d });
@@ -427,6 +429,26 @@ export function deriveAnchorTrio(
     }
   }
   return { startTod, endTod, endDayOffset, budget };
+}
+
+/**
+ * §7.0.2 snap-at-entry for the end's DAY. Picking a day that can't produce a
+ * valid span is corrected to the nearest one that can, at the moment of the
+ * click — never accepted and scolded on save. With only two days and a 24h
+ * ceiling the "nearest possible" is simply the other one, when it works:
+ *  - "Next Day" on 9am→5pm would be 32h → snaps to Same Day (8h).
+ *  - "Same Day" on 11pm→7am would be negative → snaps to Next Day (8h).
+ * With no start yet there's nothing to check, so the pick stands.
+ */
+export function snapEndDay(
+  startTod: number | undefined,
+  endTod: number | undefined,
+  wanted: EndDayOffset,
+): EndDayOffset {
+  if (startTod === undefined || endTod === undefined) return wanted;
+  if (spanOfAnchors(startTod, endTod, wanted) !== undefined) return wanted;
+  const other: EndDayOffset = wanted === 1 ? 0 : 1;
+  return spanOfAnchors(startTod, endTod, other) !== undefined ? other : wanted;
 }
 
 export type FieldRole = "required" | "optional" | "not used";
@@ -659,8 +681,10 @@ export function useTaskSpec(initial: TaskSpecInit) {
     setBudget(next.budget);
   };
   const changeStart = (tod: number | undefined): void => applyTrio("start", { startTod: tod });
+  // §7.0.2: the picked/typed day is checked against the start and snapped to the
+  // nearest day that yields a valid span before anything derives from it.
   const changeEnd = (e: { tod: number | undefined; dayOffset: EndDayOffset }): void =>
-    applyTrio("end", { endTod: e.tod, endDayOffset: e.dayOffset });
+    applyTrio("end", { endTod: e.tod, endDayOffset: snapEndDay(startTod, e.tod, e.dayOffset) });
   const changeBudget = (b: number | undefined): void => applyTrio("budget", { budget: b });
 
   /**

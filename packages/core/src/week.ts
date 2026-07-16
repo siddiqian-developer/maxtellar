@@ -6,7 +6,7 @@
  * Core stays Date-free: the caller passes today's local-midnight + weekday.
  */
 
-import type { DatedTask, Dur, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
+import type { DatedTask, Dur, EndDayOffset, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
 import { SELF_MANAGEMENT, WASTED_TIME } from "./types.js";
 import {
   budgetEntries,
@@ -273,7 +273,10 @@ export function injectTodayDetailed(
       push(t, t.id);
       continue;
     }
-    const cost = t.budget ?? (t.anchorStartTod !== undefined && t.anchorEndTod !== undefined ? t.anchorEndTod - t.anchorStartTod : 0);
+    // §4.4: `end - start` went NEGATIVE for an overnight template (7am - 11pm =
+    // -960), which credited quota back instead of spending it. `anchorSpan`
+    // carries the day offset, so an 11pm→7am sleep costs its true 8h.
+    const cost = t.budget ?? anchorSpan(t.anchorStartTod, t.anchorEndTod, t.anchorEndDayOffset) ?? 0;
     if (t.timing !== "budgeted" || cost <= rem) {
       remaining.set(t.headId, rem - cost);
       push(t, t.id);
@@ -332,10 +335,31 @@ function collectDue(s: State, midnight: Min, weekday: number): { due: WeekTempla
   return { due, adds };
 }
 
+/**
+ * §4.4 the span an anchored pair describes: `endDayOffset*1440 + end - start`.
+ * THE one definition (§7.0.6) — the editor, the quota cost and the injector all
+ * read it, so they cannot disagree about how long an overnight task is.
+ *
+ * `undefined` when it isn't a valid plan: never zero/negative, and never over 24h
+ * (planning reaches no further). An END with `dayOffset: 1` at/before the start
+ * is the overnight case (11pm → 7am = 8h).
+ */
+export function anchorSpan(
+  startTod: number | undefined,
+  endTod: number | undefined,
+  endDayOffset: EndDayOffset = 0,
+): Dur | undefined {
+  if (startTod === undefined || endTod === undefined) return undefined;
+  const raw = endDayOffset * MIN_PER_DAY + endTod - startTod;
+  return raw > 0 && raw <= MIN_PER_DAY ? raw : undefined;
+}
+
 /** Instantiate one template/dated-task onto the day at `midnight`. Time-of-day
- * anchors (0..1439) become absolute; a `tod` past 1440 (overnight) is clamped
- * inside the day. Reads only the shared TaskSpec fields, so a WeekTemplate and a
- * DatedTask instantiate through the identical path. */
+ * anchors (0..1439) become absolute. An END carrying `anchorEndDayOffset: 1`
+ * lands on the NEXT day (§4.4 overnight) — it is NOT clamped back into the day,
+ * which would silently drag an 11pm→7am sleep's end back to 23:59. Reads only the
+ * shared TaskSpec fields, so a WeekTemplate and a DatedTask instantiate through
+ * the identical path. */
 export function templateToTask(
   t: TaskSpec,
   midnight: Min,
@@ -343,6 +367,9 @@ export function templateToTask(
   rank: string,
 ): UnstartedTask {
   const abs = (tod: number): Min => midnight + Math.max(0, Math.min(MIN_PER_DAY - 1, tod));
+  // §4.4: the end may legitimately sit on the next day; carry the offset rather
+  // than clamping it into this one.
+  const absEnd = (tod: number): Min => abs(tod) + (t.anchorEndDayOffset ?? 0) * MIN_PER_DAY;
   const task: UnstartedTask = {
     kind: "task",
     id,
@@ -357,7 +384,7 @@ export function templateToTask(
     breakable: t.breakable,
     ...(t.budget !== undefined ? { budget: t.budget } : {}),
     ...(t.anchorStartTod !== undefined ? { anchorStart: abs(t.anchorStartTod) } : {}),
-    ...(t.anchorEndTod !== undefined ? { anchorEnd: abs(t.anchorEndTod) } : {}),
+    ...(t.anchorEndTod !== undefined ? { anchorEnd: absEnd(t.anchorEndTod) } : {}),
     ...(t.sleepKind !== undefined ? { sleepKind: t.sleepKind } : {}),
   };
   return task;

@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   clampDayOffset, dayOffsetLabel, MAX_END_DAY_OFFSET,
   impliedEndDayOffset, spanOfAnchors,
-  fmtAnchorEnd,
+  fmtAnchorEnd, snapEndDay,
 } from "./components/TaskSpecFields";
 import { parseAnchorEnd } from "./casualTime";
 
@@ -131,5 +131,27 @@ describe("§4.4 span across days", () => {
   it("rejects an end that lands at or before the start on the same day", () => {
     expect(span(17 * 60, 9 * 60, 0)).toBeUndefined();
     expect(span(9 * 60, 9 * 60, 0)).toBeUndefined();
+  });
+});
+
+describe("§7.0.2 the picked day snaps to the nearest possible", () => {
+  it("keeps a pick that already yields a valid span", () => {
+    expect(snapEndDay(9 * 60, 17 * 60, 0)).toBe(0);
+    expect(snapEndDay(23 * 60, 7 * 60, 1)).toBe(1);
+  });
+
+  it("Next Day on a span that would exceed 24h snaps back to Same Day", () => {
+    // 9am -> 5pm "next day" would be 32h; Same Day (8h) is the only valid one.
+    expect(snapEndDay(9 * 60, 17 * 60, 1)).toBe(0);
+  });
+
+  it("Same Day on an end at/before the start snaps to Next Day", () => {
+    // 11pm -> 7am "same day" is negative; Next Day (8h) is the only valid one.
+    expect(snapEndDay(23 * 60, 7 * 60, 0)).toBe(1);
+  });
+
+  it("leaves the pick alone when the start or end isn't set yet", () => {
+    expect(snapEndDay(undefined, 7 * 60, 1)).toBe(1);
+    expect(snapEndDay(23 * 60, undefined, 0)).toBe(0);
   });
 });
