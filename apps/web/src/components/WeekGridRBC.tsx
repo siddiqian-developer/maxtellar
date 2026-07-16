@@ -25,6 +25,7 @@
  *     the time axis entirely.
  *  2. The working-day number (§4.4b) sits on the column where the user WAKES.
  */
+import { useRef, useState } from "react";
 import { Calendar, dayjsLocalizer, type Event } from "react-big-calendar";
 import withDragAndDrop, { type EventInteractionArgs } from "react-big-calendar/lib/addons/dragAndDrop";
 import dayjs from "dayjs";
@@ -142,10 +143,67 @@ export function WeekGridRBC({
   };
 
   const gesturesOn = mode === "week" && !locked;
+  const wrapRef = useRef<HTMLDivElement>(null);
+  /** The live weekday-sweep (§4.4 feature 2), or null when idle. */
+  const [sweep, setSweep] = useState<{ x0: number; x1: number; startTod: number } | null>(null);
+  const sweepRef = useRef<{ x0: number; y0: number; startTod: number } | null>(null);
+
+  /** Which day columns the sweep's x-range covers, as weekdays. RBC's own select is
+   * per-DayColumn (its `_selectSlot` lives there) and can never report a column SET —
+   * that gap is the only reason this hand-rolled layer exists (§7.0.4). */
+  const weekdaysBetween = (xa: number, xb: number): number[] => {
+    const lo = Math.min(xa, xb), hi = Math.max(xa, xb);
+    const out: number[] = [];
+    wrapRef.current?.querySelectorAll<HTMLElement>(".rbc-day-slot").forEach((col, i) => {
+      const r = col.getBoundingClientRect();
+      // Columns are always Sun…Sat from a Sunday (`columnsFrom`), so index IS weekday.
+      // Overlap, not containment: clipping either edge still counts that day in.
+      if (r.right > lo && r.left < hi) out.push(i);
+    });
+    return out;
+  };
   /** Minutes-into-day of `d` RELATIVE to the column that owns the block (`ownerDate`).
    * Not `getHours()*60`: a block dragged onto the next calendar column (or a head sleep
    * past midnight) must read as >1440 against its owner, which is what core anchors on. */
   const todFor = (d: Date, ownerDate: number): number => Math.round(d.getTime() / 60000) - ownerDate;
+
+  /** Arms the weekday-sweep, but ONLY once the pointer has travelled further across
+   * than down (`H_INTENT`). Until then this layer stays out of the way and RBC keeps
+   * the gestures it already handles correctly — a click, and a vertical drag-select.
+   * RBC yields automatically while the overlay is up: its Selection bails via
+   * `isOverContainer` → `document.elementFromPoint`, which hits the overlay, not the
+   * grid. No patching, no stopPropagation race — its own logic declines. */
+  const onGridPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
+    if (!gesturesOn || e.button !== 0) return;
+    if ((e.target as HTMLElement).closest(".rbc-event")) return; // blocks are move/resize
+    const col = (e.target as HTMLElement).closest<HTMLElement>(".rbc-day-slot");
+    if (!col) return;
+    const r = col.getBoundingClientRect();
+    // Pixel → time-of-day against the visible window, snapped to the hour the grid
+    // actually draws (`step=60`). A sweep sets WEEKDAYS; its time is the row grabbed.
+    const frac = (e.clientY - r.top) / r.height;
+    const startTod = preview.winStart + Math.round((frac * (preview.winEnd - preview.winStart)) / 60) * 60;
+    sweepRef.current = { x0: e.clientX, y0: e.clientY, startTod };
+  };
+
+  const H_INTENT = 8; // px across before this layer claims the gesture (RBC's own is 5)
+
+  const onGridPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
+    const s = sweepRef.current;
+    if (!s) return;
+    const dx = Math.abs(e.clientX - s.x0), dy = Math.abs(e.clientY - s.y0);
+    if (!sweep && (dx < H_INTENT || dx <= dy)) return; // vertical/idle → leave it to RBC
+    setSweep({ x0: s.x0, x1: e.clientX, startTod: s.startTod });
+  };
+
+  const onGridPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
+    const s = sweepRef.current;
+    sweepRef.current = null;
+    if (!s || !sweep) { setSweep(null); return; } // never armed → RBC already handled it
+    setSweep(null);
+    const wds = weekdaysBetween(s.x0, e.clientX);
+    if (wds.length) onSlotSelect?.(wds, s.startTod, s.startTod + 60, false);
+  };
 
   const handleResize = ({ event, end }: EventInteractionArgs<BlockEvent>): void => {
     onBlockResize?.(event.date, event.block, todFor(new Date(end), event.date));
@@ -175,7 +233,30 @@ export function WeekGridRBC({
   };
 
   return (
-    <div className={`wk-rbc${mode === "week" && locked ? " locked" : ""}`} style={{ height }}>
+    <div
+      ref={wrapRef}
+      className={`wk-rbc${mode === "week" && locked ? " locked" : ""}${sweep ? " sweeping" : ""}`}
+      style={{ height }}
+      onPointerDown={onGridPointerDown}
+      onPointerMove={onGridPointerMove}
+      onPointerUp={onGridPointerUp}
+      onPointerCancel={() => { sweepRef.current = null; setSweep(null); }}
+    >
+      {/* Only mounted mid-sweep. Its presence is what makes RBC's Selection decline
+          the gesture (elementFromPoint hits this, not the grid) — so it is both the
+          visual and the mechanism. */}
+      {sweep && (() => {
+        // Band = the block you're about to make: swept columns wide, ONE ROW tall at
+        // the grabbed hour. Vertical geometry comes from a real .rbc-day-slot so it
+        // lines up with how RBC draws blocks (top/height as a fraction of the window).
+        const wrap = wrapRef.current?.getBoundingClientRect();
+        const slot = wrapRef.current?.querySelector<HTMLElement>(".rbc-day-slot")?.getBoundingClientRect();
+        if (!wrap || !slot) return null;
+        const span = preview.winEnd - preview.winStart;
+        const top = slot.top - wrap.top + ((sweep.startTod - preview.winStart) / span) * slot.height;
+        const height = (60 / span) * slot.height;
+        return <div className="wk-sweep" style={{ left: Math.min(sweep.x0, sweep.x1) - wrap.left, width: Math.abs(sweep.x1 - sweep.x0), top, height }} />;
+      })()}
       <DnDCalendar
         localizer={localizer}
         events={events}

@@ -107,6 +107,26 @@ async function run(line) {
       say(`ok drag ${sel} dx=${dx} dy=${dy}${edge ? ` from=${edge}` : ""}`);
       break;
     }
+    case "drag-hold": {
+      // Same as `drag` but leaves the button DOWN, so a mid-drag overlay/ghost can be
+      // inspected or screenshotted. Release with `mouseup`.
+      const [sel, dxs, dys, edge] = arg.split(" ");
+      const box = await page.locator(sel).first().boundingBox();
+      if (!box) { say(`err drag-hold: no box for ${sel}`); break; }
+      const x = box.x + box.width / 2;
+      const y = edge === "bottom" ? box.y + box.height - 2 : edge === "top" ? box.y + 2 : box.y + box.height / 2;
+      await page.mouse.move(x, y);
+      await page.mouse.down();
+      const dx = Number(dxs) || 0, dy = Number(dys) || 0;
+      for (let i = 1; i <= 10; i++) { await page.mouse.move(x + (dx * i) / 10, y + (dy * i) / 10); await page.waitForTimeout(20); }
+      say(`ok drag-hold ${sel} dx=${dx} dy=${dy} (button still down)`);
+      break;
+    }
+    case "mouseup": {
+      await page.mouse.up();
+      say("ok mouseup");
+      break;
+    }
     case "wait": {
       await page.waitForTimeout(Number(arg) || 1000);
       say(`ok wait ${arg}`);

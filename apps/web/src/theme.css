@@ -1758,7 +1758,29 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
    RBC ships its own stylesheet (imported by WeekGridRBC.tsx); everything below
    re-skins it to the app's paper/ink/accent. The blocks themselves keep the
    timing-hue language of the Day timeline. */
-.wk-rbc { margin-top: 4px; }
+.wk-rbc { margin-top: 4px; position: relative; }
+/* The shield is the MECHANISM: while a sweep is live it covers the whole grid, so
+   RBC's Selection bails (its isOverContainer → elementFromPoint lands here, not on
+   the grid) and two select systems coexist without fighting. It exists only
+   mid-sweep, so RBC keeps click + vertical drag exactly as before. */
+.wk-rbc.sweeping::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+}
+/* The band is the VISUAL: the block you are about to create — the swept columns
+   wide, and ONE ROW tall (its time), not the whole calendar. Its top/height are
+   inline, computed from the grabbed hour. */
+.wk-sweep {
+  position: absolute;
+  z-index: 4;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--accent) 14%, transparent);
+  border-inline: 1px solid var(--accent);
+  /* NOT pointer-events:none — being hit-testable IS the mechanism (see above). */
+}
+.wk-rbc.sweeping { cursor: ew-resize; user-select: none; }
 .wk-rbc .rbc-time-view { border: none; background: transparent; }
 .wk-rbc .rbc-time-header.rbc-overflowing { border-right: none; }
 .wk-rbc .rbc-time-header-content, .wk-rbc .rbc-time-header-cell { border: none; }

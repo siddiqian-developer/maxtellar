@@ -21,11 +21,12 @@ import { useEscClose } from "../useEscClose";
 import { WeekGridRBC } from "./WeekGridRBC";
 import { countStartWeekday } from "../workingDays";
 import { useSettings } from "../settings";
-import { fmtClock, toDate } from "../time";
+import { fmtClock, fmtDur, toDate } from "../time";
 import { diffOverride, weekPreview, type WeekColumn } from "../weekPreview";
 import { BudgetPanel, DurInput } from "./BudgetPanel";
-import { useTaskSpec, TaskSpecFieldsView, DateField, TodField } from "./TaskSpecFields";
+import { useTaskSpec, TaskSpecFieldsView, DateField, TodField, type TaskSpecInit } from "./TaskSpecFields";
 import { weekBudgetValidity } from "@maxtellar/core";
+import { SnapToast, useSnapToast } from "../SnapToast";
 
 const HOUR_PX = 30; // vertical scale: 30px per hour → 720px for the full day
 
@@ -64,10 +65,13 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
   const { timeFormat, weekendDays } = useSettings();
   const hour12 = timeFormat === "12h";
   const [mode, setMode] = useState<"week" | "calendar">(initialMode);
-  const [editing, setEditing] = useState<WeekTemplate | "new" | null>(null);
+  /** A NEW template carries an optional seed (prefilled from a grid gesture, §4.4);
+   * an existing one is the template itself. */
+  const [editing, setEditing] = useState<WeekTemplate | { new: true; seed?: TaskSpecInit; weekdays?: number[] } | null>(null);
   const [datedEdit, setDatedEdit] = useState<{ date: number; task: DatedTask | null } | null>(null);
   const [tplMenu, setTplMenu] = useState<{ date: number; templateId: string; title: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
+  const { toast, notify } = useSnapToast();
   // Calendar week offset in weeks from this week (0 = this week).
   const [weekOff, setWeekOff] = useState(1); // default to the COMING week
   const anyOverlay = editing || datedEdit || tplMenu;
@@ -192,6 +196,24 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     }
   };
 
+  /** §4.4 click/drag an empty slot → the Add-template drawer, prefilled with what the
+   * gesture said. A click has no span of its own, so it seeds the same 30m New Task
+   * uses; a drag carries its own. Either way the span is floored at MIN_FRAGMENT
+   * HERE — snap-at-entry: correct it at the boundary, never accept-then-scold. */
+  const onSlotSelect = (weekdays: number[], startTod: number, endTod: number, isClick: boolean): void => {
+    if (locked) return;
+    const wanted = isClick ? 30 : endTod - startTod;
+    const span = Math.max(wanted, state.minFragment);
+    if (span !== wanted) notify(`Snapped to ${fmtDur(span)} — the shortest usable fragment.`);
+    setEditing({
+      new: true,
+      // Both edges came from the gesture, so the honest type is `fixed` (start+end
+      // known) — not a floating budget. The user can morph it in the drawer.
+      seed: { timing: "fixed", anchorStartTod: startTod, anchorEndTod: startTod + span },
+      weekdays,
+    });
+  };
+
   const span = preview.winEnd - preview.winStart;
   const innerH = (span / 60) * HOUR_PX;
 
@@ -290,7 +312,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
               <div className="wk-section-head">
                 <h3>{mode === "week" ? "The week, placed" : "The week"}</h3>
                 {mode === "week" && (
-                  <button className="hist-add-btn" disabled={locked} onClick={() => setEditing("new")} data-tip={locked ? "Locked until an OFF day" : "Add a recurring task template"}>
+                  <button className="hist-add-btn" disabled={locked} onClick={() => setEditing({ new: true })} data-tip={locked ? "Locked until an OFF day" : "Add a recurring task template"}>
                     + Add template
                   </button>
                 )}
@@ -308,7 +330,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
                 locked={locked}
                 onBlockClick={onBlockClick}
                 onAddDated={(date) => setDatedEdit({ date, task: null })}
-                onSlotSelect={(wds, s, e, isClick) => console.log("[stage1] slotSelect", { weekdays: wds, startTod: s, endTod: e, isClick })}
+                onSlotSelect={onSlotSelect}
                 onBlockResize={(date, b, endTod) => console.log("[stage1] resize", { date, title: b.title, timing: b.timing, from: b.end, to: endTod })}
                 onBlockMove={(date, b, startTod, toWeekday) => console.log("[stage1] move", { date, title: b.title, timing: b.timing, fromStart: b.start, toStart: startTod, toWeekday })}
               />
@@ -321,7 +343,12 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
       </div>
 
       {editing && (
-        <TemplateEditor template={editing === "new" ? null : editing} hour12={hour12} now={state.now} minFragment={state.minFragment} onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
+        <TemplateEditor
+          template={"new" in editing ? null : editing}
+          seed={"new" in editing ? editing.seed : undefined}
+          seedWeekdays={"new" in editing ? editing.weekdays : undefined}
+          hour12={hour12} now={state.now} minFragment={state.minFragment}
+          onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
       )}
       {datedEdit && (
         <DatedTaskEditor date={datedEdit.date} task={datedEdit.task} hour12={hour12} minFragment={state.minFragment}
@@ -338,6 +365,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
           onMove={() => { const t = state.week.templates.find((x) => x.id === tplMenu.templateId); if (t) setEditing(t); setTplMenu(null); }}
           onClose={() => setTplMenu(null)} />
       )}
+      <SnapToast text={toast} />
     </div>
   );
 }
@@ -473,9 +501,14 @@ function DatedTaskEditor({ date, task, hour12, minFragment, onSave, onDelete, on
   );
 }
 
-/** Add/edit one recurring template — smart-input on time/duration. */
-function TemplateEditor({ template, hour12, now, minFragment, onSave, onDelete, onClose }: {
+/** Add/edit one recurring template — smart-input on time/duration.
+ * `seed`/`seedWeekdays` prefill a NEW template from a grid gesture (§4.4): passing
+ * `timing` in the seed suppresses useTaskSpec's budgeted-30m default, so the times
+ * the user actually dragged survive. An existing `template` always wins over a seed. */
+function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment, onSave, onDelete, onClose }: {
   template: WeekTemplate | null;
+  seed?: TaskSpecInit | undefined;
+  seedWeekdays?: number[] | undefined;
   hour12: boolean;
   now: number;
   minFragment: number;
@@ -485,8 +518,8 @@ function TemplateEditor({ template, hour12, now, minFragment, onSave, onDelete, 
 }): JSX.Element {
   useEscClose(onClose);
   const isNew = template === null;
-  const sp = useTaskSpec(template ?? {}, minFragment);
-  const [weekdays, setWeekdays] = useState<number[]>(template?.weekdays ?? [1, 2, 3, 4, 5]);
+  const sp = useTaskSpec(template ?? seed ?? {}, minFragment);
+  const [weekdays, setWeekdays] = useState<number[]>(template?.weekdays ?? seedWeekdays ?? [1, 2, 3, 4, 5]);
   const [err, setErr] = useState<string | null>(null);
   const toggleDay = (d: number): void => setWeekdays((w) => (w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort()));
 
