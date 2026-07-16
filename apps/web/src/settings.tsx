@@ -88,6 +88,8 @@ interface Settings {
   setMlMode: (m: "maximum" | "lightweight") => void;
   aiLevels: AiLevels;
   setAiLevel: (feature: AiFeature, level: AiLevel) => void;
+  /** Bulk restore — the §06 transactional revert puts the whole set back at once. */
+  setAiLevels: (l: AiLevels) => void;
   /** §5.2 global default pomodoro preset; per-task override at Start. */
   pomodoroDefault: PomodoroConfig;
   setPomodoroDefault: (c: PomodoroConfig) => void;
@@ -102,6 +104,8 @@ interface Settings {
   customSounds: CustomSound[];
   addCustomSound: (s: CustomSound) => void;
   removeCustomSound: (id: string) => void;
+  /** Bulk restore — §06 revert: add/remove alone can't undo a cancelled session. */
+  setCustomSounds: (l: CustomSound[]) => void;
 }
 
 const SettingsContext = createContext<Settings | null>(null);
@@ -255,7 +259,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
     localStorage.setItem("customSounds", JSON.stringify(customSounds));
   }, [customSounds]);
   return (
-    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound }}>
+    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel, setAiLevels, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound, setCustomSounds }}>
       {children}
     </SettingsContext.Provider>
   );

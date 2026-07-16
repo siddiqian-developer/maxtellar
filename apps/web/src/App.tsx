@@ -23,8 +23,10 @@ import { useAlarms } from "./useAlarms";
 import { useManagedTime } from "./useManagedTime";
 import { GapFillModal } from "./components/GapFillModal";
 import { LOST_HOURS, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
+import type { PomodoroConfig } from "@maxtellar/core";
 import { fmtDur } from "./time";
-import { useSettings, type TimeFormat, type GridGranularity, type PresetDefaults } from "./settings";
+import { useSettings, type AiLevels, type AlarmBehavior, type GridGranularity, type PresetDefaults, type TimeFormat } from "./settings";
+import type { CustomSound, SoundChoice } from "./sound";
 
 type Theme = "light" | "dark" | "system";
 type View = "main" | "headsConfig" | "history" | "analytics" | "aiStudio" | "week" | "calendar";
@@ -149,6 +151,15 @@ export function App(): JSX.Element {
      * cancelled Settings edit must revert both, or they drift apart. */
     weekendDays: number[];
     offDays: number[];
+    /** §06 says Esc/×/scrim revert EVERY field. These were editable in the panel
+     * but absent from the snapshot, so they silently survived a cancel. */
+    showWeekday: boolean;
+    aiLevels: AiLevels;
+    pomodoroDefault: PomodoroConfig;
+    alarmsEnabled: boolean;
+    alarmBehavior: AlarmBehavior;
+    alarmSound: SoundChoice;
+    customSounds: CustomSound[];
   }
   const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSnapshot | null>(null);
   const openSettings = (): void => {
@@ -163,6 +174,13 @@ export function App(): JSX.Element {
         presetDefaults: settings.presetDefaults,
         weekendDays: settings.weekendDays,
         offDays: state.week.offDays,
+        showWeekday: settings.showWeekday,
+        aiLevels: settings.aiLevels,
+        pomodoroDefault: settings.pomodoroDefault,
+        alarmsEnabled: settings.alarmsEnabled,
+        alarmBehavior: settings.alarmBehavior,
+        alarmSound: settings.alarmSound,
+        customSounds: settings.customSounds,
       });
     }
     setSettingsOpen(true);
@@ -187,6 +205,13 @@ export function App(): JSX.Element {
       // cancelling must put BOTH back — otherwise the setting reverts while the days
       // it forced OFF stay OFF, and the two definitions drift.
       settings.setWeekendDays(s.weekendDays);
+      settings.setShowWeekday(s.showWeekday);
+      settings.setAiLevels(s.aiLevels);
+      settings.setPomodoroDefault(s.pomodoroDefault);
+      settings.setAlarmsEnabled(s.alarmsEnabled);
+      settings.setAlarmBehavior(s.alarmBehavior);
+      settings.setAlarmSound(s.alarmSound);
+      settings.setCustomSounds(s.customSounds);
       if (s.offDays.join() !== state.week.offDays.join()) {
         const fw = countStartWeekday(s.weekendDays, s.offDays) ?? undefined;
         dispatch({ type: "SET_OFF_DAYS", offDays: s.offDays, ...(fw !== undefined ? { firstWeekday: fw } : {}) });

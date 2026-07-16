@@ -96,3 +96,14 @@ only instances; other `.find(x => x.id === …)` sites resolve real ids in real 
   `wasted` → Wasted Time, `managed` → Self-Management. **Not done silently: core's `achievedByHead`
   drives §5.1 quota redistribution**, so making it channel-aware moves quota math — and `breaks`
   has no specced head, which needs a ruling too.
+- ~~**BUG (verified 2026-07-16, widened audit): the §06 transactional-Settings law covered only
+  half the panel.**~~ **FIXED 2026-07-16.** §06: "Esc, the header ×, and a scrim click all revert
+  **every field**". Seven were editable but absent from App's snapshot, so they silently survived
+  a cancel: `showWeekday`, `mlMode`/`aiLevels`, `pomodoroDefault`, `alarmsEnabled`, `alarmBehavior`,
+  `alarmSound`, `customSounds`. Verified in-browser BEFORE the fix (toggled `showWeekday` 1→0,
+  pressed Escape, it stayed 0) and after (returns to 1). The same defect as the `weekendDays` gap
+  fixed earlier that day — that fix was incomplete. Needed two new bulk setters (`setAiLevels`,
+  `setCustomSounds`): `setAiLevel(feature, …)` and `addCustomSound`/`removeCustomSound` cannot undo
+  a cancelled session. Guarded by `settings-transactional.test.ts` — a STATIC guard, because the
+  bug lives in the GAP BETWEEN two files (a setting is added to the panel and nobody remembers
+  App); it names the unrestored setter and was verified to fail when one restore is removed.
