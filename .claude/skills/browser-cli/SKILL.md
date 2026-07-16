@@ -75,6 +75,12 @@ was written).
 - `fill-nth <css-selector> <index> <value>` — e.g. `fill-nth input 1 meal prep`
   fills the 2nd matching element; sidesteps `fill`'s selector-with-space bug
 - `press <key>` — e.g. `Enter`, `Escape`
+- `drag <css-selector> <dx> <dy> [bottom|top]` — real mousedown → 10 stepped
+  mousemoves → mouseup. The steps matter: drag-tracking libraries (RBC's dnd
+  addon) ignore a single teleporting move. The 4th arg grabs that **edge**
+  instead of the centre — that's how you hit a resize handle rather than the
+  block body. Selector must not contain spaces or `>>` (same parsing limit as
+  `fill`). E.g. `drag .rbc-event 0 90 bottom` = drag the bottom edge down 90px.
 - `wait <ms>` — plain timeout, use for debounce windows / model loads
 - `viewport <w> <h>` — resize the viewport (e.g. `viewport 390 844` for
   phone-width media queries); issue it BEFORE `nav`
@@ -83,6 +89,26 @@ was written).
 - `console` / `console --errors` — dump captured console/pageerror/failed-request logs
 - `eval <js-expression>` — `page.evaluate`, returns JSON
 - `quit` — closes the browser, ends the script
+
+## Gotchas that cost real time (2026-07-17)
+
+- **`fill` doesn't always reach React.** Playwright's fill sets the DOM value;
+  React's `onChange` may never fire, so the app's state stays empty and a save
+  silently fails validation. When a field looks filled but the app disagrees,
+  set it through React's own setter:
+  ```js
+  eval (()=>{const set=(el,v)=>{Object.getOwnPropertyDescriptor(Object.getPrototypeOf(el),'value').set.call(el,v);el.dispatchEvent(new Event('input',{bubbles:true}));};set(document.querySelector('input[aria-label="Title"]'),'Gym');return 'ok'})()
+  ```
+- **Read the app's OWN error before re-trying a save.** `.drawer .form-warning`
+  told me "Pick a sub-head." after several blind attempts.
+- **A fresh app has almost no sub-heads.** `DEFAULT_REGISTRY` (heads.tsx) seeds
+  only the built-ins — **Sleep / Nap / Food** are the only valid plannable
+  sub-heads until you add more. `SubheadField` is a `FuzzyDropdown` over
+  `plannableActivities`: free text is rejected, so a template fixture must use
+  one of those three (or add an activity first).
+- **`click-text` matches text behind overlays.** It happily "found" a
+  `.field-desc` under the drawer and timed out on the interception. Prefer a
+  CSS selector (`.drawer-footer button.primary`).
 
 ## Why this exists
 
