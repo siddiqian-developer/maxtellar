@@ -150,8 +150,23 @@ describe("§7.0.2 picking a day keeps the DAY and snaps the TIME to fit it", () 
 
   it("picking Same Day on an end at/before the start snaps the TIME forward, not the day", () => {
     // 11pm start, 7am end, but the user picks Same Day (would be negative): the
-    // day stays Same Day; the time snaps to 11:01pm, the earliest valid end.
-    expect(snapEndTimeForDay(23 * 60, 7 * 60, 0)).toBe(23 * 60 + 1);
+    // day stays Same Day; the end snaps to start + MIN_FRAGMENT (11:05pm) — the
+    // earliest end that's a REAL task, not an arbitrary +1 minute.
+    expect(snapEndTimeForDay(23 * 60, 7 * 60, 0, 5)).toBe(23 * 60 + 5);
+  });
+
+  it("snaps a sub-floor span to the floor, not just an invalid one", () => {
+    // 9:00 -> 9:01 is technically positive but below MIN_FRAGMENT: still snapped,
+    // so budget can never disagree with end - start.
+    expect(snapEndTimeForDay(9 * 60, 9 * 60 + 1, 0, 5)).toBe(9 * 60 + 5);
+  });
+
+  it("the reported flow: Next Day then Same Day lands on 9:05, not 9:01", () => {
+    // start 9:00, end 9:30. Pick Next Day -> end snaps to 9:00 (24h span).
+    const afterNextDay = snapEndTimeForDay(9 * 60, 9 * 60 + 30, 1, 5);
+    expect(afterNextDay).toBe(9 * 60);
+    // Then pick Same Day -> end must snap to 9:05, giving a 5m span.
+    expect(snapEndTimeForDay(9 * 60, afterNextDay!, 0, 5)).toBe(9 * 60 + 5);
   });
 
   it("leaves the end alone when the start or end isn't set yet", () => {

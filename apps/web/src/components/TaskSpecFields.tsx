@@ -445,11 +445,19 @@ export function snapEndTimeForDay(
   startTod: number | undefined,
   endTod: number | undefined,
   day: EndDayOffset,
+  minFragment: number = DEFAULT_MIN_FRAGMENT,
 ): number | undefined {
   if (startTod === undefined || endTod === undefined) return endTod;
-  if (spanOfAnchors(startTod, endTod, day) !== undefined) return endTod;
-  // Same Day needs end > start; Next Day needs end <= start (else > 24h).
-  return day === 0 ? Math.min(1439, startTod + 1) : startTod;
+  const span = spanOfAnchors(startTod, endTod, day);
+  // A span shorter than the floor is not a real end either — snap those too, or
+  // the field lands on a 1-minute task (9:00 → 9:01) that the floor then has to
+  // paper over, leaving budget ≠ end − start.
+  if (span !== undefined && span >= minFragment) return endTod;
+  // Nearest end that's actually valid on the day the user chose:
+  //  - Same Day needs end > start, by at least MIN_FRAGMENT → start + floor.
+  //  - Next Day needs end <= start (any later would exceed 24h) → start itself
+  //    is the closest, a full 24h span.
+  return day === 0 ? Math.min(1439, startTod + minFragment) : startTod;
 }
 
 export type FieldRole = "required" | "optional" | "not used";
@@ -670,27 +678,44 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
     startTod?: number | undefined; endTod?: number | undefined;
     endDayOffset?: EndDayOffset; budget?: number | undefined;
   }): void => {
-    const next = deriveAnchorTrio(changed, {
+    let { startTod: s, endTod: e, endDayOffset: off, budget: b } = deriveAnchorTrio(changed, {
       startTod: "startTod" in patch ? patch.startTod : startTod,
       endTod: "endTod" in patch ? patch.endTod : endTod,
       endDayOffset: patch.endDayOffset ?? endDayOffset,
       budget: "budget" in patch ? patch.budget : budget,
     });
-    // §7.0.2 snap-at-entry: a budget below the floor is corrected the instant it
-    // takes effect — whether typed directly or DERIVED from a start/end edit —
-    // never accepted and only caught later at save. Same floor the drawer uses.
-    const flooredBudget = next.budget !== undefined ? Math.max(minFragment, next.budget) : next.budget;
-    setStartTod(next.startTod);
-    setEndTod(next.endTod);
-    setEndDayOffsetRaw(next.endDayOffset);
-    setBudget(flooredBudget);
+
+    if (s !== undefined && e !== undefined) {
+      // §7.0.2 snap-at-entry: a sub-floor span is not a real task. Snap the END
+      // (the start is the anchor the user placed), so the fix is visible in the
+      // field rather than papered over by clamping budget behind their back.
+      if ((spanOfAnchors(s, e, off) ?? 0) < minFragment) {
+        const d = splitDay(s + minFragment);
+        e = d.tod;
+        off = d.dayOffset;
+      }
+      // THE invariant: with both anchors set, budget IS the span. Never floored
+      // independently — that's exactly how "end 9:01, budget 5m" happened.
+      b = spanOfAnchors(s, e, off);
+    } else if (b !== undefined) {
+      // No anchors to reconcile against — the floor applies to the budget itself.
+      b = Math.max(minFragment, b);
+    }
+
+    setStartTod(s);
+    setEndTod(e);
+    setEndDayOffsetRaw(off);
+    setBudget(b);
   };
   const changeStart = (tod: number | undefined): void => applyTrio("start", { startTod: tod });
   // §7.0.2: the chosen DAY always wins; the TIME snaps to the nearest value
   // that's valid on that day, before anything derives from it.
   const changeEnd = (e: { tod: number | undefined; dayOffset: EndDayOffset }): void =>
-    applyTrio("end", { endTod: snapEndTimeForDay(startTod, e.tod, e.dayOffset), endDayOffset: e.dayOffset });
-  const changeBudget = (b: number | undefined): void => applyTrio("budget", { budget: b });
+    applyTrio("end", { endTod: snapEndTimeForDay(startTod, e.tod, e.dayOffset, minFragment), endDayOffset: e.dayOffset });
+  // The typed budget is floored BEFORE it derives an end, so the derived end and
+  // the budget agree (a 1m budget becomes 5m, and the end follows the 5m).
+  const changeBudget = (b: number | undefined): void =>
+    applyTrio("budget", { budget: b === undefined ? undefined : Math.max(minFragment, b) });
 
   /**
    * §6 type-morph prefill — tapping a type pre-fills its fields, exactly as the
