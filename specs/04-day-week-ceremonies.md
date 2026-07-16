@@ -166,10 +166,20 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
     minutes count against **each day they physically fall on** — an 11pm→7am sleep spends 1h of
     Monday's capacity and 7h of Tuesday's, not 8h of Monday's. Rationale: §11 budgets are per-day
     **capacity**; attributing a whole span to its start day would leave Tuesday looking empty while
-    its hours are already occupied, letting the user over-book a day invisibly. `weekPreview` and the
-    §11 quota/budget math therefore slice an overnight occupancy at local midnight and attribute each
-    slice to its own day. The task remains ONE task (one id, one budget, one completion) — the split
-    is an accounting view, never a structural break (it is not a §2.5 `breakable` split). Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
+    its hours are already occupied, letting the user over-book a day invisibly. The task remains ONE
+    task (one id, one budget, one completion) — the split is an accounting view, never a structural
+    break (it is not a §2.5 `breakable` split). **Built 2026-07-17** — `daySplit(spec)` in core is
+    the one definition (`{today, tomorrow}`), and three surfaces read it:
+    - **`injectToday` capacity (§11.7):** the firing day is charged only `daySplit().today`, and
+      **yesterday's tails are drawn down from today's capacity before anything new is injected** —
+      so a task firing today can't over-book hours yesterday's run is still sitting in.
+    - **`weekPreview`:** the block is sliced at midnight and the remainder carried onto the next
+      column (`continued: true`), so the morning reads as SPENT, not free.
+    - **`achievedByHead` (actuals):** already correct — it clips real occupancy to each day's window,
+      so history splits for free.
+    **Only an ANCHORED task can be attributed.** Without a start we don't know which hours it
+    occupies, so an unanchored (budgeted) task's whole cost falls on its firing day — which is also
+    why the §11.7 trim path is unaffected: only budgeted tasks are trimmed, and they never split. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
   ruled IN scope (2026-07-16, supersedes the 2026-07-15 "future extension" deferral).** A template
   gains an optional **validity**: **one-time** (fires on its next weekday occurrence, then retires —
   never fires again; the retired template stays listed, marked, until deleted) or **ranged**

@@ -255,6 +255,18 @@ export function injectTodayDetailed(
   const remaining = new Map<string, Dur>();
   for (const l of shape.lines) if (headIdx.has(l.headId)) remaining.set(l.headId, l.minutes);
 
+  // §4.4/§11: YESTERDAY's overnight tails already occupy this morning, so they
+  // spend today's capacity before anything new is injected. Without this, a
+  // template firing again today would see a full budget and over-book hours its
+  // own previous run is still sitting in.
+  const yesterdayWd = (weekday + 6) % 7;
+  for (const t of collectDue(s, midnight - MIN_PER_DAY, yesterdayWd).due) {
+    const tail = daySplit(t).tomorrow;
+    if (tail <= 0) continue;
+    const rem = remaining.get(t.headId);
+    if (rem !== undefined) remaining.set(t.headId, Math.max(0, rem - tail));
+  }
+
   const out: UnstartedTask[] = [];
   const sourceIds: Record<string, string> = {};
   let prevRank: string | null = null;
@@ -273,10 +285,11 @@ export function injectTodayDetailed(
       push(t, t.id);
       continue;
     }
-    // §4.4: `end - start` went NEGATIVE for an overnight template (7am - 11pm =
-    // -960), which credited quota back instead of spending it. `anchorSpan`
-    // carries the day offset, so an 11pm→7am sleep costs its true 8h.
-    const cost = t.budget ?? anchorSpan(t.anchorStartTod, t.anchorEndTod, t.anchorEndDayOffset) ?? 0;
+    // §4.4/§11: charge THIS day only the minutes that fall on it — an overnight
+    // task's remainder is charged to tomorrow's capacity (above), not to today's.
+    // (`end - start` also went NEGATIVE for an overnight template before
+    // `anchorSpan` carried the day offset, crediting quota instead of spending it.)
+    const cost = daySplit(t).today;
     if (t.timing !== "budgeted" || cost <= rem) {
       remaining.set(t.headId, rem - cost);
       push(t, t.id);
@@ -352,6 +365,30 @@ export function anchorSpan(
   if (startTod === undefined || endTod === undefined) return undefined;
   const raw = endDayOffset * MIN_PER_DAY + endTod - startTod;
   return raw > 0 && raw <= MIN_PER_DAY ? raw : undefined;
+}
+
+/**
+ * §4.4/§11 day-attribution — how many of a task's minutes fall on the day it
+ * FIRES, and how many spill onto the next one.
+ *
+ * §11 budgets are per-day CAPACITY, so an 11pm→7am sleep spends 1h of Monday's
+ * capacity and 7h of Tuesday's — not 8h of Monday's. Charging the whole span to
+ * the firing day would leave Tuesday looking empty while its morning is already
+ * occupied, letting the user over-book it invisibly.
+ *
+ * The task stays ONE task (one id, one budget, one completion) — this split is an
+ * accounting view, never a structural break (unrelated to §2.5 `breakable`).
+ *
+ * Only an ANCHORED task can be attributed: without a start we don't know which
+ * hours it occupies, so its whole cost falls on the firing day.
+ */
+export function daySplit(t: TaskSpec): { today: Dur; tomorrow: Dur } {
+  const cost = t.budget ?? anchorSpan(t.anchorStartTod, t.anchorEndTod, t.anchorEndDayOffset) ?? 0;
+  if (t.anchorStartTod === undefined) return { today: cost, tomorrow: 0 };
+  // Minutes between the start and midnight; anything beyond lands tomorrow.
+  const untilMidnight = MIN_PER_DAY - t.anchorStartTod;
+  const tomorrow = Math.max(0, cost - untilMidnight);
+  return { today: cost - tomorrow, tomorrow };
 }
 
 /** Instantiate one template/dated-task onto the day at `midnight`. Time-of-day

@@ -210,3 +210,62 @@ describe("quota redistribution at SOD (§5.1)", () => {
     expect(notes.some((n) => n.includes("shortfall"))).toBe(true);
   });
 });
+
+/**
+ * §4.4/§11 overnight attribution. An 11pm→7am sleep occupies 1h of Monday and
+ * 7h of Tuesday. §11 budgets are per-day CAPACITY, so Tuesday's morning must be
+ * spent — otherwise Tuesday looks free while it's already occupied and the user
+ * over-books it.
+ */
+describe("overnight tasks are attributed to BOTH days (§4.4/§11)", () => {
+  const DAY = 1440;
+  // Real midnights, so "yesterday" resolves for the tail lookup.
+  const injectOn = (s: State, midnight: number, weekday: number) => {
+    let n = 0;
+    return injectTodayDetailed(s, midnight, weekday, () => `i${++n}`, () => `r${String(++n).padStart(3, "0")}`);
+  };
+  const sleep = tpl({
+    title: "Sleep", headId: "Rest", activityId: "Sleep", timing: "fixed",
+    weekdays: [MON], rank: "a", slideable: false, breakable: false,
+    anchorStartTod: 23 * H, anchorEndTod: 7 * H, anchorEndDayOffset: 1, budget: 8 * H,
+  });
+
+  it("charges the firing day only the hour that falls on it, not the whole 8h", () => {
+    const s = withWeek(DAY0, {
+      templates: [sleep, tpl({ title: "Late", headId: "Rest", activityId: "Sleep", budget: 3 * H, weekdays: [MON], rank: "b" })],
+      budgets: [abs("Rest", MAINTENANCE, 4, [MON, TUE])],
+    });
+    const r = injectOn(s, DAY0, MON);
+    // Sleep spends 1h of Monday's 4h, leaving 3h — so "Late" fits untrimmed.
+    // Charging the full 8h would have exhausted the head and spilled it.
+    expect(r.tasks.map((t) => t.title)).toEqual(["Sleep", "Late"]);
+    expect(r.spilled).toEqual([]);
+    expect(r.tasks.find((t) => t.title === "Late")!.budget).toBe(3 * H);
+  });
+
+  it("spends the 7h tail against the NEXT day's capacity", () => {
+    const s = withWeek(DAY0, {
+      templates: [sleep, tpl({ title: "Tue task", headId: "Rest", activityId: "Sleep", budget: 2 * H, weekdays: [TUE], rank: "b" })],
+      budgets: [abs("Rest", MAINTENANCE, 8, [MON, TUE])],
+    });
+    // Tuesday: 8h capacity, but Monday's sleep already occupies 7h of the
+    // morning -> only 1h is really free, so the 2h task trims to 1h.
+    const r = injectOn(s, DAY0 + DAY, TUE);
+    const t = r.tasks.find((x) => x.title === "Tue task")!;
+    expect(t.budget).toBe(1 * H);
+    expect(r.notes.join(" ")).toContain("trimmed");
+  });
+
+  it("leaves a day untouched when yesterday had no overnight tail", () => {
+    const s = withWeek(DAY0, {
+      templates: [
+        tpl({ title: "Day job", headId: "Rest", activityId: "Sleep", timing: "fixed", weekdays: [MON], rank: "a", anchorStartTod: 9 * H, anchorEndTod: 17 * H, budget: 8 * H }),
+        tpl({ title: "Tue task", headId: "Rest", activityId: "Sleep", budget: 2 * H, weekdays: [TUE], rank: "b" }),
+      ],
+      budgets: [abs("Rest", MAINTENANCE, 8, [MON, TUE])],
+    });
+    const r = injectOn(s, DAY0 + DAY, TUE);
+    expect(r.tasks.find((x) => x.title === "Tue task")!.budget).toBe(2 * H);
+    expect(r.notes).toEqual([]);
+  });
+});
