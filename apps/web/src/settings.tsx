@@ -8,6 +8,10 @@
 
 import { createContext, useContext, useEffect, useState } from "react";
 import type { PomodoroConfig, TimingType } from "@maxtellar/core";
+import type { CustomSound, SoundChoice } from "./sound";
+
+/** §5.3 alarm firing behavior — the single global toggle. */
+export type AlarmBehavior = "oneshot" | "persist";
 
 export type TimeFormat = "12h" | "24h";
 
@@ -87,6 +91,17 @@ interface Settings {
   /** §5.2 global default pomodoro preset; per-task override at Start. */
   pomodoroDefault: PomodoroConfig;
   setPomodoroDefault: (c: PomodoroConfig) => void;
+  /** §5.3 alarms — master enable (best-effort sound + Notification), the single
+   * global one-shot/persist toggle, the chosen sound, and user-added sounds. */
+  alarmsEnabled: boolean;
+  setAlarmsEnabled: (v: boolean) => void;
+  alarmBehavior: AlarmBehavior;
+  setAlarmBehavior: (b: AlarmBehavior) => void;
+  alarmSound: SoundChoice;
+  setAlarmSound: (s: SoundChoice) => void;
+  customSounds: CustomSound[];
+  addCustomSound: (s: CustomSound) => void;
+  removeCustomSound: (id: string) => void;
 }
 
 const SettingsContext = createContext<Settings | null>(null);
@@ -209,8 +224,38 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
   useEffect(() => {
     localStorage.setItem("pomodoroDefault", JSON.stringify(pomodoroDefault));
   }, [pomodoroDefault]);
+
+  const [alarmsEnabled, setAlarmsEnabled] = useState<boolean>(() => localStorage.getItem("alarmsEnabled") === "1");
+  const [alarmBehavior, setAlarmBehavior] = useState<AlarmBehavior>(() => (localStorage.getItem("alarmBehavior") === "oneshot" ? "oneshot" : "persist"));
+  const [alarmSound, setAlarmSound] = useState<SoundChoice>(() => localStorage.getItem("alarmSound") || "synth");
+  const [customSounds, setCustomSounds] = useState<CustomSound[]>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("customSounds") ?? "null");
+      return Array.isArray(s) ? s.filter((c) => c && typeof c.id === "string" && typeof c.dataUrl === "string") : [];
+    } catch {
+      return [];
+    }
+  });
+  const addCustomSound = (s: CustomSound): void => setCustomSounds((cs) => [...cs.filter((c) => c.id !== s.id), s]);
+  const removeCustomSound = (id: string): void =>
+    setCustomSounds((cs) => {
+      if (alarmSound === `custom:${id}`) setAlarmSound("synth");
+      return cs.filter((c) => c.id !== id);
+    });
+  useEffect(() => {
+    localStorage.setItem("alarmsEnabled", alarmsEnabled ? "1" : "0");
+  }, [alarmsEnabled]);
+  useEffect(() => {
+    localStorage.setItem("alarmBehavior", alarmBehavior);
+  }, [alarmBehavior]);
+  useEffect(() => {
+    localStorage.setItem("alarmSound", alarmSound);
+  }, [alarmSound]);
+  useEffect(() => {
+    localStorage.setItem("customSounds", JSON.stringify(customSounds));
+  }, [customSounds]);
   return (
-    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel, pomodoroDefault, setPomodoroDefault }}>
+    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound }}>
       {children}
     </SettingsContext.Provider>
   );

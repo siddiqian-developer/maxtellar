@@ -9,6 +9,7 @@ import type { Event, TimingType } from "@maxtellar/core";
 import { useSettings, type PresetId } from "../settings";
 import { useEscClose } from "../useEscClose";
 import { DurInput } from "./BudgetPanel";
+import { BUILTIN_SOUNDS, playAlarm } from "../sound";
 
 interface Props {
   minFragment: number;
@@ -33,7 +34,28 @@ const PRESET_ROWS: { id: PresetId; label: string }[] = [
 ];
 
 export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
-  const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, pomodoroDefault, setPomodoroDefault } = useSettings();
+  const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound } = useSettings();
+
+  const enableAlarms = (on: boolean): void => {
+    setAlarmsEnabled(on);
+    // §5.3 best-effort: ask for system-notification permission on enable; the
+    // in-app banner + sound work regardless of the answer.
+    if (on && typeof Notification !== "undefined" && Notification.permission === "default") {
+      void Notification.requestPermission();
+    }
+  };
+  const onUploadSound = (e: React.ChangeEvent<HTMLInputElement>): void => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const id = `${Date.now()}`;
+      addCustomSound({ id, name: f.name, dataUrl: String(reader.result) });
+      setAlarmSound(`custom:${id}`);
+    };
+    reader.readAsDataURL(f);
+    e.target.value = "";
+  };
   const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const toggleWeekend = (d: number): void => {
     const next = weekendDays.includes(d) ? weekendDays.filter((x) => x !== d) : [...weekendDays, d].sort();
@@ -238,6 +260,48 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
                 intervals
               </label>
             </div>
+          </div>
+          <div className="field">
+            <label className="flag" data-tip="§5.3 best-effort alarms: in-app banner always, plus system sound + notifications where allowed (fixed-start approaching, overrun, at-most quota, pomodoro transitions, SOD reminder).">
+              <input type="checkbox" checked={alarmsEnabled} onChange={(e) => enableAlarms(e.target.checked)} />
+              🔔 Alarms
+            </label>
+            {alarmsEnabled && (
+              <div className="alarm-settings">
+                <div className="field" style={{ marginTop: 6 }}>
+                  <label style={{ fontSize: 11 }}>When an alarm fires</label>
+                  <div className="type-chips" role="radiogroup" aria-label="Alarm behavior">
+                    <button type="button" className={`type-chip${alarmBehavior === "persist" ? " active" : ""}`} onClick={() => setAlarmBehavior("persist")} data-tip="Keeps showing until you dismiss it or the condition clears">Persist</button>
+                    <button type="button" className={`type-chip${alarmBehavior === "oneshot" ? " active" : ""}`} onClick={() => setAlarmBehavior("oneshot")} data-tip="Fires once, then clears itself">One-shot</button>
+                  </div>
+                </div>
+                <div className="field" style={{ marginTop: 6 }}>
+                  <label style={{ fontSize: 11 }}>Sound</label>
+                  <div className="alarm-sound-row">
+                    <select aria-label="Alarm sound" value={alarmSound} onChange={(e) => setAlarmSound(e.target.value)}>
+                      {BUILTIN_SOUNDS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+                      {customSounds.map((c) => <option key={c.id} value={`custom:${c.id}`}>{c.name}</option>)}
+                    </select>
+                    <button type="button" onClick={() => playAlarm(alarmSound, customSounds)} data-tip="Preview">▶ Play</button>
+                    <label className="alarm-upload" data-tip="Add your own audio file">
+                      + Add sound
+                      <input type="file" accept="audio/*" onChange={onUploadSound} style={{ display: "none" }} />
+                    </label>
+                  </div>
+                  {customSounds.length > 0 && (
+                    <ul className="alarm-custom-list">
+                      {customSounds.map((c) => (
+                        <li key={c.id}>
+                          <span>{c.name}</span>
+                          <button type="button" onClick={() => playAlarm(`custom:${c.id}`, customSounds)}>▶</button>
+                          <button type="button" onClick={() => removeCustomSound(c.id)} aria-label={`Remove ${c.name}`}>&times;</button>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
           <div className="field">
             <label>Heads &amp; sub-heads</label>

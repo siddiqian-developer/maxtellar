@@ -72,5 +72,22 @@
   allows; documented honestly (the mobile app later makes them reliable).
 - Events: fixed-start approaching, leading-start arrived, overrun, at-most-quota warning,
   pomodoro transitions, SOD reminder.
+- **Mechanics (built 2026-07-16, Stage 7b).** A **pure, derived watcher** — no core changes, no
+  events. `alarmSignals(state)` returns the currently-active conditions, each with a **stable key**
+  (so a one-shot fires once and a persist tracks until it clears): pomodoro-due, running overrun,
+  anchored-start arrived (start ≤ now, still unstarted) / approaching (≤ 5 min ahead), at-most
+  weekly-quota exceeded (warn, never block — §5.1), and SOD-ready. The `useAlarms` hook diffs
+  signals each tick: a newly-appearing key sounds once + fires a system `Notification` (where
+  granted) + shows an in-app **banner** (the always-available layer — carries the alarm even when
+  sound/permission are unavailable). Urgent kinds (overrun / at-most / arrived) get the danger
+  accent + a ringing bell.
+- **Behavior — one global toggle (§ user ruling 2026-07-16):** `persist` (default) keeps a banner
+  until its condition clears or the user dismisses it; `oneshot` self-clears after a short spell.
+  One switch governs all alarms.
+- **Sound — asset-free by default (§7.0.4 Scratch tier):** the **default is a synthesized WebAudio
+  tone**; a **built-in library** of synth patterns (Chime / Double / Rising / Alert) needs no
+  bundled binaries; and the user can **add their own audio files** (stored as data URLs, played via
+  `<audio>`). All best-effort — a blocked AudioContext (no gesture yet) or denied Notification
+  permission degrades to the visual banner. Enabling alarms requests Notification permission once.
 
 ---

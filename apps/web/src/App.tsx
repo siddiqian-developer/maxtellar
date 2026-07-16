@@ -17,6 +17,8 @@ import { OffPeriodControl } from "./components/OffPeriodControl";
 import { WeekView } from "./components/WeekView";
 import { SnapToast } from "./SnapToast";
 import { PomodoroModal } from "./components/PomodoroModal";
+import { AlarmCenter } from "./components/AlarmCenter";
+import { useAlarms } from "./useAlarms";
 import { GapFillModal } from "./components/GapFillModal";
 import { LOST_HOURS, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
 import { fmtDur } from "./time";
@@ -110,6 +112,9 @@ export function App(): JSX.Element {
   // §5.2 pomodoro: the phase-anchor last dismissed, so "Not now" hides the modal
   // for the current phase only (a new phase's phaseStartedAt re-raises it).
   const [pomoDismissedAt, setPomoDismissedAt] = useState<number | null>(null);
+  // §5.3 alarms: best-effort watcher (sound + Notification + banners). Called
+  // unconditionally (before the ready-guard) — it no-ops on a null state.
+  const { active: alarms, dismiss: dismissAlarm } = useAlarms(state);
 
   // §06 transactional Settings: changes reflect live but only commit on Done;
   // Esc/×/scrim revert to this snapshot. Held above the panel so it survives the
@@ -446,6 +451,7 @@ export function App(): JSX.Element {
           onDismiss={() => setPomoDismissedAt(state.running!.pomodoro!.phaseStartedAt)}
         />
       )}
+      <AlarmCenter alarms={alarms} onDismiss={dismissAlarm} />
       {error && <div className="error-toast">{error}</div>}
       <SnapToast text={noticeToast} />
       {splashPhase !== "gone" && <Splash leaving={splashPhase === "leave"} />}
