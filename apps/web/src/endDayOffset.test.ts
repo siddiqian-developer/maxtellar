@@ -10,7 +10,7 @@ import { describe, it, expect } from "vitest";
 import {
   clampDayOffset, dayOffsetLabel, MAX_END_DAY_OFFSET,
   impliedEndDayOffset, spanOfAnchors,
-  fmtAnchorEnd, snapEndDay,
+  fmtAnchorEnd, snapEndTimeForDay,
 } from "./components/TaskSpecFields";
 import { parseAnchorEnd } from "./casualTime";
 
@@ -47,13 +47,14 @@ describe("§4.4 'next day' — every variation the user might type", () => {
   });
 });
 
-describe("§4.4 the field states the day explicitly", () => {
-  it("writes the day into the text, so it's never implicit", () => {
+describe("§4.4 the field states the day explicitly, once a time exists", () => {
+  it("writes the day into the text alongside a real time — never before one", () => {
     expect(fmtAnchorEnd(10 * 60, 1, true)).toBe("Next Day, 10:00 AM");
     expect(fmtAnchorEnd(10 * 60, 0, true)).toBe("10:00 AM");
     expect(fmtAnchorEnd(undefined, 0, true)).toBe("");
-    // "Next Day" picked before a time: the qualifier waits, no time invented.
-    expect(fmtAnchorEnd(undefined, 1, true)).toBe("Next Day, ");
+    // Picking "Next Day" before a time does NOT write anything into the field —
+    // the day is remembered but only shown once a time actually lands.
+    expect(fmtAnchorEnd(undefined, 1, true)).toBe("");
   });
 
   it("round-trips: what it displays, it re-reads", () => {
@@ -134,24 +135,27 @@ describe("§4.4 span across days", () => {
   });
 });
 
-describe("§7.0.2 the picked day snaps to the nearest possible", () => {
-  it("keeps a pick that already yields a valid span", () => {
-    expect(snapEndDay(9 * 60, 17 * 60, 0)).toBe(0);
-    expect(snapEndDay(23 * 60, 7 * 60, 1)).toBe(1);
+describe("§7.0.2 picking a day keeps the DAY and snaps the TIME to fit it", () => {
+  it("leaves a time that's already valid on the chosen day alone", () => {
+    expect(snapEndTimeForDay(9 * 60, 17 * 60, 0)).toBe(17 * 60);
+    expect(snapEndTimeForDay(23 * 60, 7 * 60, 1)).toBe(7 * 60);
   });
 
-  it("Next Day on a span that would exceed 24h snaps back to Same Day", () => {
-    // 9am -> 5pm "next day" would be 32h; Same Day (8h) is the only valid one.
-    expect(snapEndDay(9 * 60, 17 * 60, 1)).toBe(0);
+  it("picking Next Day on a span that would exceed 24h snaps the TIME back to the start, not the day", () => {
+    // 9am start, 5pm end, but the user picks Next Day (would be 32h): the day
+    // stays Next Day (the user's choice); the time snaps to 9am, the latest
+    // valid end on that day.
+    expect(snapEndTimeForDay(9 * 60, 17 * 60, 1)).toBe(9 * 60);
   });
 
-  it("Same Day on an end at/before the start snaps to Next Day", () => {
-    // 11pm -> 7am "same day" is negative; Next Day (8h) is the only valid one.
-    expect(snapEndDay(23 * 60, 7 * 60, 0)).toBe(1);
+  it("picking Same Day on an end at/before the start snaps the TIME forward, not the day", () => {
+    // 11pm start, 7am end, but the user picks Same Day (would be negative): the
+    // day stays Same Day; the time snaps to 11:01pm, the earliest valid end.
+    expect(snapEndTimeForDay(23 * 60, 7 * 60, 0)).toBe(23 * 60 + 1);
   });
 
-  it("leaves the pick alone when the start or end isn't set yet", () => {
-    expect(snapEndDay(undefined, 7 * 60, 1)).toBe(1);
-    expect(snapEndDay(23 * 60, undefined, 0)).toBe(0);
+  it("leaves the end alone when the start or end isn't set yet", () => {
+    expect(snapEndTimeForDay(undefined, 7 * 60, 1)).toBe(7 * 60);
+    expect(snapEndTimeForDay(23 * 60, undefined, 0)).toBeUndefined();
   });
 });

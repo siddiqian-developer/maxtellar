@@ -19,6 +19,7 @@
  */
 import { useState } from "react";
 import type { EndDayOffset, SleepKind, TimingType } from "@maxtellar/core";
+import { DEFAULT_MIN_FRAGMENT } from "@maxtellar/core";
 import { parseTimeOfDay, parseAnchorEnd } from "../casualTime";
 import { fmtTod, toDate } from "../time";
 import { PRESETS, presetById } from "../presets";
@@ -257,10 +258,10 @@ export function fmtAnchorEnd(
   dayOffset: EndDayOffset,
   hour12: boolean,
 ): string {
-  // Picking "Next Day" before typing a time leaves the qualifier WAITING for it
-  // ("Next Day, ") rather than inventing a time the user never chose — the app
-  // never fills a value the user didn't pick.
-  if (tod === undefined) return dayOffset === 1 ? "Next Day, " : "";
+  // Picking "Next Day" before typing a time does NOT write it into the field —
+  // the app never fills text the user hasn't entered. The day is remembered
+  // (`dayOffset` state) and applied once a time actually lands.
+  if (tod === undefined) return "";
   return dayOffset === 1 ? `Next Day, ${fmtTod(tod, hour12)}` : fmtTod(tod, hour12);
 }
 
@@ -287,16 +288,12 @@ export function AnchorEndField({ tod, dayOffset, onChange, hour12 }: {
   if (str !== prev) { setPrev(str); setDraft(str); }
 
   const commit = (): void => {
-    if (!draft.trim()) { onChange({ tod: undefined, dayOffset: 0 }); setDraft(""); return; }
+    // Empty keeps whichever day was picked (`dayOffset`) but clears the time —
+    // the field only ever SHOWS a day once a time is entered (fmtAnchorEnd).
+    if (!draft.trim()) { onChange({ tod: undefined, dayOffset }); setDraft(""); return; }
     const r = parseAnchorEnd(draft);
-    if (!r) {
-      // A lone qualifier ("Next Day,") isn't nonsense — it's a chosen day still
-      // waiting for its time. Keep it; only real garbage snaps back.
-      const bare = parseAnchorEnd(`${draft} 12pm`);
-      if (bare) { onChange({ tod: undefined, dayOffset: bare.dayOffset }); setDraft(fmtAnchorEnd(undefined, bare.dayOffset, hour12)); return; }
-      setDraft(str);
-      return;
-    }
+    // Unparseable → snap back to the last good value rather than keep nonsense.
+    if (!r) { setDraft(str); return; }
     onChange({ tod: r.tod, dayOffset: r.dayOffset });
     setDraft(fmtAnchorEnd(r.tod, r.dayOffset, hour12));
   };
@@ -432,23 +429,27 @@ export function deriveAnchorTrio(
 }
 
 /**
- * §7.0.2 snap-at-entry for the end's DAY. Picking a day that can't produce a
- * valid span is corrected to the nearest one that can, at the moment of the
- * click — never accepted and scolded on save. With only two days and a 24h
- * ceiling the "nearest possible" is simply the other one, when it works:
- *  - "Next Day" on 9am→5pm would be 32h → snaps to Same Day (8h).
- *  - "Same Day" on 11pm→7am would be negative → snaps to Next Day (8h).
- * With no start yet there's nothing to check, so the pick stands.
+ * §7.0.2 snap-at-entry for picking a DAY: the chosen day is the user's intent
+ * and always wins — the TIME snaps to the nearest one that makes it valid there,
+ * instead of the day being overridden.
+ *
+ *  - "Next Day" on 9am start → 5pm end (would be 32h on Next Day): the end
+ *    can't stay 5pm, so it snaps to 9am — the latest end that still fits within
+ *    24h on Next Day, closest to what was typed.
+ *  - "Same Day" on 11pm start → 7am end (would be negative on Same Day): the
+ *    end snaps to 11pm — the earliest valid end on Same Day, closest to 7am.
+ *
+ * With no start or end yet there's nothing to check against, so the end stands.
  */
-export function snapEndDay(
+export function snapEndTimeForDay(
   startTod: number | undefined,
   endTod: number | undefined,
-  wanted: EndDayOffset,
-): EndDayOffset {
-  if (startTod === undefined || endTod === undefined) return wanted;
-  if (spanOfAnchors(startTod, endTod, wanted) !== undefined) return wanted;
-  const other: EndDayOffset = wanted === 1 ? 0 : 1;
-  return spanOfAnchors(startTod, endTod, other) !== undefined ? other : wanted;
+  day: EndDayOffset,
+): number | undefined {
+  if (startTod === undefined || endTod === undefined) return endTod;
+  if (spanOfAnchors(startTod, endTod, day) !== undefined) return endTod;
+  // Same Day needs end > start; Next Day needs end <= start (else > 24h).
+  return day === 0 ? Math.min(1439, startTod + 1) : startTod;
 }
 
 export type FieldRole = "required" | "optional" | "not used";
@@ -624,7 +625,7 @@ export interface ResolvedSpec {
  * the smart time/budget fields — so every task-spec editor gets full parity by
  * construction (§7.0.5). Callers add only their own extras (weekdays / date /
  * recurrence) and a footer. */
-export function useTaskSpec(initial: TaskSpecInit) {
+export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT_MIN_FRAGMENT) {
   const [title, setTitle] = useState(initial.title ?? "");
   const [activity, setActivity] = useState(initial.activityId ?? "");
   const [head, setHead] = useState<string | undefined>(initial.headId);
@@ -675,16 +676,20 @@ export function useTaskSpec(initial: TaskSpecInit) {
       endDayOffset: patch.endDayOffset ?? endDayOffset,
       budget: "budget" in patch ? patch.budget : budget,
     });
+    // §7.0.2 snap-at-entry: a budget below the floor is corrected the instant it
+    // takes effect — whether typed directly or DERIVED from a start/end edit —
+    // never accepted and only caught later at save. Same floor the drawer uses.
+    const flooredBudget = next.budget !== undefined ? Math.max(minFragment, next.budget) : next.budget;
     setStartTod(next.startTod);
     setEndTod(next.endTod);
     setEndDayOffsetRaw(next.endDayOffset);
-    setBudget(next.budget);
+    setBudget(flooredBudget);
   };
   const changeStart = (tod: number | undefined): void => applyTrio("start", { startTod: tod });
-  // §7.0.2: the picked/typed day is checked against the start and snapped to the
-  // nearest day that yields a valid span before anything derives from it.
+  // §7.0.2: the chosen DAY always wins; the TIME snaps to the nearest value
+  // that's valid on that day, before anything derives from it.
   const changeEnd = (e: { tod: number | undefined; dayOffset: EndDayOffset }): void =>
-    applyTrio("end", { endTod: e.tod, endDayOffset: snapEndDay(startTod, e.tod, e.dayOffset) });
+    applyTrio("end", { endTod: snapEndTimeForDay(startTod, e.tod, e.dayOffset), endDayOffset: e.dayOffset });
   const changeBudget = (b: number | undefined): void => applyTrio("budget", { budget: b });
 
   /**
@@ -733,7 +738,10 @@ export function useTaskSpec(initial: TaskSpecInit) {
       if (span === undefined) return { error: "A planned task spans at most 24 hours — check the start, the end and its day." };
       b = span;
     }
-    if (needBudget && (b === undefined || b <= 0)) return { error: "Enter a valid budget." };
+    // Same floor the drawer enforces (§3.7 MIN_FRAGMENT) — `applyTrio` already
+    // snaps a typed/derived budget live; this is the backstop for a `fixed`
+    // span computed right above, which bypasses that path.
+    if (needBudget && (b === undefined || b < minFragment)) return { error: `Enter a budget of at least ${minFragment} minutes.` };
     const eff = effectiveFlags(timing, flags, preset !== null);
     return {
       spec: {
@@ -762,7 +770,7 @@ export function useTaskSpec(initial: TaskSpecInit) {
     // §3.6 3→1: these derive the third field, they don't just assign.
     setStartTod: changeStart, setEndTod: changeEnd, setBudget: changeBudget,
     endDayOffset, setEndDayOffset, impliedOffset,
-    flags, setFlags, preset, togglePreset, sleepKind,
+    flags, setFlags, preset, togglePreset, sleepKind, minFragment,
     needStart, needEnd, needBudget, resolve,
   };
 }
@@ -830,7 +838,7 @@ export function TaskSpecFieldsView({ sp, hour12, titlePlaceholder }: {
       }
       budget={
         <RoleField name="Budget" timing={sp.timing} field="budget">
-          <DurInput value={sp.budget} ariaLabel="Budget" min={1} onCommit={(m) => sp.setBudget(m ?? undefined)} allowEmpty />
+          <DurInput value={sp.budget} ariaLabel="Budget" min={sp.minFragment} onCommit={(m) => sp.setBudget(m ?? undefined)} allowEmpty />
         </RoleField>
       }
     />

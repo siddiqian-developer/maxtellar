@@ -317,10 +317,10 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
       </div>
 
       {editing && (
-        <TemplateEditor template={editing === "new" ? null : editing} hour12={hour12} now={state.now} onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
+        <TemplateEditor template={editing === "new" ? null : editing} hour12={hour12} now={state.now} minFragment={state.minFragment} onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
       )}
       {datedEdit && (
-        <DatedTaskEditor date={datedEdit.date} task={datedEdit.task} hour12={hour12}
+        <DatedTaskEditor date={datedEdit.date} task={datedEdit.task} hour12={hour12} minFragment={state.minFragment}
           onSave={(t) => saveDated(datedEdit.date, t)} onDelete={(id) => deleteDated(datedEdit.date, id)} onClose={() => setDatedEdit(null)} />
       )}
       {tplMenu && (
@@ -422,10 +422,11 @@ function TemplateDayMenu({ menu, skipped, template, override, hour12, structural
 
 /** Add/edit a one-off dated activity (§4.6). Like the template editor minus
  * recurrence — it is pinned to `date`. Smart-input on anchor time/budget. */
-function DatedTaskEditor({ date, task, hour12, onSave, onDelete, onClose }: {
+function DatedTaskEditor({ date, task, hour12, minFragment, onSave, onDelete, onClose }: {
   date: number;
   task: DatedTask | null;
   hour12: boolean;
+  minFragment: number;
   onSave: (t: Omit<DatedTask, "id" | "rank"> & { id?: string; rank?: string }) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -433,7 +434,7 @@ function DatedTaskEditor({ date, task, hour12, onSave, onDelete, onClose }: {
   useEscClose(onClose);
   const isNew = task === null;
   const d = toDate(date);
-  const sp = useTaskSpec(task ?? {});
+  const sp = useTaskSpec(task ?? {}, minFragment);
   const [err, setErr] = useState<string | null>(null);
 
   const save = (): void => {
@@ -469,17 +470,18 @@ function DatedTaskEditor({ date, task, hour12, onSave, onDelete, onClose }: {
 }
 
 /** Add/edit one recurring template — smart-input on time/duration. */
-function TemplateEditor({ template, hour12, now, onSave, onDelete, onClose }: {
+function TemplateEditor({ template, hour12, now, minFragment, onSave, onDelete, onClose }: {
   template: WeekTemplate | null;
   hour12: boolean;
   now: number;
+  minFragment: number;
   onSave: (t: WeekTemplate) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
 }): JSX.Element {
   useEscClose(onClose);
   const isNew = template === null;
-  const sp = useTaskSpec(template ?? {});
+  const sp = useTaskSpec(template ?? {}, minFragment);
   const [weekdays, setWeekdays] = useState<number[]>(template?.weekdays ?? [1, 2, 3, 4, 5]);
   const [err, setErr] = useState<string | null>(null);
   const toggleDay = (d: number): void => setWeekdays((w) => (w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort()));
