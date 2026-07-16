@@ -113,6 +113,12 @@ async function run(line) {
       say(filtered.map((l) => `[${l.type}] ${l.text}`).join("\n") || "(none)");
       break;
     }
+    case "viewport": {
+      const [w, h] = arg.split(/\s+/).map(Number);
+      await page.setViewportSize({ width: w || 1280, height: h || 720 });
+      say(`ok viewport ${w}x${h}`);
+      break;
+    }
     case "eval": {
       const result = await page.evaluate(arg);
       say(`ok eval => ${JSON.stringify(result)}`);

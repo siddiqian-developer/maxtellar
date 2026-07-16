@@ -15,16 +15,16 @@
  * Every time/duration field inherits smart-input (§7.0.2). Esc → back.
  */
 import { useMemo, useState } from "react";
-import type { DatedTask, Event, State, WeekTemplate } from "@maxtellar/core";
+import type { DatedTask, Event, State, TemplateOverride, WeekTemplate } from "@maxtellar/core";
 import { canPlanWeek } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { WeekGridRBC } from "./WeekGridRBC";
 import { countStartWeekday } from "../workingDays";
 import { useSettings } from "../settings";
 import { fmtClock, toDate } from "../time";
-import { weekPreview, type WeekColumn } from "../weekPreview";
-import { BudgetPanel } from "./BudgetPanel";
-import { useTaskSpec, TaskSpecFieldsView, DateField } from "./TaskSpecFields";
+import { diffOverride, weekPreview, type WeekColumn } from "../weekPreview";
+import { BudgetPanel, DurInput } from "./BudgetPanel";
+import { useTaskSpec, TaskSpecFieldsView, DateField, TodField } from "./TaskSpecFields";
 import { weekBudgetValidity } from "@maxtellar/core";
 
 const HOUR_PX = 30; // vertical scale: 30px per hour → 720px for the full day
@@ -164,6 +164,13 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     const e = entryFor(date);
     const skips = e.skips.includes(templateId) ? e.skips.filter((s) => s !== templateId) : [...e.skips, templateId];
     putDated(date, e.adds as never, skips, e.overrides);
+    setTplMenu(null);
+  };
+  /** §4.6 third power: set/replace/clear THIS date's override for one template. */
+  const saveOverride = (date: number, templateId: string, ov: TemplateOverride | null): void => {
+    const e = entryFor(date);
+    const rest = e.overrides.filter((o) => o.templateId !== templateId);
+    putDated(date, e.adds as never, e.skips, ov ? [...rest, ov] : rest);
     setTplMenu(null);
   };
 
@@ -313,7 +320,11 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
       )}
       {tplMenu && (
         <TemplateDayMenu menu={tplMenu} skipped={entryFor(tplMenu.date).skips.includes(tplMenu.templateId)}
+          template={state.week.templates.find((x) => x.id === tplMenu.templateId)}
+          override={entryFor(tplMenu.date).overrides.find((o) => o.templateId === tplMenu.templateId)}
+          hour12={hour12}
           onSkip={() => toggleSkip(tplMenu.date, tplMenu.templateId)}
+          onSaveOverride={(ov) => saveOverride(tplMenu.date, tplMenu.templateId, ov)}
           structuralLock={structuralLock}
           onMove={() => { const t = state.week.templates.find((x) => x.id === tplMenu.templateId); if (t) setEditing(t); setTplMenu(null); }}
           onClose={() => setTplMenu(null)} />
@@ -322,21 +333,44 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
   );
 }
 
-/** Skip / move a recurring template on ONE date (§4.6). Move opens the template
- * editor for now (a full per-date anchor override editor is a follow-up). */
-function TemplateDayMenu({ menu, skipped, structuralLock, onSkip, onMove, onClose }: {
+/** Skip / move / resize a recurring template on ONE date (§4.6 — all three dated
+ * powers). The move/resize fields edit a `TemplateOverride` written via SET_DATED
+ * (never gated, §4.4); only the fields the template itself anchors/budgets are
+ * shown, and Save stores just the DIFF from the template (nothing differs →
+ * the override is cleared). "Edit template…" remains the structural escape. */
+function TemplateDayMenu({ menu, skipped, template, override, hour12, structuralLock, onSkip, onSaveOverride, onMove, onClose }: {
   menu: { date: number; templateId: string; title: string };
   skipped: boolean;
+  template: WeekTemplate | undefined;
+  override: TemplateOverride | undefined;
+  hour12: boolean;
   /** §4.4 mid-week lock: editing the TEMPLATE is structural (all weeks), unlike the
-   * per-date skip. Without this gate the editor opened, saved, and the reducer
-   * silently discarded the change (canPlanWeek) — the drawer closed as if saved. */
+   * per-date skip/override. Without this gate the editor opened, saved, and the
+   * reducer silently discarded the change (canPlanWeek) — closed as if saved. */
   structuralLock: boolean;
   onSkip: () => void;
+  onSaveOverride: (ov: TemplateOverride | null) => void;
   onMove: () => void;
   onClose: () => void;
 }): JSX.Element {
   useEscClose(onClose);
   const d = toDate(menu.date);
+  // Drafts start at the EFFECTIVE value (override ?? template); undefined = inherit.
+  const [start, setStart] = useState<number | undefined>(override?.anchorStartTod ?? template?.anchorStartTod);
+  const [end, setEnd] = useState<number | undefined>(override?.anchorEndTod ?? template?.anchorEndTod);
+  const [budget, setBudget] = useState<number | undefined>(override?.budget ?? template?.budget);
+  const hasStart = template?.anchorStartTod !== undefined;
+  const hasEnd = template?.anchorEndTod !== undefined;
+  const hasBudget = template?.budget !== undefined;
+  const movable = hasStart || hasEnd || hasBudget;
+  const draft = template
+    ? diffOverride(template, {
+        ...(start !== undefined ? { anchorStartTod: start } : {}),
+        ...(end !== undefined ? { anchorEndTod: end } : {}),
+        ...(budget !== undefined ? { budget } : {}),
+      })
+    : null;
+  const dirty = JSON.stringify(draft) !== JSON.stringify(override ?? null);
   return (
     <div className="drawer-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="drawer eod-modal" role="dialog" aria-modal="true">
@@ -345,10 +379,33 @@ function TemplateDayMenu({ menu, skipped, structuralLock, onSkip, onMove, onClos
           <button className="drawer-close" aria-label="Close" onClick={onClose}>&times;</button>
         </div>
         <div className="drawer-body">
-          <p className="field-desc">This recurring task, on this date only.</p>
+          <p className="field-desc">This recurring task, on this date only. Other weeks are untouched.</p>
+          {movable && !skipped && (
+            <div className="field">
+              <label>On this day {override && <span className="badge head-badge">moved</span>}</label>
+              <div className="wk-ov-fields">
+                {hasStart && (
+                  <label>Starts <TodField value={start} onChange={setStart} hour12={hour12} ariaLabel="Start on this day" /></label>
+                )}
+                {hasEnd && (
+                  <label>Ends <TodField value={end} onChange={setEnd} hour12={hour12} ariaLabel="End on this day" /></label>
+                )}
+                {hasBudget && (
+                  <label>Budget <DurInput value={budget} onCommit={(m) => setBudget(m ?? undefined)} ariaLabel="Budget on this day" min={5} /></label>
+                )}
+              </div>
+              {override && (
+                <button type="button" className="link-btn" onClick={() => onSaveOverride(null)}>Reset to the template's time</button>
+              )}
+            </div>
+          )}
         </div>
         <div className="drawer-footer">
-          <button className="primary" onClick={onSkip}>{skipped ? "Un-skip this day" : "Skip this day"}</button>
+          {movable && !skipped && (
+            <button className="primary" disabled={!dirty} onClick={() => onSaveOverride(draft)}
+              data-tip={dirty ? "Apply on this date only" : "Nothing differs from the template yet"}>Save this day</button>
+          )}
+          <button className={movable && !skipped ? "cancel-accent" : "primary"} onClick={onSkip}>{skipped ? "Un-skip this day" : "Skip this day"}</button>
           <button className="cancel-accent" disabled={structuralLock} onClick={onMove}
             data-tip={structuralLock ? "Locked until an OFF day — the template rules every week (§4.4). Skip is still available." : "Open the recurring template (changes every week)"}>Edit template…</button>
           <span style={{ flex: 1 }} />

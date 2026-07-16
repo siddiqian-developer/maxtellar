@@ -76,9 +76,13 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
    Cancel "sync to timeline unconditionally" for free, since they go through the same state. (No
    cross-pane scroll-sync exists to disable — the timeline only follows `now` itself.) The `.app`
    grid uses `minmax(0, 1fr)` on mobile: plain `1fr` floors the track at the topbar's min-content
-   (~760px) and drags the whole page into a horizontal scroll. **Known gap:** the topbar's own
-   controls still exceed a phone's width and scroll horizontally within the bar — a topbar
-   redesign is its own task.
+   (~760px) and drags the whole page into a horizontal scroll. ~~**Known gap:** the topbar's own
+   controls still exceed a phone's width and scroll horizontally within the bar.~~ **BUILT
+   (2026-07-16): the topbar REFLOWS instead of scrolling** — below 720px it wraps (flex-wrap +
+   a full-width `::after` break item) into stacked rows: identity + navigation (wordmark, screen
+   menu … theme, settings), then the hero metric, then the ceremony controls right-aligned. The
+   desktop spacers stand down (`display:none`); the global clock stays hidden (already law). No
+   horizontal scroll exists on the page OR inside the bar (verified at 390px).
    **Cards follow TIME order (2026-07-11), mirroring the timeline** — sorted by each item's
    first placed part, not by raw priority rank (an anchored task can be placed earlier in
    time than a higher-priority float; the two projections must agree). Unplaced items sink

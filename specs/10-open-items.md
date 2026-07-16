@@ -107,17 +107,16 @@ only instances; other `.find(x => x.id === …)` sites resolve real ids in real 
   a cancelled session. Guarded by `settings-transactional.test.ts` — a STATIC guard, because the
   bug lives in the GAP BETWEEN two files (a setting is added to the panel and nobody remembers
   App); it names the unrestored setter and was verified to fail when one restore is removed.
-- **GAP (widened audit 2026-07-16): §4.5's displaced-tasks flow is unbuilt.** Spec: "On
-  initiation [of an off-period]: app … offers a displaced-tasks flow reusing the pruning UI
-  (perish / carry / push)." The dialog only asks title + known/open end; displacement is hardcoded
-  to "push" (the file comment admits it). Cancel-per-card still exists as a manual escape hatch,
-  but the offered flow does not. Fix direction: after START_OFF_PERIOD, list the displaced plan
-  tasks with per-item keep(push)/cancel choices, reusing the pruning-list component.
-- **GAP (widened audit 2026-07-16): §4.6's third power (per-date override / "move") has no UI.**
-  Core fully supports `TemplateOverride` (collectDue applies it; SET_DATED carries it) but nothing
-  ever creates one — the Calendar menu's "Edit template…" edits the template for ALL weeks (the
-  in-code comment marks the per-date editor as a follow-up). Fix direction: a small per-date
-  editor (anchor move / budget resize) writing `overrides` via the existing `putDated`.
+- ~~**GAP (widened audit 2026-07-16): §4.5's displaced-tasks flow is unbuilt.**~~ **BUILT
+  2026-07-16.** The Off dialog now lists the displaced top-level plan tasks with per-item
+  Keep(push)/Discard(perish via CANCEL_TASK) chips, pruning-list style. Verified in-browser:
+  two tasks, one discarded — the discard left the pipeline, the keep pushed below the running
+  Off block. Core sequence pinned in `weekly.test.ts`.
+- ~~**GAP (widened audit 2026-07-16): §4.6's third power (per-date override / "move") has no
+  UI.**~~ **BUILT 2026-07-16.** The Calendar day-menu grew "On this day" smart fields writing a
+  minimal-diff `TemplateOverride` via `putDated` (`diffOverride`, tested — incl. that the
+  override moves the block on that date ONLY through `weekPreview`). Verified in-browser: a
+  Mon–Fri 9–10am template moved to 2–3pm on one date; the other four occurrences untouched.
 - ~~**BUG (widened audit 2026-07-16): Calendar-mode "Edit template…" silently discarded mid-week
   saves.**~~ **FIXED 2026-07-16.** `locked` exempted Calendar mode entirely, but the reducer gates
   SET_WEEK_PLAN on `canPlanWeek` regardless — so mid-week on a working day the editor opened,

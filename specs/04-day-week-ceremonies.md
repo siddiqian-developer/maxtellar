@@ -183,7 +183,12 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
 - **Real tasks on the spine** (Inviolable tier), UX-distinct from ordinary tasks. Known end →
   fixed block; unknown end → head-anchored running block.
 - On initiation: app asks known/unknown end, and offers a **displaced-tasks flow reusing the
-  pruning UI** (perish / carry / push).
+  pruning UI** (perish / carry / push). **BUILT (2026-07-16):** the Off dialog lists the
+  top-level unstarted plan tasks (children ride with their bracket, as in SOD pruning) with a
+  per-item **Keep / Discard** chip — Keep = push (default; the task settles below the block and
+  resumes after), Discard = perish (`CANCEL_TASK` dispatched after `START_OFF_PERIOD`). "Carry"
+  IS the push default here: unlike SOD pruning there is no day boundary to carry across — a
+  pushed task survives the block by construction.
 - Ceremonies auto-suspend while off (they're user-performed; no SOD = suspended).
 - **Weekend OFF day ≠ abrupt off-period:** resumption from a weekend expects weekly planning
   (a hidden urgent bypass exists). Off-periods are pausable and OMMF-capable.
@@ -246,6 +251,13 @@ a **dated override layer** on top of the recurring plan — three powers per dat
 - **Add** a one-off `DatedTask` (a `TaskSpec` pinned to a date, not a weekday) — e.g. a dentist appt.
 - **Skip** a recurring template on that date only (skip Friday standup this once).
 - **Override** a template's anchor/budget on that date only (gym at 11 instead of 9 this Thursday).
+  **BUILT (2026-07-16):** clicking a recurring block in Calendar mode opens the day-menu, whose
+  "On this day" fields (smart TodField / DurInput — only the fields the template itself
+  anchors/budgets are shown) edit a `TemplateOverride`. **Save stores just the DIFF from the
+  template** (`diffOverride`): undefined fields inherit, so a later template edit still flows
+  through to dates the user never touched; nothing differs → the override is cleared. A "moved"
+  badge + "Reset to the template's time" appear while one exists. Never gated (`SET_DATED`);
+  "Edit template…" remains the structural, all-weeks escape.
 
 **Model.** `State.dated: DatedEntry[]`, one entry per date that has any add/skip/override, keyed by
 that date's **local-midnight epoch-minute** (`date`) — the same key SOD injection uses (core stays

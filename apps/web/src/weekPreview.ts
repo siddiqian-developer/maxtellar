@@ -63,6 +63,23 @@ export interface WeekPreview {
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 
 /**
+ * §4.6: build the MINIMAL per-date override for template `t` from the editor's
+ * draft values — a field is included only when it is set AND differs from the
+ * template (undefined draft fields inherit, per `applyOverride`). Returns null
+ * when nothing differs: no override is needed, and an existing one is cleared.
+ */
+export function diffOverride(
+  t: WeekTemplate,
+  draft: { anchorStartTod?: number; anchorEndTod?: number; budget?: number },
+): { templateId: string; anchorStartTod?: number; anchorEndTod?: number; budget?: number } | null {
+  const ov: { templateId: string; anchorStartTod?: number; anchorEndTod?: number; budget?: number } = { templateId: t.id };
+  if (draft.anchorStartTod !== undefined && draft.anchorStartTod !== t.anchorStartTod) ov.anchorStartTod = draft.anchorStartTod;
+  if (draft.anchorEndTod !== undefined && draft.anchorEndTod !== t.anchorEndTod) ov.anchorEndTod = draft.anchorEndTod;
+  if (draft.budget !== undefined && draft.budget !== t.budget) ov.budget = draft.budget;
+  return ov.anchorStartTod !== undefined || ov.anchorEndTod !== undefined || ov.budget !== undefined ? ov : null;
+}
+
+/**
  * @param full24 when true the vertical window is the whole day [0,1440); else it
  *   shrinks to the placed span (padded to the hour).
  */

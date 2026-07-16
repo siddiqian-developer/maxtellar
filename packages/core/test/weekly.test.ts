@@ -164,6 +164,19 @@ describe("off-periods (§4.5)", () => {
     noViolations(s);
   });
 
+  it("§4.5 displaced-tasks flow: per-item perish (CANCEL_TASK after start) removes ONLY the chosen task", () => {
+    let s = initialState(DAY0 + 8 * H);
+    const spec = { headId: "Work", activityId: "Coding", tier: "normal", timing: "budgeted", ommf: false, slideable: true, breakable: true, budget: 60 };
+    s = reduce(s, { type: "CREATE_TASK", task: { id: "keep", title: "Keep", ...spec } as never });
+    s = reduce(s, { type: "CREATE_TASK", task: { id: "drop", title: "Drop", ...spec } as never });
+    s = reduce(s, { type: "START_OFF_PERIOD", title: "Sick", knownEnd: DAY0 + 12 * H });
+    s = reduce(s, { type: "CANCEL_TASK", taskId: "drop" }); // the UI's "Discard" choice
+    expect(s.running?.isOff).toBe(true); // the block itself is untouched
+    expect(s.plan.some((i) => i.id === "keep")).toBe(true); // push survives
+    expect(s.plan.some((i) => i.id === "drop")).toBe(false); // perish leaves the plan
+    noViolations(s);
+  });
+
   it("unknown-end off-period runs open (stopwatch); END_OFF_PERIOD books Off-Periods occupancy", () => {
     let s = initialState(DAY0 + 8 * H);
     s = reduce(s, { type: "START_OFF_PERIOD" }); // no title, no end

@@ -76,6 +76,8 @@ was written).
   fills the 2nd matching element; sidesteps `fill`'s selector-with-space bug
 - `press <key>` — e.g. `Enter`, `Escape`
 - `wait <ms>` — plain timeout, use for debounce windows / model loads
+- `viewport <w> <h>` — resize the viewport (e.g. `viewport 390 844` for
+  phone-width media queries); issue it BEFORE `nav`
 - `screenshot` — full page, auto-numbered
 - `screenshot-element <css-selector>` — crop to one element
 - `console` / `console --errors` — dump captured console/pageerror/failed-request logs

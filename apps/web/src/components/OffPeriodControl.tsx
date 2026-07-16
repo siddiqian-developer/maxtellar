@@ -2,12 +2,16 @@
  * Off-period control (§4.5) — abrupt, mid-week. When an off-period is running it
  * shows "End Off"; otherwise "Off" opens a dialog asking title + known/unknown
  * end. Known end → a countdown block; unknown → an open (stopwatch) block. Both
- * are Inviolable and book to the Off-Periods head. Displaced plan tasks default
- * to "push" (they settle after the block); the dialog notes this. Smart-input on
- * the end time (§7.0.2). Esc → close the dialog.
+ * are Inviolable and book to the Off-Periods head.
+ *
+ * §4.5 displaced-tasks flow: the dialog lists the plan tasks the block will
+ * displace, each with a keep/discard toggle (the pruning-list pattern, §4.2).
+ * Keep = "push" (default — the task settles below the block and survives);
+ * discard = "perish" (CANCEL_TASK after the block starts). Smart-input on the
+ * end time (§7.0.2). Esc → close the dialog.
  */
 import { useState } from "react";
-import type { Event, State } from "@maxtellar/core";
+import type { Event, State, UnstartedTask } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
 import { parseCasualTime, parseTimeOfDay } from "../casualTime";
@@ -35,20 +39,21 @@ export function OffPeriodControl({ state, dispatch }: Props): JSX.Element {
       <button className="eod-btn" onClick={() => setOpen(true)} data-tip="Start an off-period (illness, travel, an abrupt break)">
         Off
       </button>
-      {open && <OffDialog now={state.now} dispatch={dispatch} onClose={() => setOpen(false)} />}
+      {open && <OffDialog state={state} dispatch={dispatch} onClose={() => setOpen(false)} />}
     </>
   );
 }
 
 function OffDialog({
-  now,
+  state,
   dispatch,
   onClose,
 }: {
-  now: number;
+  state: State;
   dispatch: (e: Event) => void;
   onClose: () => void;
 }): JSX.Element {
+  const now = state.now;
   const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
   const [title, setTitle] = useState("");
@@ -57,6 +62,16 @@ function OffDialog({
   const [endMin, setEndMin] = useState<number | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [calOpen, setCalOpen] = useState(false);
+  // §4.5 displaced tasks: the top-level unstarted plan items the block pushes
+  // below it (children ride with their parent bracket, as in SOD pruning).
+  const displaced = state.plan.filter((i): i is UnstartedTask => i.kind === "task" && !i.parentId);
+  const [discard, setDiscard] = useState<Set<string>>(new Set());
+  const toggleDiscard = (id: string): void =>
+    setDiscard((s) => {
+      const next = new Set(s);
+      next.has(id) ? next.delete(id) : next.add(id);
+      return next;
+    });
   // Esc closes the calendar first, then the dialog (back-navigation stack).
   useEscClose(calOpen ? () => setCalOpen(false) : onClose);
 
@@ -89,6 +104,8 @@ function OffDialog({
       ...(title.trim() ? { title: title.trim() } : {}),
       ...(known && endMin !== null ? { knownEnd: endMin } : {}),
     });
+    // §4.5 perish: the chosen discards leave the plan; the rest push below.
+    for (const id of discard) dispatch({ type: "CANCEL_TASK", taskId: id });
     onClose();
   };
 
@@ -130,6 +147,28 @@ function OffDialog({
                   data-tip="Pick a date (day after tomorrow onward). Today & tomorrow: just type them."
                   onClick={() => setCalOpen(true)}>📅</button>
               </div>
+            </div>
+          )}
+          {displaced.length > 0 && (
+            <div className="field">
+              <label>Displaced tasks <span className="hint-glyph" tabIndex={0} data-tip="The block pushes these below it. Kept tasks resume when it ends (push); discarded ones are cancelled (perish, §4.5).">ⓘ</span></label>
+              <ul className="sod-leftovers">
+                {displaced.map((t) => {
+                  const gone = discard.has(t.id);
+                  return (
+                    <li key={t.id} className={`sod-leftover${gone ? " discarded" : ""}`}>
+                      <span className="sl-title">{t.title}</span>
+                      <span className="badge head-badge">{t.headId}{t.activityId && ` · ${t.activityId}`}</span>
+                      <button type="button"
+                        className={`type-chip${gone ? " active" : ""}`}
+                        data-status={gone ? "fixed" : "budgeted"}
+                        onClick={() => toggleDiscard(t.id)}>
+                        {gone ? "Discard" : "Keep"}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             </div>
           )}
           {err && <div className="form-warning" role="status">{err}</div>}
