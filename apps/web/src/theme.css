@@ -1716,3 +1716,18 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .config-cat-select { font-size: 11px; padding: 2px 6px; margin-left: 8px; color: var(--ink-soft); }
 .ledger-subhead { margin: 14px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .06em; color: var(--ink-soft); }
 .ledger-note { font-size: 11px; color: var(--ink-soft); font-style: italic; }
+
+/* §5.2 pomodoro */
+.pomo-row { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; padding: 8px 0 2px; }
+.pomo-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
+.pomo-fields { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); }
+.pomo-fields label { display: inline-flex; align-items: center; gap: 5px; }
+.pomo-fields .bp-input, .pomo-settings .bp-input { width: 68px; }
+.pomo-settings { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
+.pomo-settings label { display: inline-flex; align-items: center; gap: 5px; }
+.pomo-cycles { width: 52px; }
+.pomo-extend-label { font-size: 11px; color: var(--ink-faint); align-self: center; }
+.pomo-modal { max-width: 460px; }
+.pomo-modal .drawer-footer { flex-wrap: wrap; gap: 6px; }
+.pomo-badge { border-color: var(--accent); color: var(--accent); }
+.pomo-badge[data-phase="break"], .pomo-badge[data-phase="longBreak"] { border-color: var(--ink-faint); color: var(--ink-soft); }

@@ -43,6 +43,29 @@
 - **Quotas count the whole pomodoro task** (60m task = 60m to the head, breaks included).
 - Phases (work/break) are **internal ledger channels of the running task**, not spine segments.
 - **Config:** global presets (25/5×4+15, 50/10, …) + per-task override at Start.
+- **Mechanics (built 2026-07-16, Stage 7a).** A pomodoro run carries live state on the running
+  task: `{ config, phase: "work"|"break"|"longBreak", phaseLen, phaseStartedAt, cycle }`. `phaseLen`
+  starts at the config length and grows with each extend; `phaseStartedAt` anchors elapsed. **Zero
+  automation** — the reducer never switches phases; the UI raises the alarm+modal when the derived
+  `pomodoroView.due` (phase elapsed ≥ `phaseLen`) flips, and only an explicit tap transitions:
+  - `POMODORO_BREAK` (work→break): `cycle+1`; every `cyclesBeforeLong`-th completed work interval
+    the break becomes a **longBreak** (else a normal break); phase clock resets.
+  - `POMODORO_RESUME` (break/longBreak→work): back to a work interval; clock resets.
+  - `POMODORO_EXTEND {minutes}`: grows the **current** phase's `phaseLen` (Keep working +5/+10/+15;
+    **+1 pomodoro** = extend work by `workMin`; Extend break +5/+10/+15). No phase change.
+  - **Channel attribution per tick (the ledger, not spine):** minutes up to `phaseLen` accrue to the
+    phase's primary channel — **work → `spent`, break/longBreak → `breaks`**; minutes **beyond**
+    `phaseLen` (you're past the interval, the app never auto-pauses) accrue to the decision channel —
+    **after work → `managed`** (Self-Management: deciding to break/continue), **after break →
+    `wasted`** (post-break idle — the honest mirror). Non-pomodoro tasks route all minutes to `spent`
+    as before (`breaks` stays 0).
+  - **Breaks eat budget, universally:** `remaining = budget − (spent + breaks)` in `cursorOf` /
+    `runningView` / the pause remainder (a pure generalization — 0 `breaks` for every non-pomodoro
+    task, so behavior is unchanged there). `managed`/`wasted` sit OUTSIDE budget (they push the end
+    later, unbounded). Overrun = `spent + breaks > budget`.
+  - Pomodoro state is **per-run**: pausing ends the run; re-starting the remainder is a fresh Start
+    (attach a config again to resume pomodoro). The whole task still counts to quotas (breaks
+    included).
 
 ### 5.3 Alarms
 - **Ship best-effort in MVP:** in-app sound + system notifications where the installed PWA

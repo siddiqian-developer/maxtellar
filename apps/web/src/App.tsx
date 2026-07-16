@@ -16,8 +16,9 @@ import { EodButton } from "./components/EodButton";
 import { OffPeriodControl } from "./components/OffPeriodControl";
 import { WeekView } from "./components/WeekView";
 import { SnapToast } from "./SnapToast";
+import { PomodoroModal } from "./components/PomodoroModal";
 import { GapFillModal } from "./components/GapFillModal";
-import { LOST_HOURS, formingDayStart, sodPrecondition } from "@maxtellar/core";
+import { LOST_HOURS, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
 import { fmtDur } from "./time";
 import { useSettings, type TimeFormat, type GridGranularity, type PresetDefaults } from "./settings";
 
@@ -106,6 +107,9 @@ export function App(): JSX.Element {
   // Missing-data fallback: when the precondition fails, the same GapFillModal
   // (its §4.2 second entry point) opens on the trailing unaccounted span.
   const [sodGapFill, setSodGapFill] = useState<{ from: number; to: number } | null>(null);
+  // §5.2 pomodoro: the phase-anchor last dismissed, so "Not now" hides the modal
+  // for the current phase only (a new phase's phaseStartedAt re-raises it).
+  const [pomoDismissedAt, setPomoDismissedAt] = useState<number | null>(null);
 
   // §06 transactional Settings: changes reflect live but only commit on Done;
   // Esc/×/scrim revert to this snapshot. Held above the panel so it survives the
@@ -216,6 +220,7 @@ export function App(): JSX.Element {
     + (state.running ? clip(state.running.startedAt, state.now) : 0);
   const lost = Math.max(0, wall - accounted);
   const canSod = sodPrecondition(state).ok;
+  const pomoDue = pomodoroView(state)?.due ?? false;
 
   // Start-of-Day entry point. Mid-ceremony → resume. Precondition ok → open the
   // guided sweep. Otherwise open the missing-data GapFillModal on the trailing
@@ -432,6 +437,13 @@ export function App(): JSX.Element {
           onDone={commitSettings}
           onOpenHeadsConfig={() => { setSettingsOpen(false); setView("headsConfig"); }}
           onOpenAiStudio={() => { setSettingsOpen(false); setView("aiStudio"); }}
+        />
+      )}
+      {pomoDue && pomoDismissedAt !== state.running!.pomodoro!.phaseStartedAt && (
+        <PomodoroModal
+          state={state}
+          dispatch={(e) => void dispatch(e)}
+          onDismiss={() => setPomoDismissedAt(state.running!.pomodoro!.phaseStartedAt)}
         />
       )}
       {error && <div className="error-toast">{error}</div>}

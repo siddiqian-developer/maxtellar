@@ -9,13 +9,14 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import type { Event, SleepKind, TimingType } from "@maxtellar/core";
+import type { Event, PomodoroConfig, SleepKind, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings, type PresetId } from "../settings";
 import { PRESETS, presetById, matchPreset } from "../presets";
 import { parseCasualTime, parseCasualDuration } from "../casualTime";
 import { fmtDayTime, fmtDurUnits } from "../time";
 import { DatePicker } from "./DatePicker";
+import { DurInput } from "./BudgetPanel";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
@@ -168,7 +169,7 @@ const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget
 
 export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
   const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
-  const { presetDefaults, timeFormat, aiLevels, showWeekday } = useSettings();
+  const { presetDefaults, timeFormat, aiLevels, showWeekday, pomodoroDefault } = useSettings();
   const hour12 = timeFormat === "12h";
   const fmtT = (m: number): string => fmtDayTime(m, now, hour12, showWeekday);
   // Head-suggester should only ever propose PLANNABLE heads (never the system
@@ -203,6 +204,11 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // by the preset pill (not a free-form control).
   const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(undefined);
   const [flags, setFlags] = useState<{ slideable?: boolean; breakable?: boolean }>({});
+  // §5.2: start this task as a pomodoro (only meaningful on "Add & start now").
+  // Work/break override the global default at Start; long-break + cycles inherit.
+  const [pomo, setPomo] = useState(false);
+  const [pomoWork, setPomoWork] = useState<number>(pomodoroDefault.workMin);
+  const [pomoBreak, setPomoBreak] = useState<number>(pomodoroDefault.breakMin);
   // §2.7 (G24) composition: optional subtasks entered at creation. Each leaf is
   // a title + casual budget; if any are present, the task is created then
   // decomposed (SET_SUBTASKS) so its budget becomes the zero-sum Σ of leaves.
@@ -594,7 +600,10 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
       recordDecomposition(title.trim(), kids);
     }
     if (thenStart) {
-      dispatch({ type: "START_TASK", taskId: parentId });
+      const pomodoro: PomodoroConfig | undefined = pomo
+        ? { ...pomodoroDefault, workMin: Math.max(1, pomoWork), breakMin: Math.max(1, pomoBreak) }
+        : undefined;
+      dispatch({ type: "START_TASK", taskId: parentId, ...(pomodoro ? { pomodoro } : {}) });
     }
     onClose();
   };
@@ -931,6 +940,19 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
             onClose={() => setCalendarField(null)}
           />
         )}
+        <div className="pomo-row">
+          <label className="pomo-toggle" data-tip="Run this task in pomodoro intervals (only when you start it now)">
+            <input type="checkbox" checked={pomo} onChange={(e) => setPomo(e.target.checked)} />
+            🍅 Start as pomodoro
+          </label>
+          {pomo && (
+            <span className="pomo-fields">
+              <label>Work <DurInput ariaLabel="Pomodoro work length" value={pomoWork} onCommit={(m) => { if (m !== null) setPomoWork(Math.max(1, m)); }} /></label>
+              <label>Break <DurInput ariaLabel="Pomodoro break length" value={pomoBreak} onCommit={(m) => { if (m !== null) setPomoBreak(Math.max(1, m)); }} /></label>
+              <span className="field-desc">then {fmtDurUnits(pomodoroDefault.longBreakMin)} long break every {pomodoroDefault.cyclesBeforeLong}</span>
+            </span>
+          )}
+        </div>
         <div className="drawer-footer">
           <button className="primary" onClick={() => add(false)}>Add</button>
           <button className="start-accent" onClick={() => add(true)}>Add &amp; start now ⚡</button>

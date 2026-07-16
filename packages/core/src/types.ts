@@ -163,6 +163,27 @@ export interface DayRecord {
 
 export type TimerMode = "countdown" | "stopwatch"; // §9.2 (from the 8-yr AppScript)
 
+/** §5.2 pomodoro preset — work / break / long-break lengths + how many WORK
+ * intervals precede a long break (25/5 ×4 + 15 by default). */
+export interface PomodoroConfig {
+  workMin: Dur;
+  breakMin: Dur;
+  longBreakMin: Dur;
+  cyclesBeforeLong: number;
+}
+export type PomodoroPhase = "work" | "break" | "longBreak";
+/** Live pomodoro state on a RunningTask (present only when started as one). */
+export interface PomodoroState {
+  config: PomodoroConfig;
+  phase: PomodoroPhase;
+  /** the current phase's target length: config length + any POMODORO_EXTEND. */
+  phaseLen: Dur;
+  /** epoch minute the current phase began (drives elapsed + overshoot split). */
+  phaseStartedAt: Min;
+  /** completed WORK intervals in this set (drives the long break). */
+  cycle: number;
+}
+
 export interface RunningTask {
   id: string;
   title: string;
@@ -185,6 +206,9 @@ export interface RunningTask {
   /** §4.5: this running block is an off-period (Inviolable tier) — lets
    * END_OFF_PERIOD and the UI distinguish it from an ordinary running task. */
   isOff?: boolean;
+  /** §5.2: live pomodoro state, present only when the task was started as a
+   * pomodoro. Absent = an ordinary run (all minutes → spent). */
+  pomodoro?: PomodoroState;
 }
 
 /** §4.4/§4.6: the schedulable shape shared by a recurring template and a dated
@@ -319,9 +343,12 @@ export type Event =
   | { type: "TICK"; to?: Min } // advance now by 1 (or batch catch-up to `to`)
   | { type: "CREATE_TASK"; task: Omit<UnstartedTask, "kind" | "rank"> & { rank?: string } }
   | { type: "CREATE_GAP"; afterRank?: string; budget: Dur; id?: string }
-  | { type: "START_TASK"; taskId: string }
+  | { type: "START_TASK"; taskId: string; pomodoro?: PomodoroConfig }
   | { type: "PAUSE_RUNNING" }
   | { type: "COMPLETE_RUNNING" }
+  | { type: "POMODORO_BREAK" } // §5.2 work-end tap: Take break (→ break/longBreak)
+  | { type: "POMODORO_RESUME" } // §5.2 break-end tap: Resume work
+  | { type: "POMODORO_EXTEND"; minutes: Dur } // §5.2 keep working / extend break +N
   | { type: "CANCEL_TASK"; taskId: string }
   | { type: "SET_MIN_FRAGMENT"; minutes: Dur } // §3.7/7.1 fragment floor (settable in Settings)
   | { type: "SET_OPEN_CAP"; minutes: Dur } // §3.9 open-task presumed-extent cap

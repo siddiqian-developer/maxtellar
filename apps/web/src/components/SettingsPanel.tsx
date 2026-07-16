@@ -8,6 +8,7 @@
 import type { Event, TimingType } from "@maxtellar/core";
 import { useSettings, type PresetId } from "../settings";
 import { useEscClose } from "../useEscClose";
+import { DurInput } from "./BudgetPanel";
 
 interface Props {
   minFragment: number;
@@ -32,7 +33,7 @@ const PRESET_ROWS: { id: PresetId; label: string }[] = [
 ];
 
 export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
-  const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode } = useSettings();
+  const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, pomodoroDefault, setPomodoroDefault } = useSettings();
   const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const toggleWeekend = (d: number): void => {
     const next = weekendDays.includes(d) ? weekendDays.filter((x) => x !== d) : [...weekendDays, d].sort();
@@ -221,6 +222,22 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
                 </div>
               </div>
             ))}
+          </div>
+          <div className="field">
+            <label data-tip="§5.2 default pomodoro preset — the intervals a task starts with when you check 'Start as pomodoro'. Work/break are overridable per task at Start.">
+              🍅 Pomodoro default
+            </label>
+            <div className="pomo-settings">
+              <label>Work <DurInput ariaLabel="Default work length" value={pomodoroDefault.workMin} onCommit={(m) => { if (m !== null) setPomodoroDefault({ ...pomodoroDefault, workMin: Math.max(1, m) }); }} /></label>
+              <label>Break <DurInput ariaLabel="Default break length" value={pomodoroDefault.breakMin} onCommit={(m) => { if (m !== null) setPomodoroDefault({ ...pomodoroDefault, breakMin: Math.max(1, m) }); }} /></label>
+              <label>Long break <DurInput ariaLabel="Default long-break length" value={pomodoroDefault.longBreakMin} onCommit={(m) => { if (m !== null) setPomodoroDefault({ ...pomodoroDefault, longBreakMin: Math.max(1, m) }); }} /></label>
+              <label>Every
+                <input className="num bp-input pomo-cycles" type="number" min={1} aria-label="Work intervals before a long break"
+                  value={pomodoroDefault.cyclesBeforeLong}
+                  onChange={(e) => { const n = Math.round(Number(e.target.value)); if (n >= 1) setPomodoroDefault({ ...pomodoroDefault, cyclesBeforeLong: n }); }} />
+                intervals
+              </label>
+            </div>
           </div>
           <div className="field">
             <label>Heads &amp; sub-heads</label>

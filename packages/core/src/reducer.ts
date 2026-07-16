@@ -19,6 +19,7 @@ import type {
   HistoryEntry,
   Min,
   PlanItem,
+  PomodoroPhase,
   RunningView,
   State,
   UnstartedTask,
@@ -180,10 +181,15 @@ function validateHistoryBatch<T extends { kind: HistoryEntry["kind"]; start: Min
 }
 
 /** The first schedulable instant for the plan (§3.13). */
+/** §5.2: minutes that consume the countdown budget — work spent PLUS sanctioned
+ * breaks (breaks eat budget). `breaks` is 0 for every non-pomodoro task, so this
+ * is a pure generalization of the old `spent`-only remaining. */
+const budgetUsed = (c: Channels): Dur => c.spent + c.breaks;
+
 export function cursorOf(s: State): Min {
   if (!s.running) return s.now;
   if (s.running.budget === undefined) return s.now; // stopwatch: open tail rides now
-  const remaining = Math.max(0, s.running.budget - s.running.channels.spent);
+  const remaining = Math.max(0, s.running.budget - budgetUsed(s.running.channels));
   return s.now + remaining; // countdown: projected end (overrun → now)
 }
 
@@ -194,13 +200,39 @@ export function runningView(s: State): RunningView | null {
   if (r.budget === undefined) {
     return { mode: "stopwatch", elapsedWall, remaining: 0, overrun: false, projectedEnd: s.now };
   }
-  const remaining = Math.max(0, r.budget - r.channels.spent);
+  const remaining = Math.max(0, r.budget - budgetUsed(r.channels));
   return {
     mode: "countdown",
     elapsedWall,
     remaining,
-    overrun: r.channels.spent > r.budget,
+    overrun: budgetUsed(r.channels) > r.budget,
     projectedEnd: s.now + remaining,
+  };
+}
+
+/** §5.2: derived pomodoro view for the UI — current phase, how far into it, and
+ * whether it's DUE (elapsed ≥ phaseLen), i.e. the alarm+modal should show. Pure;
+ * null when the running task is not a pomodoro. */
+export interface PomodoroView {
+  phase: PomodoroPhase;
+  phaseLen: Dur;
+  phaseElapsed: Dur;
+  due: boolean;
+  cycle: number;
+  /** if a break is taken NOW, would it be the long break? (drives the label). */
+  nextBreakIsLong: boolean;
+}
+export function pomodoroView(s: State): PomodoroView | null {
+  const p = s.running?.pomodoro;
+  if (!p) return null;
+  const phaseElapsed = Math.max(0, s.now - p.phaseStartedAt);
+  return {
+    phase: p.phase,
+    phaseLen: p.phaseLen,
+    phaseElapsed,
+    due: phaseElapsed >= p.phaseLen,
+    cycle: p.cycle,
+    nextBreakIsLong: (p.cycle + 1) % Math.max(1, p.config.cyclesBeforeLong) === 0,
   };
 }
 
@@ -365,14 +397,28 @@ export function reduce(state: State, event: Event): State {
       const delta = to - state.now;
       let s: State = { ...state, now: to };
       if (s.running) {
-        // default accrual: running minutes are spent(work); reattribution via LOG_CHANNEL
-        s = {
-          ...s,
-          running: {
-            ...s.running,
-            channels: { ...s.running.channels, spent: s.running.channels.spent + delta },
-          },
-        };
+        const r = s.running;
+        const p = r.pomodoro;
+        let channels: Channels;
+        if (p) {
+          // §5.2 phase-aware accrual: minutes up to phaseLen → the phase's
+          // primary channel (work→spent, break→breaks); minutes BEYOND it →
+          // the decision channel (after work→managed, after break→wasted —
+          // the app never auto-pauses). Split the delta at the phase boundary.
+          const elapsed = Math.max(0, state.now - p.phaseStartedAt);
+          const room = Math.max(0, p.phaseLen - elapsed);
+          const primary = Math.min(delta, room);
+          const overflow = delta - primary;
+          const primaryCh = p.phase === "work" ? "spent" : "breaks";
+          const overflowCh = p.phase === "work" ? "managed" : "wasted";
+          channels = { ...r.channels };
+          channels[primaryCh] += primary;
+          channels[overflowCh] += overflow;
+        } else {
+          // default accrual: running minutes are spent(work); reattribution via LOG_CHANNEL
+          channels = { ...r.channels, spent: r.channels.spent + delta };
+        }
+        s = { ...s, running: { ...r, channels } };
       }
       s = applyAmputations(s);
       return resettle(s);
@@ -526,6 +572,19 @@ export function reduce(state: State, event: Event): State {
         ...(target.sleepKind !== undefined ? { sleepKind: target.sleepKind } : {}),
         ...(target.parentId !== undefined ? { parentId: target.parentId } : {}),
         channels: emptyChannels(),
+        // §5.2: begin a pomodoro run when the Start carries a config — first
+        // phase is work, its clock anchored at now.
+        ...(event.pomodoro
+          ? {
+              pomodoro: {
+                config: event.pomodoro,
+                phase: "work" as const,
+                phaseLen: event.pomodoro.workMin,
+                phaseStartedAt: s.now,
+                cycle: 0,
+              },
+            }
+          : {}),
       };
       return resettle({ ...s, plan, history, running });
     }
@@ -560,7 +619,7 @@ export function reduce(state: State, event: Event): State {
         seq: state.seq + 1,
       };
 
-      const remaining = r.budget !== undefined ? r.budget - r.channels.spent : undefined;
+      const remaining = r.budget !== undefined ? r.budget - budgetUsed(r.channels) : undefined;
       if (remaining === undefined || remaining > 0) {
         const remBudget =
           remaining === undefined ? undefined : Math.max(s.minFragment, remaining); // floor (7.1)
@@ -725,6 +784,49 @@ export function reduce(state: State, event: Event): State {
       channels.spent -= minutes;
       channels[event.channel] += minutes;
       return resettle({ ...state, running: { ...r, channels } });
+    }
+
+    case "POMODORO_BREAK": {
+      // §5.2 work-end tap: work → break (or the long break every
+      // cyclesBeforeLong-th completed work interval). Zero automation — only
+      // this explicit tap transitions; the phase clock resets to now.
+      const r = state.running;
+      if (!r?.pomodoro || r.pomodoro.phase !== "work") return state;
+      const p = r.pomodoro;
+      const cycle = p.cycle + 1;
+      const isLong = cycle % Math.max(1, p.config.cyclesBeforeLong) === 0;
+      const pomodoro = {
+        ...p,
+        phase: (isLong ? "longBreak" : "break") as PomodoroPhase,
+        phaseLen: isLong ? p.config.longBreakMin : p.config.breakMin,
+        phaseStartedAt: state.now,
+        cycle,
+      };
+      return resettle({ ...state, running: { ...r, pomodoro } });
+    }
+
+    case "POMODORO_RESUME": {
+      // §5.2 break-end tap: break/longBreak → a fresh work interval.
+      const r = state.running;
+      if (!r?.pomodoro || r.pomodoro.phase === "work") return state;
+      const pomodoro = {
+        ...r.pomodoro,
+        phase: "work" as PomodoroPhase,
+        phaseLen: r.pomodoro.config.workMin,
+        phaseStartedAt: state.now,
+      };
+      return resettle({ ...state, running: { ...r, pomodoro } });
+    }
+
+    case "POMODORO_EXTEND": {
+      // §5.2 Keep working / Extend break +N (and +1 pomodoro = +workMin): grow
+      // the CURRENT phase's cap so the modal won't re-fire until the new length.
+      // No phase change, no clock reset.
+      const r = state.running;
+      if (!r?.pomodoro) return state;
+      const minutes = Math.max(0, Math.round(event.minutes));
+      const pomodoro = { ...r.pomodoro, phaseLen: r.pomodoro.phaseLen + minutes };
+      return resettle({ ...state, running: { ...r, pomodoro } });
     }
 
     case "BACKLOG": {

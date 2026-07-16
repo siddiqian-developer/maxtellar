@@ -7,9 +7,12 @@
  */
 
 import { createContext, useContext, useEffect, useState } from "react";
-import type { TimingType } from "@maxtellar/core";
+import type { PomodoroConfig, TimingType } from "@maxtellar/core";
 
 export type TimeFormat = "12h" | "24h";
+
+/** §5.2 pomodoro global default preset (per-task override happens at Start). */
+export const DEFAULT_POMODORO: PomodoroConfig = { workMin: 25, breakMin: 5, longBreakMin: 15, cyclesBeforeLong: 4 };
 
 /** §2.9 preset ids whose default timing type is user-configurable. */
 export type PresetId = "sleep" | "nap" | "food";
@@ -81,6 +84,9 @@ interface Settings {
   setMlMode: (m: "maximum" | "lightweight") => void;
   aiLevels: AiLevels;
   setAiLevel: (feature: AiFeature, level: AiLevel) => void;
+  /** §5.2 global default pomodoro preset; per-task override at Start. */
+  pomodoroDefault: PomodoroConfig;
+  setPomodoroDefault: (c: PomodoroConfig) => void;
 }
 
 const SettingsContext = createContext<Settings | null>(null);
@@ -161,6 +167,24 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
   const setPresetDefault = (id: PresetId, timing: TimingType): void =>
     setPresetDefaults((d) => ({ ...d, [id]: timing }));
 
+  const [pomodoroDefault, setPomodoroDefault] = useState<PomodoroConfig>(() => {
+    try {
+      const s = JSON.parse(localStorage.getItem("pomodoroDefault") ?? "null");
+      const n = (v: unknown, f: number): number => (typeof v === "number" && v > 0 ? Math.round(v) : f);
+      if (s && typeof s === "object") {
+        return {
+          workMin: n(s.workMin, DEFAULT_POMODORO.workMin),
+          breakMin: n(s.breakMin, DEFAULT_POMODORO.breakMin),
+          longBreakMin: n(s.longBreakMin, DEFAULT_POMODORO.longBreakMin),
+          cyclesBeforeLong: n(s.cyclesBeforeLong, DEFAULT_POMODORO.cyclesBeforeLong),
+        };
+      }
+    } catch {
+      // fall through
+    }
+    return DEFAULT_POMODORO;
+  });
+
   useEffect(() => {
     localStorage.setItem("timeFormat", timeFormat);
   }, [timeFormat]);
@@ -182,8 +206,11 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
   useEffect(() => {
     localStorage.setItem("aiLevels", JSON.stringify(aiLevels));
   }, [aiLevels]);
+  useEffect(() => {
+    localStorage.setItem("pomodoroDefault", JSON.stringify(pomodoroDefault));
+  }, [pomodoroDefault]);
   return (
-    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel }}>
+    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel, pomodoroDefault, setPomodoroDefault }}>
       {children}
     </SettingsContext.Provider>
   );

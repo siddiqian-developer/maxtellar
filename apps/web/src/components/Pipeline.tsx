@@ -12,7 +12,7 @@
  */
 
 import type { Dur, Event, Min, State, TimingType, UnstartedTask } from "@maxtellar/core";
-import { runningView } from "@maxtellar/core";
+import { pomodoroView, runningView } from "@maxtellar/core";
 import { fmtAbs, fmtDur } from "../time";
 import { useSettings } from "../settings";
 
@@ -123,6 +123,7 @@ function Field({ label, value, floating }: { label: string; value: string | null
 
 export function Pipeline({ state, dispatch }: Props): JSX.Element {
   const rv = runningView(state);
+  const pv = pomodoroView(state);
   const { timeFormat } = useSettings();
   const hour12 = timeFormat === "12h";
   const abs = (m: Min): string => fmtAbs(m, { now: state.now, hour12 });
@@ -362,6 +363,11 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
               label={rv.overrun ? "Overrun" : "Running"}
               hue={rv.overrun ? "overrun" : "running"}
             />
+            {pv && (
+              <span className="badge pomo-badge" data-phase={pv.phase} data-tip={`Pomodoro · interval ${pv.cycle + 1}`}>
+                🍅 {pv.phase === "work" ? "Work" : pv.phase === "longBreak" ? "Long break" : "Break"} {pv.due ? "· due" : fmtDur(Math.max(0, pv.phaseLen - pv.phaseElapsed))}
+              </span>
+            )}
           </div>
           <div className="card-fields">
             <Field label="Started" value={abs(state.running.startedAt)} />
@@ -380,6 +386,7 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
                 />
                 <Field label="Budget" value={fmtDur(state.running.budget ?? 0)} />
                 <Field label="Spent" value={fmtDur(state.running.channels.spent)} />
+                {pv && <Field label="Breaks" value={fmtDur(state.running.channels.breaks)} />}
                 <Field label="Remaining" value={fmtDur(rv.remaining)} />
               </>
             ) : (
