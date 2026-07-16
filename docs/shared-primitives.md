@@ -12,7 +12,8 @@ parallel copy. Adding a genuinely new shared primitive? Add a row here so the ne
 | `TodField` | `./TaskSpecFields` | Smart **time-of-day** input (0..1439, no calendar — §7.0.5 exemption) **+ ±5 stepper** | `smart-input-guard.test.ts` |
 | `useTaskSpec` + `TaskSpecFieldsView` | `./TaskSpecFields` | The full New-Task **option set** as one hook+view (title, presets, sub-head+ML, timing chips, smart time/budget fields, validity-guarded flags) — every task-spec editor gets parity by construction (§7.0.5) | §7.0.5 symmetry |
 | `PresetPills` / `TaskFlagsRow` | `./TaskSpecFields` | The §2.9 preset row and the §2.5 validity-guarded OMMF/slideable/breakable row, standalone | §7.0.5 symmetry |
-| `DatePicker` + smart date/time field | `./DatePicker` | Smart **date/time** input + direction-aware 📅 picker (§7.0.5) | §7.0.5 symmetry |
+| `DatePicker` + smart date/time field | `./DatePicker` | Smart **date/time** input + direction-aware 📅 picker (§7.0.5). Grid = react-day-picker; this file owns the direction law + the `Date`↔epoch-minute boundary | §7.0.5 symmetry |
+| `FuzzyDropdown` | `./FuzzyDropdown` | The one combobox pattern (§6): subsequence filter + bolding (`fuzzy.ts`) over downshift's `useCombobox`. Free text; Escape closes only the list and keeps the text | §6 combobox law |
 | `SubheadField` | `./SubheadField` | Sub-head input with title→sub-head ML suggestion (§7.0.1) | §7.0.5 symmetry |
 | `parseTitleGrammar` / `resolveHash` | `../titleGrammar` | Title **shorthand** parser (`#head`/`@time`/`15:50-16:20`/`1h30`) — recognizes + strips tokens, delegates time/dur values to `casualTime` (never re-parses), §06 | smart-input parity law |
 | `SnapToast` / `useSnapToast` | `../SnapToast` | The one snap-notify toast (§7.0.2) — transient status line for a snap/meaning-change | `snap-toast-guard.test.ts` |

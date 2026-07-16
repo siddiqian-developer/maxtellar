@@ -809,40 +809,32 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   width: 280px;
   box-shadow: var(--shadow-raised, 0 8px 30px rgba(0, 0, 0, 0.18));
 }
-.datepicker-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-bottom: 10px;
-  font-weight: 600;
-}
-.datepicker-header button {
-  border: none;
-  background: transparent;
-  font-size: 18px;
-  cursor: pointer;
-  color: var(--ink-soft);
-  padding: 0 8px;
-}
-.datepicker-header button:hover { color: var(--ink); }
-.datepicker-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 2px; }
-.datepicker-dow {
-  text-align: center;
-  font-size: 10px;
-  color: var(--ink-faint);
-  padding: 4px 0;
-}
-.datepicker-day {
-  aspect-ratio: 1;
-  border: none;
-  background: transparent;
-  border-radius: var(--radius);
+/* The grid is react-day-picker; its own stylesheet is imported by DatePicker.tsx
+   and bound to the app's tokens here — RDP exposes everything we restyle as CSS
+   variables, so no rule below fights its internals. */
+.datepicker .rdp-root {
+  --rdp-accent-color: var(--accent);
+  --rdp-accent-background-color: var(--accent-soft);
+  --rdp-today-color: var(--accent);
+  --rdp-disabled-opacity: 0.35;
+  --rdp-day-height: 34px;
+  --rdp-day-width: 34px;
+  --rdp-day_button-height: 32px;
+  --rdp-day_button-width: 32px;
+  --rdp-day_button-border-radius: var(--radius);
+  --rdp-nav_button-height: 1.6rem;
+  --rdp-nav_button-width: 1.6rem;
+  --rdp-nav-height: 2rem;
   font-size: 12px;
   color: var(--ink);
-  cursor: pointer;
 }
-.datepicker-day:hover:not(:disabled) { background: var(--accent-soft); }
-.datepicker-day:disabled { color: var(--ink-faint); opacity: 0.35; cursor: not-allowed; }
+.datepicker .rdp-month_caption { font-weight: 600; font-size: 13px; }
+.datepicker .rdp-weekday { font-size: 10px; color: var(--ink-faint); font-weight: 400; }
+.datepicker .rdp-chevron { fill: var(--ink-soft); }
+.datepicker .rdp-button_next:hover .rdp-chevron,
+.datepicker .rdp-button_previous:hover .rdp-chevron { fill: var(--ink); }
+.datepicker .rdp-day_button:hover:not(:disabled) { background: var(--accent-soft); }
+.datepicker .rdp-day_button:disabled { color: var(--ink-faint); cursor: not-allowed; }
 
 .form-error {
   color: var(--danger);

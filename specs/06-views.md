@@ -483,7 +483,11 @@ order") matching** — typed characters must appear in the candidate in the same
 necessarily contiguous (e.g. "te" matches "The Exercise" via the T and e of "The") — with
 matched letters **bolded**, not colored. Arrow-key navigable; Enter selects the highlighted
 option; Escape closes only the open list (never the parent drawer — stops propagation
-before the drawer's own Escape-closes handler sees it). Implementation: `fuzzy.ts`
-(`fuzzyMatch`/`fuzzyScore`) + `components/FuzzyDropdown.tsx`.
+before the drawer's own Escape-closes handler sees it) **and never clears what was typed**;
+the field is **free text** (a brand-new sub-head is a valid value), so blurring never
+auto-commits the highlighted option over it. Implementation: `fuzzy.ts`
+(`fuzzyMatch`/`fuzzyScore`) for matching/bolding + downshift's `useCombobox` for the state
+machine and ARIA, in `components/FuzzyDropdown.tsx`. The last two behaviors above are
+downshift defaults *inverted* in its `stateReducer` — the law wins over the library (§7.0.4).
 
 ---

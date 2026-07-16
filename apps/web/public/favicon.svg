@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <rect width="512" height="512" fill="#2f6d68"/>
+  <!-- graduation ticks (the day axis) -->
+  <g fill="#faf9f5" opacity="0.34">
+    <rect x="128" y="150" width="96" height="10" rx="5"/>
+    <rect x="128" y="206" width="64" height="10" rx="5"/>
+    <rect x="128" y="262" width="96" height="10" rx="5"/>
+    <rect x="128" y="318" width="64" height="10" rx="5"/>
+  </g>
+  <!-- the now-seam -->
+  <rect x="300" y="118" width="12" height="276" rx="6" fill="#faf9f5"/>
+  <circle cx="306" cy="256" r="34" fill="#faf9f5"/>
+  <circle cx="306" cy="256" r="16" fill="#2f6d68"/>
+</svg>

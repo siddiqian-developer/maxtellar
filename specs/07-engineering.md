@@ -393,9 +393,23 @@ writing code**:
    style-agnostic — so headless-logic-plus-own-styling satisfies the buy-first bias *and* the
    design-token / `useEscClose` / smart-input non-negotiables above at once.
 
-This reconciles the existing bespoke components (DatePicker, drawers, etc.): they predate this
+This reconciles the existing bespoke components (drawers, tooltips, etc.): they predate this
 ruling and stay **as long as they're untouched** — but the moment one is edited, the buy-first
 re-evaluation above applies. **New** UI work starts from "what package does this?" first.
+
+#### Named decisions (each with the live check that produced it)
+
+Every adoption **and every rejection** is recorded here in the turn it is made. Health figures are
+from a **live** registry check on the stated date — never from memory (that is the rule above).
+
+| Date | Package | Verdict | Reasoning |
+|---|---|---|---|
+| 2026-07-16 | **react-day-picker** 10.0.1 (MIT, 40M dl/wk) | **Adopt** — Hybrid | Powers the `DatePicker` month grid. "Advanced form input" → case 1/3 above. Themed purely through its CSS variables bound to our tokens, so no rule fights its internals. `DatePicker.tsx` remains ours and keeps the epoch-minute boundary (RDP speaks `Date`; the app speaks epoch minutes — converted in that one file), the direction law, the overlay chrome + `useEscClose`, and the disabled-day tooltips. The four call sites bind to our props, not to RDP. |
+| 2026-07-16 | **downshift** 9.4.0 (MIT, 3.6M dl/wk) | **Adopt** — Hybrid (headless only) | `useCombobox` under `FuzzyDropdown`: buys the ARIA plumbing (`aria-activedescendant`/`aria-controls`/ids), outside-click dismissal, and a tested keyboard state machine. `fuzzy.ts` subsequence matching + bolding stay ours (locked §6 behavior a generic filter can't express). **Two downshift defaults are overridden in its `stateReducer` because they contradict §6:** its Escape *clears the input* (§6: Escape closes only the list, the typed text survives), and its blur *auto-commits the highlighted option* (the field is free text — a brand-new sub-head is a valid value). Adopting a package never overrides a spec law; where they disagree, the law wins and the override is commented at the site. |
+| 2026-07-16 | **vite-plugin-pwa** 1.3.0 (MIT, 3.4M dl/wk) | **Adopt** | The §7.2 "Vite PWA" / §5.3 installed-PWA layer, which had never been built. `registerType: "prompt"` — a new build waits and takes over on the next natural load rather than reloading a live day out from under the user. Precache excludes `public/models/` (~34MB) and the ~23MB onnx wasm; both are runtime-cached (CacheFirst) so they cost nothing on first visit and work offline once actually used. The SW's navigation fallback denies `/models/` — an `index.html` body would fail transformers.js's optional-file probes exactly as the dev-only `modelFile404()` guard prevents. |
+| 2026-07-16 | **lexorank** (pkg) | **Reject** | Live check: last publish **2022** — unmaintained. `rank.ts` stays hand-rolled. |
+| 2026-07-16 | **chrono-node** / generic date libs | **Reject** | The §7.0.2 casual-grammar rulings are locked spec law (day-aware, floor-to-past, snap-notify); a generic parser cannot honor them. `casualTime.ts` stays hand-rolled. |
+| 2026-07-16 | Radix / vaul dialogs, tooltips | **Keep bespoke** | §6 locks the custom drawer chrome and `data-tip` tooltip look. Healthy packages, but no behavior gap to close; revisit under the re-check rule when one of those files is next edited. |
 
 ### 7.0.5 UI symmetry — same semantic input, same powers everywhere (LAW, 2026-07-15)
 **Binding, future-facing (grilled 2026-07-15 — "make the app symmetrical").** A given *semantic
@@ -473,7 +487,10 @@ back a shared primitive with a guard test like the toast's.
   - `packages/store` — append-only **event log** + snapshots behind a `StorageAdapter`
     interface → **SQLite-wasm** (OPFS) on web (chosen over Dexie for history-scale queries,
     analytics GROUP BYs, mobile parity, Drive export); `expo-sqlite` later.
-  - `apps/web` — React 18 + Vite **PWA**; Zustand; dnd-kit; absolutely-positioned timeline.
+  - `apps/web` — React 18 + Vite **PWA** (vite-plugin-pwa — BUILT 2026-07-16: manifest,
+    service worker, installable; models/wasm runtime-cached, not precached); Zustand;
+    dnd-kit; react-day-picker + downshift (§7.0.4 named decisions);
+    absolutely-positioned timeline.
 - **No backend in MVP** (local-first, solo). Cloud offload later = log segments to Drive.
 - **Ticks:** minute-aligned interval + `visibilitychange` batch catch-up.
 - **Testing:** Vitest + **fast-check** property tests enforcing the R-audit invariants

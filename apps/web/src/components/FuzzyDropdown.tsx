@@ -7,9 +7,18 @@
  * only the open list (stops propagation so it doesn't also close the parent
  * drawer via useEscClose); Escape with the list already closed bubbles
  * normally.
+ *
+ * The combobox state machine + ARIA wiring is downshift's `useCombobox` (adopted
+ * 2026-07-16 per the §7.0.4 buy-first rule — see specs/07-engineering.md). What
+ * downshift buys: aria-activedescendant/aria-controls/id plumbing, outside-click
+ * dismissal, and a tested keyboard state machine. What stays ours: `fuzzy.ts`
+ * matching + bolding, and the two §6 behaviors that downshift's defaults would
+ * otherwise break — see `stateReducer` below. The field is FREE TEXT (a brand-new
+ * sub-head is a valid value); downshift's "selection" is only a shortcut for
+ * filling it, never a constraint on it.
  */
 
-import { useEffect, useRef, useState } from "react";
+import { useCombobox } from "downshift";
 import { fuzzyMatch, fuzzyScore } from "../fuzzy";
 
 interface Props {
@@ -32,88 +41,76 @@ function highlightMatches(text: string, positions: number[]): JSX.Element {
 }
 
 export function FuzzyDropdown({ value, onChange, options, placeholder, autoFocus, clearable, ariaLabel }: Props): JSX.Element {
-  const [open, setOpen] = useState(false);
-  const [highlight, setHighlight] = useState(0);
-  const rootRef = useRef<HTMLDivElement>(null);
-
   const matches = options
     .map((o) => ({ o, pos: fuzzyMatch(value, o) }))
     .filter((m): m is { o: string; pos: number[] } => m.pos !== null)
     .sort((a, b) => fuzzyScore(a.pos) - fuzzyScore(b.pos) || (a.pos[0] ?? 0) - (b.pos[0] ?? 0))
     .map((m) => m.o);
 
-  useEffect(() => setHighlight(0), [value]);
+  const { isOpen, getInputProps, getMenuProps, getItemProps, highlightedIndex, openMenu } = useCombobox({
+    items: matches,
+    inputValue: value,
+    defaultHighlightedIndex: 0, // Enter with no arrow-key press takes the top match
+    itemToString: (item) => item ?? "",
+    onInputValueChange: ({ inputValue }) => onChange(inputValue ?? ""),
+    stateReducer: (state, { type, changes }) => {
+      switch (type) {
+        // §6: Escape closes only the open list. downshift's default ALSO clears the
+        // input — that would silently destroy what the user typed. Keep the text.
+        case useCombobox.stateChangeTypes.InputKeyDownEscape:
+          return { ...changes, inputValue: state.inputValue, selectedItem: state.selectedItem };
+        // The field is free text: blurring must never auto-commit the highlighted
+        // option over what was actually typed (downshift's default for a combobox).
+        case useCombobox.stateChangeTypes.InputBlur:
+          return { ...changes, inputValue: state.inputValue, selectedItem: state.selectedItem };
+        default:
+          return changes;
+      }
+    },
+  });
 
-  useEffect(() => {
-    const onDocMouseDown = (e: MouseEvent): void => {
-      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
-    };
-    document.addEventListener("mousedown", onDocMouseDown);
-    return () => document.removeEventListener("mousedown", onDocMouseDown);
-  }, []);
-
-  const choose = (opt: string): void => {
-    onChange(opt);
-    setOpen(false);
-  };
-
-  const onKeyDown = (e: React.KeyboardEvent<HTMLInputElement>): void => {
-    if (e.key === "Escape" && open) {
-      e.stopPropagation();
-      setOpen(false);
-      return;
-    }
-    if (!open) return;
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setHighlight((h) => Math.min(h + 1, matches.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setHighlight((h) => Math.max(h - 1, 0));
-    } else if (e.key === "Enter" && matches[highlight]) {
-      e.preventDefault();
-      choose(matches[highlight] as string);
-    }
-  };
+  const show = isOpen && matches.length > 0;
 
   return (
-    <div className="fuzzy-combobox" ref={rootRef}>
+    <div className="fuzzy-combobox">
       <div className="clearable-field">
         <input
-          autoFocus={autoFocus}
-          value={value}
-          onChange={(e) => { onChange(e.target.value); setOpen(true); }}
-          onFocus={() => setOpen(true)}
-          onKeyDown={onKeyDown}
-          placeholder={placeholder}
-          role="combobox"
-          aria-expanded={open}
-          aria-label={ariaLabel}
-          autoComplete="off"
+          {...getInputProps({
+            autoFocus,
+            placeholder,
+            "aria-label": ariaLabel,
+            autoComplete: "off",
+            onFocus: () => { if (!isOpen) openMenu(); },
+            onKeyDown: (e) => {
+              if (e.key !== "Escape") return;
+              if (isOpen) {
+                // Closing the list is this Escape's whole job — don't let the
+                // parent drawer's useEscClose see it too (back-navigation stack).
+                e.stopPropagation();
+              } else {
+                // List already closed: this Escape belongs to the drawer. Tell
+                // downshift to keep its hands off and let it bubble.
+                (e.nativeEvent as unknown as { preventDownshiftDefault?: boolean }).preventDownshiftDefault = true;
+              }
+            },
+          })}
         />
         {clearable && value && (
           <button type="button" className="clear-btn" tabIndex={-1} aria-label="Clear" onClick={() => onChange("")}>&times;</button>
         )}
       </div>
-      {open && matches.length > 0 && (
-        <ul className="fuzzy-list" role="listbox">
-          {matches.map((o, i) => {
-            const pos = fuzzyMatch(value, o) ?? [];
-            return (
-              <li
-                key={o}
-                role="option"
-                aria-selected={i === highlight}
-                className={`fuzzy-option${i === highlight ? " active" : ""}`}
-                onMouseDown={(e) => { e.preventDefault(); choose(o); }}
-                onMouseEnter={() => setHighlight(i)}
-              >
-                {highlightMatches(o, pos)}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <ul {...getMenuProps({ className: "fuzzy-list" })} style={show ? undefined : { display: "none" }}>
+        {show &&
+          matches.map((o, i) => (
+            <li
+              key={o}
+              className={`fuzzy-option${i === highlightedIndex ? " active" : ""}`}
+              {...getItemProps({ item: o, index: i })}
+            >
+              {highlightMatches(o, fuzzyMatch(value, o) ?? [])}
+            </li>
+          ))}
+      </ul>
     </div>
   );
 }
