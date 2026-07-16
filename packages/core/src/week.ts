@@ -130,6 +130,9 @@ export function quotaTrimsAtPruning(
   for (const t of trims) {
     const b = entries.find((e) => e.headId === t.headId && e.kind === "weekly");
     if (!b) continue;
+    // at-least/exact only: at-most never accumulates (it never redistributes),
+    // so a ceiling has no monster to trim — lowering one is a planning edit.
+    if ((b.quotaType ?? "atLeast") === "atMost") continue;
     const share = weeklyShare(b, weekday);
     const kept = Math.min(Math.max(0, Math.round(t.shareMinutes)), share);
     if (kept >= share) continue; // trims only reduce; equal = no-op

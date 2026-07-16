@@ -90,6 +90,42 @@ describe("quotaTrimsAtPruning (§5.1 Stage 6)", () => {
     const w = withWeek(DAY0, { budgets: [abs("Chores", MAINTENANCE, 4), jobSearch] }).week;
     expect(quotaTrimsAtPruning(w, TUE, [{ headId: "Chores", shareMinutes: 0 }]).adjust).toEqual([]);
   });
+
+  it("ignores at-most heads — a ceiling never accumulates, so there is nothing to trim", () => {
+    const w = withWeek(DAY0, {
+      budgets: [{ ...jobSearch, quotaType: "atMost" as const }],
+    }).week;
+    expect(quotaTrimsAtPruning(w, TUE, [{ headId: "Job", shareMinutes: 0 }]).adjust).toEqual([]);
+  });
+});
+
+describe("at-most never redistributes (§5.1 type asymmetry)", () => {
+  const atMostWeek = (achievedMin: number): State => {
+    const s = sealedMonday(achievedMin);
+    return {
+      ...s,
+      week: {
+        ...s.week,
+        budgets: s.week.budgets.map((b) => (b.headId === "Job" ? { ...b, quotaType: "atMost" as const } : b)),
+      },
+    };
+  };
+
+  it("a shortfall against an at-most share leaves the remaining days untouched", () => {
+    // Monday sealed with 1h of the 2h share — an at-least would spread the
+    // missing 1h forward; at-most must not.
+    const { adjust, notes } = quotaAdjustmentsAtSod(atMostWeek(60), DAY0 + 1440, TUE);
+    expect(adjust).toEqual([]);
+    expect(notes).toEqual([]);
+  });
+
+  it("an overrun past an at-most share never trims the remaining days (warn, never block)", () => {
+    // 3h against the 2h ceiling — an exact would pull 1h from Tue–Fri; at-most
+    // reports the overrun and changes nothing.
+    const { adjust, notes } = quotaAdjustmentsAtSod(atMostWeek(3 * H), DAY0 + 1440, TUE);
+    expect(adjust).toEqual([]);
+    expect(notes).toEqual([]);
+  });
 });
 
 describe("trimDeficit (sticky visible deficit)", () => {

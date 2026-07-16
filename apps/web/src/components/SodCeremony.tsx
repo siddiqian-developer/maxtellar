@@ -80,7 +80,9 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
     state.week.startedAt === null || state.week.offDays.includes(weekday)
       ? []
       : budgetEntries(previewWeek)
-          .filter((b) => b.kind === "weekly" && b.weekdays.includes(weekday))
+          // at-least/exact only (§5.1): at-most never accumulates, so there is
+          // no monster to trim — a ceiling never shows a trim row.
+          .filter((b) => b.kind === "weekly" && b.weekdays.includes(weekday) && (b.quotaType ?? "atLeast") !== "atMost")
           .map((b) => {
             const base = weeklyShare(baseEntries.find((e) => e.headId === b.headId) ?? b, weekday);
             return { headId: b.headId, base, eff: weeklyShare(b, weekday) };

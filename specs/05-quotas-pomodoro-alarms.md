@@ -21,7 +21,9 @@
   symmetric: shortfall redistributes forward AND overshoot reduces remaining days' shares.
 - Monster accumulations trimmed by the user during Pruning; **after trim, the deficit stays
   visible on every such item**. *(Built 2026-07-16.)* Mechanics: the Pruning step lists each
-  weekly head's **today share, post-redistribution** (an inflated share shows "+X carried in");
+  **at-least/exact** weekly head's **today share, post-redistribution** (an inflated share shows
+  "+X carried in") — *at-most* heads never accumulate (they never redistribute), so a ceiling
+  shows no trim row (lowering a ceiling is a planning edit, not a Pruning trim);
   the user edits the share they'll KEEP (Smart Input). **Reduce-only** — an entry above the share
   snaps back with the snap-notify naming head + rule; UNDER is the trim itself, never snapped.
   The cut lands on the week-instance ledger as a `kind: "trim"` adjustment (template untouched)
