@@ -7,7 +7,7 @@
  */
 
 import type { Dur, Min, State } from "@maxtellar/core";
-import { LOST_HOURS, SLEEP_HEAD, budgetEntries, weekDayShape } from "@maxtellar/core";
+import { LOST_HOURS, SLEEP_HEAD, budgetEntries, trimDeficit, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -144,12 +144,14 @@ function BudgetSection({ state, todayStart, todayByHead }: {
                         ? `over by ${fmtDur(-diff)}`
                         : "met ✓";
                 const danger = (type === "atMost" && diff < 0) || (type === "exact" && diff !== 0 && ach > quota);
-                const moved = week.quotaAdjust.filter((q) => q.headId === b.headId).reduce((a, q) => a + Math.abs(q.delta), 0);
+                const moved = week.quotaAdjust.filter((q) => q.headId === b.headId && q.kind !== "trim").reduce((a, q) => a + Math.abs(q.delta), 0);
+                const trimmed = trimDeficit(week, b.headId);
                 return (
                   <tr key={b.headId}>
                     <td>
                       {b.headId}
                       {moved > 0 && <span className="ledger-note" data-tip="Shares were redistributed at SOD (§5.1) — shortfall moved to later days">{" "}· redistributed</span>}
+                      {trimmed > 0 && <span className="ledger-note is-danger" data-tip="Trimmed during Pruning (§5.1) — the cut never redistributes; it stays reported until week's end">{" "}· trimmed, {fmtDur(trimmed)} deficit</span>}
                     </td>
                     <td>{label}</td>
                     <td className="num num-col">{fmtDur(quota)}</td>

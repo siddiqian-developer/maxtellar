@@ -538,8 +538,9 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
 }
 
 /** Smart duration input (§7.0.2 parity): casual parse, reformat on blur/Enter.
- * `allowEmpty` maps a cleared field to null (remove the value). */
-function DurInput({ value, onCommit, disabled, ariaLabel, placeholder, allowEmpty }: {
+ * `allowEmpty` maps a cleared field to null (remove the value). Exported —
+ * every duration field app-wide must ride this (smart-input parity law). */
+export function DurInput({ value, onCommit, disabled, ariaLabel, placeholder, allowEmpty }: {
   value: number | undefined;
   onCommit: (minutes: number | null) => void;
   disabled?: boolean;

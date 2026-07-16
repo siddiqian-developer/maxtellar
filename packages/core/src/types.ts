@@ -362,7 +362,15 @@ export type Event =
   // weekly-plan injection (§4.4) — `inject` carries today's local-midnight +
   // weekday from the web; instantiate today's templates below the leftovers and
   // settle (partly-past → amputate at birth). No week started → no-op. → "planning".
-  | { type: "PRUNING_DONE"; discardIds?: string[]; inject?: { midnight: Min; weekday: number } }
+  | {
+      type: "PRUNING_DONE";
+      discardIds?: string[];
+      inject?: { midnight: Min; weekday: number };
+      /** §5.1 Stage 6: per-head trims of today's (post-redistribution) weekly
+       * share, applied AFTER redistribution and BEFORE injection. `shareMinutes`
+       * is the kept share; the cut becomes a sticky visible deficit. */
+      quotaTrims?: { headId: string; shareMinutes: Min }[];
+    }
   // §4.2 step 4 → 5: Planning Done → ceremony = null (Live).
   | { type: "PLANNING_DONE" }
   // §4.4 SET_WEEK_PLAN — replace the structural template set. LOCKED mid-week

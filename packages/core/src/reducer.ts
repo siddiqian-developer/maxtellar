@@ -28,7 +28,7 @@ import type {
 import { emptyChannels, LOST_HOURS, OFF_PERIOD, SELF_MANAGEMENT } from "./types.js";
 import { CORE_WORK, weekBudgetValidity } from "./budget.js";
 import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
-import { canPlanWeek, injectTodayDetailed, quotaAdjustmentsAtSod } from "./week.js";
+import { canPlanWeek, injectTodayDetailed, quotaAdjustmentsAtSod, quotaTrimsAtPruning } from "./week.js";
 import { settle } from "./settle.js";
 import { snapTask } from "./validate.js";
 import { rankAfter, rankBetween } from "./rank.js";
@@ -911,8 +911,8 @@ export function reduce(state: State, event: Event): State {
     case "PRUNING_DONE": {
       // §4.2 step 2 → 3. Discard dead leftovers (auto-dead ∪ user-chosen) via the
       // existing CANCEL_TASK path (records a cancelled entry, cleans up parent
-      // brackets, resettles). Quota trim is a no-op until Stage 6. Then §4.4
-      // weekly-plan injection. → phase "planning".
+      // brackets, resettles). Then §5.1 redistribution → quota trims (sticky
+      // deficit) → §4.4 weekly-plan injection. → phase "planning".
       if (!state.ceremony || state.ceremony.phase !== "pruning") return state;
       const dead = deadLeftovers(state).map((t) => t.id);
       const discard = new Set<string>([...dead, ...(event.discardIds ?? [])]);
@@ -933,6 +933,13 @@ export function reduce(state: State, event: Event): State {
         const redis = quotaAdjustmentsAtSod(s, midnight, weekday);
         if (redis.adjust.length > 0) {
           s = { ...s, week: { ...s.week, quotaAdjust: [...s.week.quotaAdjust, ...redis.adjust] } };
+        }
+        // §5.1 Stage 6: Pruning trims apply AFTER redistribution (so they cut
+        // the post-pile-up share) and BEFORE injection (so drawing-down uses
+        // the trimmed budget). The cut is the sticky visible deficit.
+        const trims = quotaTrimsAtPruning(s.week, weekday, event.quotaTrims ?? []);
+        if (trims.adjust.length > 0) {
+          s = { ...s, week: { ...s.week, quotaAdjust: [...s.week.quotaAdjust, ...trims.adjust] } };
         }
         const below = s.plan.length
           ? s.plan.reduce((m, i) => (i.rank > m ? i.rank : m), s.plan[0]!.rank)
@@ -971,7 +978,7 @@ export function reduce(state: State, event: Event): State {
           s = { ...s, dated: [...others, { ...existing, adds }].sort((a, b) => a.date - b.date) };
         }
         // Universal snap-NOTIFY: every meaning-change is surfaced.
-        const allNotes = [...redis.notes, ...notes];
+        const allNotes = [...redis.notes, ...trims.notes, ...notes];
         if (allNotes.length > 0) {
           s = { ...s, notice: { text: allNotes.join(" "), seq: (s.notice?.seq ?? 0) + 1 } };
         }

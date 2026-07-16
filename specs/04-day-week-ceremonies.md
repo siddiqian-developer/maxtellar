@@ -62,8 +62,11 @@ type; same flow as the >30-min-gap modal).
   window is fully past, or an ommf task whose anchored start has passed) — a slideable non-fixed
   task rides and is never dead, and most past-window tasks are already gone via tick amputation.
   Discards go through the existing `CANCEL_TASK` path (records a cancelled entry, cleans up parent
-  brackets). Quota trim (Stage 6) and weekly-plan injection (Stage 5) are **shipped as no-ops**.
-  → phase `"planning"`.
+  brackets). Then, in order: **§5.1 redistribution** (the sealed day's weekly-quota
+  shortfall/exact-overshoot appends to the week-instance ledger) → **quota trims** (§5.1 Pruning
+  trim, built 2026-07-16 — the event carries per-head kept shares; each cut lands as a `kind:
+  "trim"` ledger entry and a sticky visible deficit) → **weekly-plan injection** (§11.7, drawing
+  against the redistributed-then-trimmed shares). → phase `"planning"`.
 - **PLANNING_DONE event.** → `ceremony = null` (Live). Ad-hoc tasks are added via the ordinary New
   Task drawer during the planning step.
 - **Zero-width occupancy guard.** COMPLETE/PAUSE of a task in the same minute it started occupied

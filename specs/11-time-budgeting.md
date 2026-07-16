@@ -155,8 +155,10 @@ The Analytics screen gains a **Budgets** section (only when head budgets exist):
   when no week is running — degrade gracefully), and the standing per §5.1 type semantics:
   *at-least* "X to go / met ✓"; *at-most* "headroom / over by X" (warn, never block); *exact*
   both ways. Heads whose shares were redistributed at SOD are marked "· redistributed".
-- Quota trim during Pruning (with its sticky visible deficit) is **not yet built** — it stays
-  §4.2's "no-op until Stage 6" and §5.1's Pruning bullet is the standing spec for it.
+- Quota trim during Pruning (with its sticky visible deficit) — **built 2026-07-16 (Stage 6)**;
+  §5.1's Pruning bullet carries the mechanics. Trims ride the §5.1 week-instance ledger as
+  `kind: "trim"` entries, applied at `PRUNING_DONE` **after** redistribution and **before**
+  injection; the Analytics quota standing marks trimmed heads "· trimmed, X deficit".
 
 ## 11.10 Micro-items — RESOLVED (grilled 2026-07-16)
 1. **Category names**: *Supportive Work* → **Maintenance**; *Not Work* → **keeps its name**.

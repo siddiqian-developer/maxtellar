@@ -6,7 +6,7 @@
  * Core stays Date-free: the caller passes today's local-midnight + weekday.
  */
 
-import type { Dur, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekTemplate } from "./types.js";
+import type { Dur, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
 import {
   budgetEntries,
   redistributeOvershoot,
@@ -105,6 +105,38 @@ export function quotaAdjustmentsAtSod(
       for (const d of r.deltas) adjust.push({ headId: b.headId, weekday: d.weekday, delta: d.delta });
       if (r.unplaced > 0) notes.push(`“${b.headId}” overshot by ${fmtM(r.unplaced)} beyond what remaining days could absorb.`);
     }
+  }
+  return { adjust, notes };
+}
+
+/**
+ * §5.1 Stage 6 — Pruning trims. `trims` name the share the user KEEPS for
+ * today (post-redistribution); anything below the current effective share
+ * becomes a `kind:"trim"` ledger entry (delta ≤ 0). Trims only reduce —
+ * a request above the effective share is snapped down to it (no-op); below
+ * zero snaps to 0. The cut never redistributes forward (the next SOD compares
+ * achieved against the ALREADY-trimmed share) — it is the sticky deficit,
+ * reported until week's end. Call with the redistribution ledger already
+ * appended so "effective share" includes today's incoming pile-up.
+ */
+export function quotaTrimsAtPruning(
+  week: WeekPlan,
+  weekday: number,
+  trims: { headId: string; shareMinutes: Min }[],
+): { adjust: QuotaAdjustment[]; notes: string[] } {
+  const adjust: QuotaAdjustment[] = [];
+  const notes: string[] = [];
+  const entries = budgetEntries(week);
+  for (const t of trims) {
+    const b = entries.find((e) => e.headId === t.headId && e.kind === "weekly");
+    if (!b) continue;
+    const share = weeklyShare(b, weekday);
+    const kept = Math.min(Math.max(0, Math.round(t.shareMinutes)), share);
+    if (kept >= share) continue; // trims only reduce; equal = no-op
+    adjust.push({ headId: t.headId, weekday, delta: kept - share, kind: "trim" });
+    notes.push(
+      `Trimmed “${t.headId}” today to ${fmtM(kept)} — the ${fmtM(share - kept)} deficit stays visible (§5.1).`,
+    );
   }
   return { adjust, notes };
 }

@@ -63,6 +63,19 @@ export interface QuotaAdjustment {
   headId: string;
   weekday: number;
   delta: Dur;
+  /** §5.1 Pruning trim (Stage 6): user-cut monster accumulation. Trim deltas
+   * are always ≤ 0, never redistribute forward, and their sum per head is the
+   * STICKY deficit that stays visible until week's end. Absent = ordinary
+   * SOD redistribution. */
+  kind?: "trim";
+}
+
+/** §5.1 sticky trim deficit for a head: Σ of the week's Pruning trims, as a
+ * positive minute count. Stays visible until week's end (nothing carries). */
+export function trimDeficit(week: WeekPlan, headId: string): Dur {
+  return week.quotaAdjust
+    .filter((q) => q.headId === headId && q.kind === "trim")
+    .reduce((a, q) => a - q.delta, 0);
 }
 
 const EPS = 1e-6;

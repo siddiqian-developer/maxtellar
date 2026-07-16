@@ -20,7 +20,14 @@
   unchanged. *at-most* — never redistributes; overrun warns, never blocks. *exact-match* —
   symmetric: shortfall redistributes forward AND overshoot reduces remaining days' shares.
 - Monster accumulations trimmed by the user during Pruning; **after trim, the deficit stays
-  visible on every such item**.
+  visible on every such item**. *(Built 2026-07-16.)* Mechanics: the Pruning step lists each
+  weekly head's **today share, post-redistribution** (an inflated share shows "+X carried in");
+  the user edits the share they'll KEEP (Smart Input). **Reduce-only** — an entry above the share
+  snaps back with the snap-notify naming head + rule; UNDER is the trim itself, never snapped.
+  The cut lands on the week-instance ledger as a `kind: "trim"` adjustment (template untouched)
+  and **never redistributes again** — the next SOD compares achieved against the already-trimmed
+  share. The deficit stays reported (Pruning row pill + Analytics "· trimmed, X deficit" on the
+  quota standing, whose "to go" still counts the full quota) until it dies at week's end.
 - **Hard boundary: nothing carries beyond the week.** Unfulfilled quota dies at week's end
   (reported as shortfall; at-most overrun reported as overrun).
 

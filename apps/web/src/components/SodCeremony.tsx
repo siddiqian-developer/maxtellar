@@ -16,13 +16,22 @@
  * Esc → back one level (closes the overlay; ceremony state persists and the SOD
  * button re-opens mid-ceremony).
  */
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Event, State, UnstartedTask } from "@maxtellar/core";
-import { LOST_HOURS, deadLeftovers, sodPrecondition, unaccountedGaps } from "@maxtellar/core";
+import {
+  LOST_HOURS,
+  budgetEntries,
+  deadLeftovers,
+  quotaAdjustmentsAtSod,
+  sodPrecondition,
+  unaccountedGaps,
+  weeklyShare,
+} from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
 import { dayStartMin } from "../casualTime";
-import { fmtDayTime, fmtDur, toDate } from "../time";
+import { fmtDayTime, fmtDur, fmtDurUnits, toDate } from "../time";
+import { DurInput } from "./BudgetPanel";
 
 interface Props {
   state: State;
@@ -58,6 +67,55 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
   const prunable = leftovers.filter((t) => !deadIds.has(t.id));
   const carryAll = (): void => setDiscard(new Set());
   const discardAll = (): void => setDiscard(new Set(prunable.map((t) => t.id)));
+
+  // §5.1 Stage 6 — quota trims. Preview today's weekly shares WITH the pending
+  // SOD redistribution folded in (the same ledger PRUNING_DONE will append),
+  // so the number the user trims against is the number the reducer will cut.
+  const midnight = dayStartMin(now);
+  const weekday = toDate(now).getDay();
+  const pending = state.week.startedAt !== null ? quotaAdjustmentsAtSod(state, midnight, weekday) : { adjust: [], notes: [] };
+  const previewWeek = { ...state.week, quotaAdjust: [...state.week.quotaAdjust, ...pending.adjust] };
+  const baseEntries = budgetEntries({ ...state.week, quotaAdjust: [] });
+  const trimRows =
+    state.week.startedAt === null || state.week.offDays.includes(weekday)
+      ? []
+      : budgetEntries(previewWeek)
+          .filter((b) => b.kind === "weekly" && b.weekdays.includes(weekday))
+          .map((b) => {
+            const base = weeklyShare(baseEntries.find((e) => e.headId === b.headId) ?? b, weekday);
+            return { headId: b.headId, base, eff: weeklyShare(b, weekday) };
+          })
+          .filter((r) => r.eff > 0);
+  const [trims, setTrims] = useState<Record<string, number>>({});
+  const [toast, setToast] = useState<string | null>(null);
+  // Bumped on every snap so the input remounts and reformats to the snapped
+  // value even when the KEPT share didn't change (snap-at-entry: the field
+  // must never keep displaying a rejected entry).
+  const [snapSeq, setSnapSeq] = useState(0);
+  const toastTimer = useRef<number | null>(null);
+  const notify = (text: string): void => {
+    setToast(text);
+    setSnapSeq((n) => n + 1);
+    if (toastTimer.current) window.clearTimeout(toastTimer.current);
+    toastTimer.current = window.setTimeout(() => setToast(null), 3200);
+  };
+  // Snap-at-entry: a trim can only REDUCE today's share — over-entry snaps
+  // back to the effective share (with the notify naming head + rule); an
+  // entry equal to the share clears the trim.
+  const setTrim = (headId: string, eff: number, m: number | null): void => {
+    if (m === null) return;
+    let v = Math.max(0, Math.round(m));
+    if (v > eff) {
+      v = eff;
+      notify(`Snapped ${headId} to ${fmtDurUnits(eff)} — a Pruning trim can only reduce today's share (§5.1)`);
+    }
+    setTrims((t) => {
+      const next = { ...t };
+      if (v >= eff) delete next[headId];
+      else next[headId] = v;
+      return next;
+    });
+  };
 
   return (
     <div className="config-screen">
@@ -120,6 +178,45 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
                 </ul>
               </>
             )}
+            {trimRows.length > 0 && (
+              <div className="config-subsection">
+                <h4>Weekly quotas today</h4>
+                <p className="field-desc">
+                  Today's shares, redistribution included. Trim a monster accumulation down to what
+                  you'll actually do — the cut stays visible as <strong>deficit</strong> until
+                  week's end (§5.1); it never redistributes again.
+                </p>
+                <ul className="sod-leftovers">
+                  {trimRows.map(({ headId, base, eff }) => {
+                    const kept = trims[headId] ?? eff;
+                    return (
+                      <li key={headId} className="sod-leftover">
+                        <span className="badge head-badge">{headId}</span>
+                        <span className="sl-title num">
+                          {fmtDurUnits(eff)}
+                          {eff > base && (
+                            <span className="ledger-note" data-tip={`Base share ${fmtDurUnits(base)} + ${fmtDurUnits(eff - base)} redistributed from earlier days (§5.1)`}>
+                              {" "}· +{fmtDurUnits(eff - base)} carried in
+                            </span>
+                          )}
+                        </span>
+                        <DurInput
+                          key={`${headId}:${snapSeq}`}
+                          value={kept}
+                          onCommit={(m) => setTrim(headId, eff, m)}
+                          ariaLabel={`Keep today's ${headId} share`}
+                        />
+                        {kept < eff && (
+                          <span className="outcome-pill" data-outcome="skipped" data-tip="The trimmed share stays reported as deficit until week's end — nothing carries over (§5.1)">
+                            −{fmtDurUnits(eff - kept)} deficit stays
+                          </span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ul>
+              </div>
+            )}
             <div className="drawer-footer">
               <button
                 className="primary"
@@ -129,7 +226,10 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
                     discardIds: [...discard],
                     // §4.4 injection: today's local-midnight + weekday for the
                     // weekly-plan instantiation (no-op if no week started).
-                    inject: { midnight: dayStartMin(now), weekday: toDate(now).getDay() },
+                    inject: { midnight, weekday },
+                    // §5.1 Stage 6: kept shares for trimmed heads (post-
+                    // redistribution; the reducer re-derives and clamps).
+                    quotaTrims: Object.entries(trims).map(([headId, shareMinutes]) => ({ headId, shareMinutes })),
                   })
                 }
               >
@@ -137,6 +237,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
               </button>
               <span style={{ flex: 1 }} />
             </div>
+            {toast && <div className="notice-toast" role="status">{toast}</div>}
           </div>
         )}
         {phase === "planning" && (
