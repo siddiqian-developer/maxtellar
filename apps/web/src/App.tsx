@@ -397,7 +397,7 @@ export function App(): JSX.Element {
         <WeekView state={state} dispatch={(e) => void dispatch(e)} onBack={() => setView("main")} initialMode={view === "calendar" ? "calendar" : "week"} />
       ) : (
         <>
-          <Timeline state={state} />
+          <Timeline state={state} dispatch={(e) => void dispatch(e)} />
           <div
             className="col-resizer"
             role="separator"

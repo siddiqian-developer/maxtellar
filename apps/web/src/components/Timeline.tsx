@@ -5,20 +5,28 @@
  */
 
 import { useEffect, useRef, useState } from "react";
-import type { State } from "@maxtellar/core";
+import type { Event, State } from "@maxtellar/core";
 import { runningView } from "@maxtellar/core";
 import { fmtDur, fmtClock } from "../time";
 import { useSettings } from "../settings";
+import { SnapToast, useSnapToast } from "../SnapToast";
 
 const PPM = 1.6; // px per minute
 const PAST_WINDOW = 6 * 60;
 const FUTURE_WINDOW = 12 * 60;
 
-export function Timeline({ state }: { state: State }): JSX.Element {
+export function Timeline({ state, dispatch }: { state: State; dispatch: (e: Event) => void }): JSX.Element {
   const { timeFormat, gridGranularity } = useSettings();
   const hhmm = (min: number): string => fmtClock(new Date(min * 60000), timeFormat === "12h");
   const scrollRef = useRef<HTMLDivElement>(null);
+  const canvasRef = useRef<HTMLDivElement>(null);
   const [follow, setFollow] = useState(true);
+  const { toast, notify } = useSnapToast();
+  // §3.11/§6 layered reorder on the timeline: dragging a plan block vertically
+  // is a priority override → RERANK → resettle ripple → time reactivates. Live
+  // drag state: the block id + its pixel offset from the pointer-down point.
+  const [drag, setDrag] = useState<{ id: string; dy: number } | null>(null);
+  const dragRef = useRef<{ id: string; startClientY: number } | null>(null);
 
   const windowStart = state.now - PAST_WINDOW;
   const windowEnd = state.now + FUTURE_WINDOW;
@@ -125,6 +133,66 @@ export function Timeline({ state }: { state: State }): JSX.Element {
     return it?.kind === "task" && it.budget === undefined;
   };
 
+  // §3.11/§6 layered reorder on the timeline. Reorderable = TOP-LEVEL standalone
+  // unstarted, NON-anchored blocks (budgeted / unscheduled) — an anchored block
+  // sits at its clock (§3.4), so dragging it to reprioritize would be confusing;
+  // reprioritize those via the pipeline arrows instead. Dragging a block past
+  // others expresses a new priority order → RERANK → resettle ripple → the
+  // blocks re-lay-out by TIME (the layered model). Dropping into the past (above
+  // now) is invalid and snaps back with a notify.
+  const isReorderable = (id: string): boolean => {
+    const it = planItems.get(id);
+    return !!it && it.kind === "task" && !it.parentId && !isParentId(id) && (it.timing === "budgeted" || it.timing === "unscheduled");
+  };
+  const reorderBlocks = state.placements
+    .filter((p) => isReorderable(p.itemId) && p.parts.length > 0)
+    .map((p) => ({ id: p.itemId, start: p.parts[0]!.start, mid: (p.parts[0]!.start + p.parts[p.parts.length - 1]!.end) / 2 }))
+    .sort((a, b) => a.start - b.start);
+
+  const startDrag = (id: string, e: React.PointerEvent): void => {
+    e.preventDefault();
+    dragRef.current = { id, startClientY: e.clientY };
+    setDrag({ id, dy: 0 });
+  };
+
+  useEffect(() => {
+    if (!drag) return;
+    const onMove = (e: PointerEvent): void => {
+      const d = dragRef.current;
+      if (d) setDrag({ id: d.id, dy: e.clientY - d.startClientY });
+    };
+    const onUp = (e: PointerEvent): void => {
+      const d = dragRef.current;
+      dragRef.current = null;
+      setDrag(null);
+      const canvas = canvasRef.current;
+      if (!d || !canvas) return;
+      const dropMin = (e.clientY - canvas.getBoundingClientRect().top) / PPM + windowStart;
+      if (dropMin < state.now) {
+        notify(`Can’t reprioritize into the past — the plan is below now.`);
+        return; // snap back (no dispatch)
+      }
+      // Insert AFTER every other reorderable block whose CENTER sits above the
+      // drop point (so dropping in a block's upper half lands before it, lower
+      // half after it — the intuitive list-reorder mapping). afterId = null →
+      // front. RERANK then resettles; the blocks re-lay-out by their new order.
+      let afterId: string | null = null;
+      for (const b of reorderBlocks) {
+        if (b.id === d.id) continue;
+        if (b.mid < dropMin) afterId = b.id;
+        else break;
+      }
+      dispatch({ type: "RERANK", taskId: d.id, afterId });
+    };
+    window.addEventListener("pointermove", onMove);
+    window.addEventListener("pointerup", onUp);
+    return () => {
+      window.removeEventListener("pointermove", onMove);
+      window.removeEventListener("pointerup", onUp);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drag !== null]);
+
   // Gutter timestamps for every task box: its start (first part) and end (last
   // part). Deduped by minute — where a box's end coincides with the next box's
   // start, keep the LATER task's label (a start outranks an end, since the start
@@ -175,7 +243,7 @@ export function Timeline({ state }: { state: State }): JSX.Element {
   return (
     <div className="timeline-wrap">
       <div className="timeline-scroll" ref={scrollRef} onScroll={onScroll}>
-        <div className="timeline-canvas" style={{ height: canvasH }}>
+        <div className="timeline-canvas" ref={canvasRef} style={{ height: canvasH }}>
           {hourMarks.map((m) => (
             <div key={m} className="tick-label num" style={{ top: y(m) }}>
               {hhmm(m)}
@@ -269,13 +337,20 @@ export function Timeline({ state }: { state: State }): JSX.Element {
                 item.timing === "semi-head" ||
                 item.timing === "semi-tail");
             const open = isOpen(p.itemId);
+            const reord = isReorderable(p.itemId);
+            const dragging = drag?.id === p.itemId;
             return p.parts.map((part, idx) => (
               <div
                 key={`${p.itemId}-${idx}`}
-                className={`block plan${anchored ? " anchored" : ""}${open ? " open-ended" : ""}`}
+                className={`block plan${anchored ? " anchored" : ""}${open ? " open-ended" : ""}${reord ? " reorderable" : ""}${dragging ? " dragging" : ""}`}
                 data-timing={item.kind === "task" ? item.timing : undefined}
-                style={{ top: y(part.start), height: Math.max(8, (part.end - part.start) * PPM - 2) }}
-                title={open ? `${hhmm(part.start)} · open (presumed extent, capped)` : `${hhmm(part.start)}–${hhmm(part.end)}`}
+                style={{
+                  top: y(part.start),
+                  height: Math.max(8, (part.end - part.start) * PPM - 2),
+                  ...(dragging ? { transform: `translateY(${drag!.dy}px)`, zIndex: 20 } : {}),
+                }}
+                title={reord ? "Drag to reprioritize" : open ? `${hhmm(part.start)} · open (presumed extent, capped)` : `${hhmm(part.start)}–${hhmm(part.end)}`}
+                onPointerDown={reord && idx === 0 ? (e) => startDrag(p.itemId, e) : undefined}
               >
                 {item.kind === "task" ? item.title : "· gap ·"}
                 {leafInfo.has(p.itemId) && (
@@ -347,6 +422,7 @@ export function Timeline({ state }: { state: State }): JSX.Element {
           </svg>
         </button>
       )}
+      <SnapToast text={toast} />
     </div>
   );
 }

@@ -293,6 +293,14 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   border: 1px dashed var(--ink-faint);
   transition: top 0.6s ease, height 0.6s ease; /* reflow: gently witnessed */
 }
+/* §3.11/§6 layered reorder: a non-anchored plan block can be dragged to
+   reprioritize. Grab cursor; while dragging it follows the pointer and the
+   reflow transition is suspended so it tracks 1:1. */
+.block.plan.reorderable { cursor: grab; touch-action: none; }
+.block.plan.dragging {
+  cursor: grabbing; transition: none;
+  box-shadow: 0 4px 14px rgba(0,0,0,0.18); opacity: 0.9;
+}
 /* running block: full projected span, two-tone — spent (top, stronger fill)
    vs remaining (bottom, soft). The spent fill height tracks `now`. */
 .block.running {
