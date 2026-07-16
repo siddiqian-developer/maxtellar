@@ -103,8 +103,11 @@ export function App(): JSX.Element {
   }, [splashPhase]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>("main");
-  // §4.2 SOD ceremony overlay (pre-sweep). Once dispatched, state.ceremony
-  // drives the phase and keeps the overlay up across reloads.
+  // §4.2 SOD ceremony overlay. `sodOpen` alone controls visibility so Esc/Back
+  // can dismiss it (one level back to the Day) even mid-ceremony — the committed
+  // sweep/day-record and `state.ceremony` phase survive, resumable via the Day's
+  // "Resume day setup" button. A mount effect re-opens an in-progress ceremony
+  // after a reload (the old always-on `|| state.ceremony` render made Esc a no-op).
   const [sodOpen, setSodOpen] = useState(false);
   // Missing-data fallback: when the precondition fails, the same GapFillModal
   // (its §4.2 second entry point) opens on the trailing unaccounted span.
@@ -206,6 +209,14 @@ export function App(): JSX.Element {
       if (p.kind === "task") addActivity(p.headId, p.activityId);
     }
   }, [state, addActivity]);
+
+  // Reload-resume: if a ceremony was already in progress when the app mounts,
+  // re-open its overlay once. Mount-only, so a later Esc dismissal sticks (the
+  // overlay is otherwise driven purely by `sodOpen` so Esc can close it).
+  useEffect(() => {
+    if (state?.ceremony) setSodOpen(true);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   if (!ready || !state) {
     return <Splash leaving={false} />;
@@ -414,7 +425,7 @@ export function App(): JSX.Element {
           )}
         </>
       )}
-      {(sodOpen || state.ceremony) && (
+      {sodOpen && (
         <SodCeremony
           state={state}
           dispatch={(e) => void dispatch(e)}

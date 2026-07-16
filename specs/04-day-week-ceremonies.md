@@ -37,6 +37,14 @@ type; same flow as the >30-min-gap modal).
   `days: DayRecord[]` are event-sourced core State (open-item 7 — stored via the SOD event,
   reproduced by deterministic replay, NOT re-derived each render). `ceremony` persists, so a
   mid-ceremony reload resumes at the right step.
+- **Overlay dismissal (back-navigation law, fixed 2026-07-16).** The guided-ceremony overlay is
+  **dismissable at any phase** — Escape, the header Back (‹/×), and the scrim all just close the
+  overlay one level back to the Day, **without aborting the ceremony**: the committed sweep,
+  `DayRecord`, and `ceremony` phase all survive, and the Day header's **"Resume day setup"** button
+  re-opens the overlay at the phase left off. Visibility is driven **solely by the web's transient
+  `sodOpen` flag** (not by `state.ceremony`, which only re-opens the overlay ONCE on a mid-ceremony
+  reload) — so Esc can dismiss it in every phase. Aborting/discarding a ceremony is a distinct
+  action, never what Back does; Back is always non-destructive (consistent with the Esc==back law).
 - **`DayRecord` is MINIMAL** (grilled 2026-07-15): `{ id, start, end, reportDate }` — boundary
   facts only. `start` = Sleep A start, `end` (exclusive) = Sleep B start, `reportDate` =
   local-midnight Min of the SOD press day (the web computes it; core stays Date-free). No cached
