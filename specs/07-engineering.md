@@ -212,8 +212,11 @@ browser could be checked. Self-hosting sidesteps that entirely by making the res
 same-origin. Verification note: this sandbox has no headless-browser runtime (missing
 system audio libs, no sudo) — verified via `tsc --noEmit` (clean), `vite build` (clean;
 model files confirmed copied into `dist/models/`), and the dev server confirmed serving
-all model files at the expected same-origin paths via `curl`. Live in-browser inference
-was still **not** exercised end-to-end; do a manual check before fully trusting this.
+all model files at the expected same-origin paths via `curl`. **Live in-browser inference
+VERIFIED (Stage 9, 2026-07-16):** driven via browser-cli — opening the drawer and typing a
+title loads the on-device model and produces a sub-head suggestion (autofill + `suggested`
+tag) with a **clean console** (no `registerBackend`, no JSON-parse failure). The earlier
+"do a manual check before trusting this" caveat is now discharged.
 
 **Second real bug found via user testing (2026-07-10):** the COEP theory above was not
 actually the cause. The real error, seen at the 3rd typed character (the code's own
@@ -242,9 +245,9 @@ suffix, so the already-downloaded `onnx/model_quantized.onnx` needed no re-fetch
 `env.allowRemoteModels` / `env.localModelPath` API unchanged. Verified: `tsc --noEmit`
 clean, `vite build` clean (no more `eval`-in-bundle warning that v2's build triggered;
 onnxruntime's own WASM binary now correctly emitted as a proper Vite asset), dev server
-confirmed resolving the correct browser build (`transformers.web.js`) via `curl`. Still
-awaiting final manual browser confirmation that typing now produces a suggestion with no
-console error.
+confirmed resolving the correct browser build (`transformers.web.js`) via `curl`. **Confirmed
+end-to-end in a real browser (Stage 9, 2026-07-16, browser-cli):** typing a title produces a
+suggestion with **no console error** — the migration fix holds.
 
 **EventStore dispatch is serialized (bug fixed 2026-07-11):** `dispatch()` runs through an
 internal promise chain — one event fully reduces+persists before the next reads state. The
@@ -460,11 +463,20 @@ back a shared primitive with a guard test like the toast's.
 - **Testing:** Vitest + **fast-check** property tests enforcing the R-audit invariants
   (no-overlap, budget conservation, forward-only, no fragment < MIN_FRAGMENT, idempotent
   replay) + a **50k-tick random-soup simulation** harness.
-- **Acceptance tests (deferred):** once UI flows stabilize, regenerate scenario-style
-  (Gherkin) acceptance tests **fresh from this spec**, each scenario tagged with the rule
-  it verifies (e.g. `@G7`). The old generic `features/*.feature` drafts were deleted
-  2026-07-09; they described a different app and must not be resurrected. The spec stays
-  the single source of truth — scenarios are a derived test layer, never a second spec.
+- **Acceptance tests (BUILT — Stage 9, 2026-07-16):** scenario-style (Gherkin) acceptance
+  tests were regenerated **fresh from this spec**, each scenario tagged with the rule it
+  verifies (`@G7`, `@G10`, `@G18`, `@G24`, …). They live as real `.feature` files under
+  `packages/core/test/acceptance/` and run **inside the existing Vitest pass** via
+  **`quickpickle`** (a Vite-plugin Gherkin runner — no separate/heavy runner; chosen per the
+  §7.0.4 buy-first bias after a live registry check), wired through
+  `packages/core/vitest.config.ts` (plugin + `test/acceptance/steps.ts` setup). Step
+  definitions are thin calls into the pure `(State,Event)→State` core; the scenarios
+  **restate laws already proven numerically by the unit tests** (scheduling no-overlap /
+  overrun-slide / amputation-at-birth, the five timing types, subtask zero-sum, SOD sweep +
+  Lost-Hours zero-sum, fork/commit re-settle, pomodoro channels + breaks-eat-budget, quota
+  redistribution + at-most-never-blocks) — a **derived test layer, never a second spec**. The
+  old generic `features/*.feature` drafts (deleted 2026-07-09, a different app) were **not**
+  resurrected. The spec stays the single source of truth.
 - **Mobile later:** Expo/React Native reusing core+store untouched (health APIs → wearable).
 
 ### 7.3 Build order
@@ -479,9 +491,17 @@ back a shared primitive with a guard test like the toast's.
 ### 7.4 Verification
 - `pnpm test` green including fast-check suites; simulation harness: 50k ticks × 100 random
   soups, zero invariant violations, circuit breaker never trips on legal input.
+- **Gherkin acceptance layer (§7.2, Stage 9):** the manual list below is also encoded as
+  `@G`-tagged `.feature` scenarios that run in the same `pnpm test` pass — the five timing
+  types, overrun-slides-through-fixed (G10 worked example), amputation-at-birth (G18), subtask
+  zero-sum (G24), SOD sweep + Lost-Hours zero-sum, fork/commit re-settle, pomodoro
+  channels/breaks-eat-budget, and quota redistribution + at-most-never-blocks.
 - Manual: create all 5 timing types; start/pause/overrun through a fixed task; run a full SOD
   ceremony; edit-via-fork while a task runs and confirm re-settle at real `now`; verify
   timeline/pipeline sync — reproducing the spec's worked examples (§3.7 tick-by-tick numbers)
-  exactly.
+  exactly. **Browser-cli spot-check (Stage 9, 2026-07-16):** a task created via the drawer
+  renders in **both** the timeline (`block < timeline-canvas`) and the pipeline
+  (`card < pipeline`) — timeline/pipeline sync confirmed; on-device ML suggestion verified live
+  (§7.0.1).
 
 ---
