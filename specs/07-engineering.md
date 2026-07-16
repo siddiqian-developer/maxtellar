@@ -347,9 +347,52 @@ just plumbing. Writing a component from scratch is the exception, taken only wit
   (here or the relevant spec), not discoverable only from `package.json`. This does **not**
   contradict "consult v3-rebuild first" — check the reference for a pattern, but a maintained
   package beats copying bespoke code when one fits.
+- **Where to look — reach out to live online resources, not memory (2026-07-16):** the first move
+  for any new component or mechanism is to search what's already built out there. Start with the
+  **npm registry** (the default for this JS/TS stack), but also other package registries (e.g.
+  **JSR**, GitHub Packages) and **GitHub itself**, where ready-made components and mechanisms
+  live; broaden the search to these online resources rather than assuming nothing exists. Judging
+  "well-maintained" is a **live** check, never answered from training memory — package health
+  goes stale, so query real, current data: npm registry metadata (`npm view <pkg> time dist-tags
+  dependencies license`), weekly downloads (`api.npmjs.org/downloads`), security advisories (the
+  npm advisories endpoint / `npm audit`), and the source repo's recent commits, releases, and
+  open-vs-closed issue ratio on GitHub. Aggregators (deps.dev, Snyk Advisor, Socket) give a single
+  health/security score. These read-only lookups need no sign-off; only *adding* the dependency is
+  the named decision above.
+- **Touching hand-rolled code triggers a buy-first re-evaluation (2026-07-16):** before updating
+  ANY existing hand-rolled component or mechanism in this app, first check (via "Where to look"
+  above) whether a ready-built online option is now a better fit. If one clearly is — and it can
+  meet the locked laws and the non-negotiables above — **replace the hand-rolled code with it**
+  rather than extending the bespoke version. If none is better, proceed with the hand-rolled edit
+  and (briefly) note that the check was made. Applies to every future maintenance edit, not just
+  new features.
+
+**Decision criteria — Package vs. Scratch vs. Hybrid (refined 2026-07-16).** When building a UI
+component, weigh its complexity, accessibility (a11y) surface, and state-management overhead, and
+**state the architectural choice (Package / Scratch / Hybrid) and the reasoning explicitly before
+writing code**:
+
+1. **Package — complex & data-heavy elements.** Use when the component needs deep functionality,
+   rigorous testing, or high interactivity: data tables (multi-column sort / filter / pagination),
+   carousels / sliders (touch / swipe gestures), advanced form inputs (comboboxes, date pickers),
+   multi-step modals, virtualized lists. Reach for industry-standard, lightweight or **headless**
+   libraries (e.g. TanStack, Radix UI, Headless UI, shadcn/ui-style copy-in components); provide the
+   install command and the implementation code.
+2. **Scratch — simple & visually unique elements.** Use when the component is primarily
+   presentational, must add zero dependency weight, or needs total styling freedom: buttons, content
+   cards, nav bars, static headers, simple presentation grids, basic alerts. Write 100% custom,
+   production-ready, clean code on native elements + the app's tokens — zero third-party bundle
+   weight.
+3. **Hybrid — robust logic + unique styling (prefer when both are needed).** Leverage a **headless**
+   utility for the underlying state / accessibility and write custom markup + styling for the visual
+   layer. This is the strongest fit for maxtellar specifically: the app owns its look via
+   `docs/design-tokens.md` + `theme.css` and is **not** Tailwind, but headless libraries are
+   style-agnostic — so headless-logic-plus-own-styling satisfies the buy-first bias *and* the
+   design-token / `useEscClose` / smart-input non-negotiables above at once.
 
 This reconciles the existing bespoke components (DatePicker, drawers, etc.): they predate this
-ruling and stay, but **new** UI work starts from "what package does this?" first.
+ruling and stay **as long as they're untouched** — but the moment one is edited, the buy-first
+re-evaluation above applies. **New** UI work starts from "what package does this?" first.
 
 ### 7.0.5 UI symmetry — same semantic input, same powers everywhere (LAW, 2026-07-15)
 **Binding, future-facing (grilled 2026-07-15 — "make the app symmetrical").** A given *semantic
