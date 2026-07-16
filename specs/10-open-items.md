@@ -124,3 +124,10 @@ only instances; other `.find(x => x.id === …)` sites resolve real ids in real 
   saved, the drawer closed as if saved, and the reducer silently `return state`d. The Edit-template
   button now carries the same structural lock + tooltip as Add-template (per-date Skip stays
   available — SET_DATED is never gated).
+- **LATENT (2026-07-16): one observed forward-only violation in the property suite.** The
+  `forward-only: ticking never moves a surviving placement earlier` property failed ONCE in a
+  randomized run (fast-check, no fixed seed) and passed on re-runs. The generator emits only
+  long-standing events (tick/create/start/pause/complete/cancel/log/decompose), so the
+  counterexample is a latent settle/tick bug, not from the day's changes. The failing seed was
+  lost to output filtering. Next occurrence will be capturable: record the printed seed +
+  shrunk counterexample verbatim, pin it as a regression test, then fix.
