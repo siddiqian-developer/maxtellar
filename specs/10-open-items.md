@@ -41,7 +41,11 @@ week grid; both were silent, user-facing, in features marked DONE, and untested.
 for the same class turned up two more, **both verified**, plus one by inspection. The common shape:
 a value that looks right, is never checked, and fails without an error.
 
-- **BUG (verified, 2026-07-16): toggling an OFF day RESTARTS THE WEEK and wipes the §5.1 ledger.**
+- ~~**BUG (verified, 2026-07-16): toggling an OFF day RESTARTS THE WEEK and wipes the §5.1 ledger.**~~
+  **FIXED 2026-07-16** — new `SET_OFF_DAYS` event edits the OFF set + §4.4b First Weekday only;
+  `START_WEEK` stays the rollover. Guarded by `off-days-invariants.test.ts` (incl. a test pinning
+  that START_WEEK *does* still reset them) + a static guard failing any call site that sends
+  `START_WEEK` with `offDays`. Original report:
   `WeekView.toggleOffDay` dispatches **`START_WEEK`** — the week-**rollover** event ("marks the
   boundary", §4.4) — merely to edit `offDays`. The reducer therefore also does
   `startedAt: event.startedAt ?? state.now` and `quotaAdjust: []`. Proven in a reducer test:
@@ -50,7 +54,13 @@ a value that looks right, is never checked, and fails without an error.
   (`AnalyticsScreen.tsx`), so both silently reset; every §5.1 redistribution + pruning trim is
   discarded. Fix direction: a dedicated event (e.g. `SET_OFF_DAYS { offDays, firstWeekday? }`) that
   changes ONLY the OFF set — `START_WEEK` should stay the rollover.
-- **BUG (verified, 2026-07-16): marking a day "weekend" in Settings does not make it OFF —
+- ~~**BUG (verified, 2026-07-16): marking a day "weekend" in Settings does not make it OFF.**~~
+  **FIXED 2026-07-16** — `toggleWeekend` unions the weekend into core's `offDays` via
+  `SET_OFF_DAYS`; unmarking leaves the day OFF (offDays may exceed the weekend). Settings stays
+  transactional: `weekendDays` + `offDays` joined the snapshot, so Cancel reverts both (they were
+  not snapshotted at all before — a second, latent §06 violation). Browser-verified: Friday marked
+  weekend → blocks 1→0, off false→true; Cancel restores 1/false. Guarded by
+  `weekend-invariant.test.ts`. Original report: marking a day "weekend" in Settings did not make it OFF —
   §4.4a's `weekend ⊆ offDays` invariant is broken.** `SettingsPanel.toggleWeekend` calls
   `setWeekendDays` (web/localStorage) only; it never syncs core's `week.offDays`, though the panel
   already holds `dispatch`. Verified in-browser: marking Friday weekend leaves
@@ -60,8 +70,10 @@ a value that looks right, is never checked, and fails without an error.
   Needs a ruling first: syncing `offDays` is a STRUCTURAL change, and §4.4 locks those mid-week —
   so does the weekend setting become OFF-day-gated, or does it only take effect at the next
   `START_WEEK`?
-- **SUSPECTED (by inspection, unverified): toggling an OFF day is a silent no-op when budgets
-  don't balance.** `START_WEEK` gates on `weekBudgetValidity(probe).ok` and otherwise
+- ~~**SUSPECTED: toggling an OFF day is a silent no-op when budgets don't balance.**~~
+  **RESOLVED 2026-07-16** by the `SET_OFF_DAYS` split — it is deliberately not gated on
+  `weekBudgetValidity` (that gate belongs to the rollover, and still disables the Start-Week
+  button), so the chip always responds. Original report: `START_WEEK` gates on `weekBudgetValidity(probe).ok` and otherwise
   `return state` (reducer.ts). The Start-Week button is disabled in that state; the OFF-day chips
   are not, but dispatch the same event — so the chip would just not respond, with no feedback
   (§7.0.2 snap-NOTIFY says a rejected input must say so). Same root as the first item; a dedicated

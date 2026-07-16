@@ -1236,6 +1236,25 @@ export function reduce(state: State, event: Event): State {
       };
     }
 
+    case "SET_OFF_DAYS": {
+      // §4.4a: the OFF set (and the §4.4b First Weekday) change; the WEEK does not.
+      // Deliberately does NOT touch `startedAt` (the week window weekly quotas and
+      // Analytics measure from) or `quotaAdjust` (the §5.1 ledger) — only START_WEEK,
+      // the rollover, may reset those. Nor is this gated on weekBudgetValidity: the
+      // §11.2 gate exists to stop a week STARTING unbalanced, and it still guards the
+      // Start-Week button. Gating here would make the chip a silent no-op instead.
+      const offDays = [...new Set(event.offDays)].sort((a, b) => a - b);
+      if (offDays.length === 0) return state; // §4.4: ≥1 OFF day required
+      return {
+        ...state,
+        week: {
+          ...state.week,
+          offDays,
+          firstWeekday: event.firstWeekday ?? state.week.firstWeekday,
+        },
+      };
+    }
+
     case "SET_BUDGETS": {
       // §11: replace the head-budget set + explicit Category targets. Same
       // structural lock as SET_WEEK_PLAN. Percent is only legal on Core Work

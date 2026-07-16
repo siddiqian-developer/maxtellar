@@ -130,10 +130,13 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     // weekend ⊆ offDays, and ≥1 OFF day.
     const withWeekend = [...new Set([...offDays, ...weekendDays])].sort();
     if (withWeekend.length === 0) return;
+    // SET_OFF_DAYS, never START_WEEK: this edits the OFF set, it does not roll the
+    // week over. START_WEEK would also reset `startedAt` (the week window weekly
+    // quotas + Analytics measure from) and wipe the §5.1 ledger — from one chip click.
     // The OFF set just changed, so the weekend RUN — and with it the first working
     // day (§4.4b) — may have moved. Re-declare it, or `firstWeekday` goes stale.
     const fw = firstWorkingDay(withWeekend);
-    dispatch({ type: "START_WEEK", offDays: withWeekend, ...(fw !== undefined ? { firstWeekday: fw } : {}) });
+    dispatch({ type: "SET_OFF_DAYS", offDays: withWeekend, ...(fw !== undefined ? { firstWeekday: fw } : {}) });
   };
 
   // ---- dated mutations (calendar mode) ----

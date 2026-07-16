@@ -141,7 +141,15 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
   reducer stays Date-free — the web passes today's `weekday`.
 - **`START_WEEK { firstWeekday?, offDays?, startedAt? }`** marks the boundary + First Weekday + OFF
   days. It does **not** instantiate anything — daily SOD injection does (the three realities above
-  all just start).
+  all just start). **It is the ROLLOVER**: it resets `startedAt` (the week WINDOW weekly quotas and
+  Analytics measure from) and clears the §5.1 `quotaAdjust` ledger (per week instance).
+- **`SET_OFF_DAYS { offDays, firstWeekday? }` (added 2026-07-16)** edits the OFF set + the §4.4b
+  First Weekday **without** rolling the week over. Off-day edits must NOT borrow `START_WEEK`:
+  doing so silently restarted the week and discarded the §5.1 ledger on every chip click (audit
+  finding, §10). Not gated on `weekBudgetValidity` — the §11.2 gate stops a week STARTING
+  unbalanced (it still disables the Start-Week button); gating here would make the chip a silent
+  no-op instead. Guarded by `off-days-invariants.test.ts` + a static check that no call site sends
+  `START_WEEK` with `offDays`.
 - **Injection at `PRUNING_DONE { inject: { midnight, weekday } }`** (§3.13). `injectToday`
   instantiates every template whose `weekdays` includes today's weekday, resolving time-of-day
   anchors to absolute epoch for `midnight`, ranked **strictly below the surviving leftovers**
@@ -188,8 +196,13 @@ Two distinct concepts, deliberately not merged:
 - **OFF days** — the *functional* set (`week.offDays`, core, event-sourced). An OFF day (a) opens
   the mid-week structural-planning lock (§4.4) and (b) **skips recurring injection** (rest: no
   templates instantiate at that day's SOD; **dated one-offs still fire**, §4.6).
-- **Invariant `weekend ⊆ offDays`.** Every weekend day is always an OFF day (you cannot mark a day
-  "weekend" yet have it inject). OFF days may **exceed** the weekend — the user pre/post-pends extra
+- **Invariant `weekend ⊆ offDays`** — enforced at both edit points (2026-07-16; it was broken).
+  Every weekend day is always an OFF day (you cannot mark a day "weekend" yet have it inject).
+  Marking a day weekend in **Settings** unions it into core's `offDays` (`SET_OFF_DAYS`) — without
+  this the day was tinted weekend, dropped its §4.4b number, and **still injected its templates**.
+  **Unmarking** does not un-OFF it: `offDays` may exceed the weekend, so it simply becomes a
+  non-weekend off the planner can toggle. Settings stays transactional (§06) — a cancelled weekend
+  edit reverts the setting AND the OFF set together. OFF days may **exceed** the weekend — the user pre/post-pends extra
   OFF days to **lengthen the weekend** (Fri off before a Sat/Sun weekend). In the planner, weekend
   chips are OFF and **locked-on**; non-weekend days toggle freely; the set can never drop below the
   weekend or below one OFF day. Toggling OFF a day **clears that column's placement in the preview**

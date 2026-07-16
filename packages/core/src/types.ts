@@ -439,6 +439,14 @@ export type Event =
   // + OFF days. Daily SOD injection does the instantiating (three realities:
   // planned / no-plan-yet / no-plan-ever all just start).
   | { type: "START_WEEK"; firstWeekday?: number; offDays?: number[]; startedAt?: Min }
+  /**
+   * §4.4a: edit the OFF-day set (and the §4.4b First Weekday it implies) WITHOUT
+   * rolling the week over. `START_WEEK` marks a week boundary — it resets
+   * `startedAt` (the week WINDOW read by weekly quotas + Analytics) and clears the
+   * §5.1 `quotaAdjust` ledger. Reusing it to toggle an OFF day silently restarted
+   * the week and threw the ledger away; this event exists so that can't happen.
+   */
+  | { type: "SET_OFF_DAYS"; offDays: number[]; firstWeekday?: number }
   // §4.5 START_OFF_PERIOD — begin an Inviolable running block on the spine.
   // Known end → countdown [now, knownEnd]; unknown → open stopwatch. Pauses any
   // current runner (remainder survives); plan tasks push below (displaced-tasks

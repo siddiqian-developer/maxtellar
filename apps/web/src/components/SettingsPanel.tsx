@@ -8,6 +8,7 @@
 import type { Event, TimingType } from "@maxtellar/core";
 import { useSettings, type PresetId } from "../settings";
 import { useEscClose } from "../useEscClose";
+import { countStartWeekday } from "../workingDays";
 import { DurInput } from "./BudgetPanel";
 import { BUILTIN_SOUNDS, playAlarm } from "../sound";
 
@@ -17,6 +18,8 @@ interface Props {
   semiTailFloor: number;
   /** §11.4 Sleep budget — the one global value, synced with Weekly Planning. */
   sleepMinutes: number;
+  /** §4.4a: core's OFF set — the weekend must stay a subset of it. */
+  offDays: number[];
   dispatch: (e: Event) => void;
   /** Revert-and-close (Esc / × / scrim) — §06 transactional Settings. */
   onCancel: () => void;
@@ -33,7 +36,7 @@ const PRESET_ROWS: { id: PresetId; label: string }[] = [
   { id: "food", label: "Food" },
 ];
 
-export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
+export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, offDays, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
   const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound } = useSettings();
 
   const enableAlarms = (on: boolean): void => {
@@ -59,7 +62,16 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
   const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
   const toggleWeekend = (d: number): void => {
     const next = weekendDays.includes(d) ? weekendDays.filter((x) => x !== d) : [...weekendDays, d].sort();
-    setWeekendDays(next); // setter enforces ≥1
+    if (next.length < 1) return; // ≥1 weekend day (the setter enforces it too)
+    setWeekendDays(next);
+    // §4.4a invariant `weekend ⊆ offDays`: a day marked weekend is ALWAYS an OFF day
+    // — "you cannot mark a day 'weekend' yet have it inject". Without this the day
+    // was tinted as weekend and still injected its templates.
+    // UNMARKING does not un-OFF it: offDays may exceed the weekend, so it simply
+    // becomes a non-weekend off, which the planner's chips can toggle freely.
+    const union = [...new Set([...offDays, ...next])].sort((a, b) => a - b);
+    const fw = countStartWeekday(next, union) ?? undefined; // §4.4b: the run moved
+    dispatch({ type: "SET_OFF_DAYS", offDays: union, ...(fw !== undefined ? { firstWeekday: fw } : {}) });
   };
   const gridOptions = [0, 5, 10, 15, 30] as const;
   useEscClose(onCancel);

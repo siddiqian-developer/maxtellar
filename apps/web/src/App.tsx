@@ -7,6 +7,7 @@ import { TaskDrawer } from "./components/TaskDrawer";
 import { GlobalClock } from "./components/GlobalClock";
 import { DevClock } from "./components/DevClock";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { countStartWeekday } from "./workingDays";
 import { HeadsConfigScreen } from "./components/HeadsConfigScreen";
 import { AiStudioScreen } from "./components/AiStudioScreen";
 import { HistoryScreen } from "./components/HistoryScreen";
@@ -130,6 +131,10 @@ export function App(): JSX.Element {
     gridGranularity: GridGranularity;
     devSandboxVal: boolean;
     presetDefaults: PresetDefaults;
+    /** §4.4a: the weekend is a web setting, but it FORCES core's OFF set — so a
+     * cancelled Settings edit must revert both, or they drift apart. */
+    weekendDays: number[];
+    offDays: number[];
   }
   const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSnapshot | null>(null);
   const openSettings = (): void => {
@@ -142,6 +147,8 @@ export function App(): JSX.Element {
         gridGranularity: settings.gridGranularity,
         devSandboxVal: settings.devSandbox,
         presetDefaults: settings.presetDefaults,
+        weekendDays: settings.weekendDays,
+        offDays: state.week.offDays,
       });
     }
     setSettingsOpen(true);
@@ -162,6 +169,14 @@ export function App(): JSX.Element {
       settings.setPresetDefault("sleep", s.presetDefaults.sleep);
       settings.setPresetDefault("nap", s.presetDefaults.nap);
       settings.setPresetDefault("food", s.presetDefaults.food);
+      // §4.4a: the weekend edit also forced core's OFF set (weekend ⊆ offDays), so
+      // cancelling must put BOTH back — otherwise the setting reverts while the days
+      // it forced OFF stay OFF, and the two definitions drift.
+      settings.setWeekendDays(s.weekendDays);
+      if (s.offDays.join() !== state.week.offDays.join()) {
+        const fw = countStartWeekday(s.weekendDays, s.offDays) ?? undefined;
+        dispatch({ type: "SET_OFF_DAYS", offDays: s.offDays, ...(fw !== undefined ? { firstWeekday: fw } : {}) });
+      }
     }
     setSettingsSnapshot(null);
     setSettingsOpen(false);
@@ -448,6 +463,7 @@ export function App(): JSX.Element {
           openExtentCap={state.openExtentCap}
           semiTailFloor={state.semiTailFloor}
           sleepMinutes={state.week.sleepMinutes}
+          offDays={state.week.offDays}
           dispatch={(e) => void dispatch(e)}
           onCancel={revertSettings}
           onDone={commitSettings}
