@@ -77,7 +77,12 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
 
   const todayWeekday = toDate(state.now).getDay();
   const started = state.week.startedAt !== null;
-  const locked = mode !== "calendar" && !canPlanWeek(state, todayWeekday, urgent);
+  // §4.4: mid-week structural re-planning is forbidden — SET_WEEK_PLAN is gated in
+  // the reducer regardless of which screen dispatched it. `structuralLock` is that
+  // same truth for the UI; `locked` additionally exempts Calendar mode's DATED
+  // powers (add/skip — SET_DATED is never gated).
+  const structuralLock = !canPlanWeek(state, todayWeekday, urgent);
+  const locked = mode !== "calendar" && structuralLock;
   const budgetValidity = weekBudgetValidity(state.week);
 
   // Week Plan is pinned to the COMING week; Calendar navigates from this week.
@@ -309,6 +314,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
       {tplMenu && (
         <TemplateDayMenu menu={tplMenu} skipped={entryFor(tplMenu.date).skips.includes(tplMenu.templateId)}
           onSkip={() => toggleSkip(tplMenu.date, tplMenu.templateId)}
+          structuralLock={structuralLock}
           onMove={() => { const t = state.week.templates.find((x) => x.id === tplMenu.templateId); if (t) setEditing(t); setTplMenu(null); }}
           onClose={() => setTplMenu(null)} />
       )}
@@ -318,9 +324,13 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
 
 /** Skip / move a recurring template on ONE date (§4.6). Move opens the template
  * editor for now (a full per-date anchor override editor is a follow-up). */
-function TemplateDayMenu({ menu, skipped, onSkip, onMove, onClose }: {
+function TemplateDayMenu({ menu, skipped, structuralLock, onSkip, onMove, onClose }: {
   menu: { date: number; templateId: string; title: string };
   skipped: boolean;
+  /** §4.4 mid-week lock: editing the TEMPLATE is structural (all weeks), unlike the
+   * per-date skip. Without this gate the editor opened, saved, and the reducer
+   * silently discarded the change (canPlanWeek) — the drawer closed as if saved. */
+  structuralLock: boolean;
   onSkip: () => void;
   onMove: () => void;
   onClose: () => void;
@@ -339,7 +349,8 @@ function TemplateDayMenu({ menu, skipped, onSkip, onMove, onClose }: {
         </div>
         <div className="drawer-footer">
           <button className="primary" onClick={onSkip}>{skipped ? "Un-skip this day" : "Skip this day"}</button>
-          <button className="cancel-accent" onClick={onMove}>Edit template…</button>
+          <button className="cancel-accent" disabled={structuralLock} onClick={onMove}
+            data-tip={structuralLock ? "Locked until an OFF day — the template rules every week (§4.4). Skip is still available." : "Open the recurring template (changes every week)"}>Edit template…</button>
           <span style={{ flex: 1 }} />
         </div>
       </div>

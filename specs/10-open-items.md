@@ -107,3 +107,20 @@ only instances; other `.find(x => x.id === …)` sites resolve real ids in real 
   a cancelled session. Guarded by `settings-transactional.test.ts` — a STATIC guard, because the
   bug lives in the GAP BETWEEN two files (a setting is added to the panel and nobody remembers
   App); it names the unrestored setter and was verified to fail when one restore is removed.
+- **GAP (widened audit 2026-07-16): §4.5's displaced-tasks flow is unbuilt.** Spec: "On
+  initiation [of an off-period]: app … offers a displaced-tasks flow reusing the pruning UI
+  (perish / carry / push)." The dialog only asks title + known/open end; displacement is hardcoded
+  to "push" (the file comment admits it). Cancel-per-card still exists as a manual escape hatch,
+  but the offered flow does not. Fix direction: after START_OFF_PERIOD, list the displaced plan
+  tasks with per-item keep(push)/cancel choices, reusing the pruning-list component.
+- **GAP (widened audit 2026-07-16): §4.6's third power (per-date override / "move") has no UI.**
+  Core fully supports `TemplateOverride` (collectDue applies it; SET_DATED carries it) but nothing
+  ever creates one — the Calendar menu's "Edit template…" edits the template for ALL weeks (the
+  in-code comment marks the per-date editor as a follow-up). Fix direction: a small per-date
+  editor (anchor move / budget resize) writing `overrides` via the existing `putDated`.
+- ~~**BUG (widened audit 2026-07-16): Calendar-mode "Edit template…" silently discarded mid-week
+  saves.**~~ **FIXED 2026-07-16.** `locked` exempted Calendar mode entirely, but the reducer gates
+  SET_WEEK_PLAN on `canPlanWeek` regardless — so mid-week on a working day the editor opened,
+  saved, the drawer closed as if saved, and the reducer silently `return state`d. The Edit-template
+  button now carries the same structural lock + tooltip as Add-template (per-date Skip stays
+  available — SET_DATED is never gated).
