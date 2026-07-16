@@ -127,7 +127,20 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
   A **`WeekTemplate`** is a reusable task spec: title, head/activity, timing, tier, ommf,
   slideable, breakable, budget?, **anchor time-of-day** `anchorStartTod`/`anchorEndTod` (0..1439 —
   a "9am meeting", NOT an absolute epoch), sleepKind?, `weekdays: number[]` (0=Sun…6=Sat), and a
-  LexoRank. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
+  LexoRank.
+  **Multi-day span — `anchorEndDayOffset` (ruled 2026-07-17, model pending confirmation).** A
+  template anchor has no date (§7.0.5 exemption — hence no 📅), so today a template can only reach
+  into the next day by INFERENCE (`end <= start` → overnight), which silently caps every template at
+  24h. That's wrong for a real spanning task. The END anchor therefore gains an explicit
+  **`anchorEndDayOffset`** (0 = same day, 1 = next day, 2 = +2 days, …): the number of days after the
+  template's fired day on which `anchorEndTod` falls. **Span = `offset*1440 + endTod − startTod`,
+  which must be > 0.** Shown as a compact selector on the End field (same day / next day / +2 days /
+  …), only where End is in play (fixed / semi-tail). Per §7.0.2 **snap-at-entry**: entering an End at
+  or before Start with offset 0 snaps the offset to **next day** and NOTIFIES — the old overnight
+  inference, made explicit and visible instead of silent. Absent/0 on legacy templates keeps today's
+  behaviour. **Open (must be settled before implementing):** the scheduler/`weekPreview` currently
+  assume a template occupies one day — a >24h span touches placement, and §11 day-attribution needs
+  a rule for which day(s) a spanning task's minutes count against. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
   ruled IN scope (2026-07-16, supersedes the 2026-07-15 "future extension" deferral).** A template
   gains an optional **validity**: **one-time** (fires on its next weekday occurrence, then retires —
   never fires again; the retired template stays listed, marked, until deleted) or **ranged**

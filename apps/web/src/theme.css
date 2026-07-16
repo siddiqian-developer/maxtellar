@@ -834,8 +834,33 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .card .badge[data-timing="semi-head"], .card .badge[data-timing="semi-tail"] { background: var(--st-semi); border-color: var(--st-semi); }
 .type-chip.active[data-status="fixed"], .card .badge[data-timing="fixed"] { background: var(--st-fixed); border-color: var(--st-fixed); }
 
-.time-stepper { display: flex; align-items: stretch; gap: 4px; }
-.time-stepper input { flex: 1; min-width: 0; }
+/* §7.0.5/§7.0.6 — the stepper IS the input field, not a field plus loose
+ * chevrons beside it (ruled 2026-07-17). The SHELL carries the field's border,
+ * background and radius; the input sits borderless inside it; the ▴▾ chevrons
+ * and the 📅 live INSIDE that same border, flush to its right edge. So the whole
+ * control reads as one box — identical on every surface, because every surface
+ * composes the one `StepperField`.
+ * Alignment/layout goes on THIS wrapper — never on the input inside it (an auto
+ * margin on a flex child zeroes its flex-grow and detaches the chevrons).
+ * Guarded by `stepper-chrome-guard.test.ts`. */
+.time-stepper {
+  display: flex;
+  align-items: stretch;
+  background: var(--paper-raised);
+  border: 1px solid var(--hairline);
+  border-radius: var(--radius);
+  overflow: hidden; /* chevrons clip to the field's rounded corners */
+}
+/* The field lights up as ONE control, matching `input:focus`. */
+.time-stepper:focus-within { border-color: var(--accent); }
+.time-stepper input,
+.time-stepper input:focus {
+  flex: 1;
+  min-width: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
 .time-stepper-btns { display: flex; flex-direction: column; }
 .time-stepper-btns button {
   padding: 0 6px;
@@ -843,20 +868,24 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   line-height: 1.2;
   flex: 1;
   color: var(--ink-soft);
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  cursor: pointer;
 }
-.time-stepper-btns button:first-child { border-bottom: none; border-radius: var(--radius) var(--radius) 0 0; }
-.time-stepper-btns button:last-child { border-radius: 0 0 var(--radius) var(--radius); }
-/* §1.6 far-date calendar affordance on Start/End (day after tomorrow onward). */
+.time-stepper-btns button:hover { color: var(--ink); background: var(--hairline); }
+/* §1.6 far-date calendar affordance on Start/End (day after tomorrow onward) —
+ * inside the field's border, like the chevrons. */
 .cal-btn {
   padding: 0 6px;
   font-size: 13px;
   color: var(--ink-soft);
-  border: 1px solid var(--line);
-  border-radius: var(--radius);
+  border: none;
+  border-radius: 0;
   background: transparent;
   cursor: pointer;
 }
-.cal-btn:hover { color: var(--ink); }
+.cal-btn:hover { color: var(--ink); background: var(--hairline); }
 
 /* §1.6 month-grid date picker — nested overlay above the drawer. */
 .datepicker {
@@ -1777,6 +1806,15 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .bp-panes { display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr); gap: 18px; align-items: start; }
 @media (max-width: 860px) { .bp-panes { grid-template-columns: 1fr; } }
 
+/* Week Plan two-column layout (§11.8): budgets LEFT, the week itself RIGHT. */
+.wk-body-wide { max-width: 1280px; }
+.wk-columns { display: grid; grid-template-columns: minmax(320px, 5fr) minmax(0, 7fr); gap: 28px; align-items: start; }
+.wk-col-main { display: flex; flex-direction: column; gap: 28px; min-width: 0; }
+/* Inside the narrower left column the outliner+gauge stack vertically. */
+.wk-columns .bp-panes { grid-template-columns: 1fr; }
+.wk-columns .bp-gauge { position: static; }
+@media (max-width: 1000px) { .wk-columns { grid-template-columns: 1fr; } }
+
 .bp-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; min-height: 32px; }
 .bp-row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .bp-pinned { border: 1px dashed var(--hairline); background: color-mix(in srgb, var(--cat-sleep) 8%, transparent); margin-bottom: 8px; }
@@ -1791,14 +1829,27 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .bp-caret { background: none; border: none; cursor: pointer; color: var(--ink-soft); width: 18px; padding: 0; font-size: 11px; }
 .bp-rollup { margin-left: auto; color: var(--ink-soft); font-size: 12px; }
 .bp-head-row { padding-left: 16px; }
-.bp-head-row .bp-input, .bp-cat-row .bp-input { margin-left: auto; }
-.bp-head-row .bp-input { margin-left: 0; }
+/* Right-align the value field within the row. Duration fields wrap their input
+ * in `.time-stepper`, so the auto-margin MUST sit on that wrapper — never on
+ * the inner input. An auto margin on a flex child eats the free space AND
+ * zeroes its flex-grow, which kills `.time-stepper input { flex: 1 }` and
+ * detaches the ▴▾ chevrons from the field they belong to. */
+.bp-cat-row .time-stepper { margin-left: auto; }
+.bp-head-row .time-stepper { margin-left: 0; }
+/* Week-plan rows want a COMPACT field. The size goes on the shell (the visible
+ * field box), never on the shared DurInput itself — a shared component must not
+ * carry one surface's sizing, or that sizing leaks everywhere it's reused. It
+ * did: the drawer's Budget inherited this 84px, so its input stopped short and
+ * the chevrons floated mid-field (found 2026-07-17). The input fills the shell. */
+.bp-row .time-stepper { width: 84px; flex: 0 0 auto; }
+.bp-row .time-stepper input { font-size: 12px; padding: 3px 6px; }
 .bp-head-row .bp-head-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp-offday { opacity: .55; }
 .bp-drag { cursor: grab; color: var(--ink-faint); font-size: 11px; width: 14px; letter-spacing: -1px; }
 .bp-arrows { display: inline-flex; flex-direction: column; gap: 0; }
 .bp-arrows button { background: none; border: none; cursor: pointer; color: var(--ink-faint); font-size: 8px; line-height: 1; padding: 1px 2px; }
 .bp-arrows button:hover { color: var(--ink); }
+/* Bare (non-stepper) row input — the percent field. */
 .bp-input { width: 84px; font-size: 12px; padding: 3px 6px; }
 .bp-pct { width: 60px; }
 .bp-badge { font-size: 11px; color: var(--ink-soft); white-space: nowrap; }
@@ -1845,7 +1896,8 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .pomo-toggle { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; cursor: pointer; }
 .pomo-fields { display: inline-flex; align-items: center; gap: 12px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); }
 .pomo-fields label { display: inline-flex; align-items: center; gap: 5px; }
-.pomo-fields .bp-input, .pomo-settings .bp-input { width: 68px; }
+/* Compact pomodoro duration fields — sized on the shell, same reason as above. */
+.pomo-fields .time-stepper, .pomo-settings .time-stepper { width: 68px; }
 .pomo-settings { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 12px; color: var(--ink-soft); margin-top: 6px; }
 .pomo-settings label { display: inline-flex; align-items: center; gap: 5px; }
 .pomo-cycles { width: 52px; }

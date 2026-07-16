@@ -26,6 +26,7 @@ import type { PresetId } from "../settings";
 import { SubheadField } from "./SubheadField";
 import { DurInput } from "./BudgetPanel";
 import { DatePicker } from "./DatePicker";
+import { StepperField } from "./StepperField";
 
 const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -71,41 +72,45 @@ export function TodField({ value, onChange, hour12, ariaLabel, disabled }: {
   disabled?: boolean;
 }): JSX.Element {
   const str = value !== undefined ? fmtTod(value, hour12) : "";
-  const commit = (raw: string): void => {
-    const t = parseTimeOfDay(raw);
-    onChange(t ? t.hour * 60 + t.min : undefined);
+  // Draft text is local (type freely); the model commits on blur/Enter. Re-sync
+  // whenever the committed value reformats underneath us.
+  const [draft, setDraft] = useState(str);
+  const [prev, setPrev] = useState(str);
+  if (str !== prev) { setPrev(str); setDraft(str); }
+  const commit = (): void => {
+    const t = parseTimeOfDay(draft);
+    const next = t ? t.hour * 60 + t.min : undefined;
+    onChange(next);
+    setDraft(next !== undefined ? fmtTod(next, hour12) : "");
   };
   const nudge = (dir: 1 | -1): void => {
     if (disabled) return;
     const base = value ?? 9 * 60;
     onChange((((base + dir * 5) % 1440) + 1440) % 1440);
   };
-  // Uncontrolled-on-type, snap-on-blur: mirror the drawer's commit discipline.
+  // No date on a recurring time-of-day anchor → no calendar (§7.0.5 exemption).
   return (
-    <div className="time-stepper">
-      <input
-        className="num"
-        defaultValue={str}
-        key={str}
-        aria-label={ariaLabel}
-        disabled={disabled}
-        placeholder="e.g. 9am, 14:30"
-        onBlur={(e) => commit(e.target.value)}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit((e.target as HTMLInputElement).value); } }}
-      />
-      <div className="time-stepper-btns">
-        <button type="button" tabIndex={-1} aria-label={`Increase ${ariaLabel}`} disabled={disabled} onClick={() => nudge(1)}>▴</button>
-        <button type="button" tabIndex={-1} aria-label={`Decrease ${ariaLabel}`} disabled={disabled} onClick={() => nudge(-1)}>▾</button>
-      </div>
-    </div>
+    <StepperField
+      text={draft}
+      onText={setDraft}
+      onCommit={commit}
+      onStep={nudge}
+      ariaLabel={ariaLabel}
+      disabled={disabled}
+      placeholder="e.g. 9am, 14:30"
+    />
   );
 }
 
 /** §2.9 preset pill row. `active` = the selected preset id (null = none, which
  * IS "ordinary" — there is no ordinary pill). Toggling re-taps the active pill. */
-export function PresetPills({ active, onToggle }: {
+export function PresetPills({ active, onToggle, autoId }: {
   active: PresetId | null;
   onToggle: (id: PresetId) => void;
+  /** The preset that was auto-selected from the title (§2.9) — tagged "auto" so
+   * the user can see it wasn't their pick. Null when the choice was the user's
+   * (source ≠ value: an accepted suggestion is the user's, never app-owned). */
+  autoId?: PresetId | null;
 }): JSX.Element {
   return (
     <div className="hint-row">
@@ -119,10 +124,13 @@ export function PresetPills({ active, onToggle }: {
             onClick={() => onToggle(p.id)}
           >
             {p.label}
+            {p.id === active && p.id === autoId && (
+              <span className="ml-tag ml-tag-auto" data-tip="Auto-selected from your title — tap the pill to undo">auto</span>
+            )}
           </button>
         ))}
       </div>
-      <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Sleep / Nap / Food pre-fill a locked bundle (§2.9)">ⓘ</span>
+      <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Sleep / Nap / Food pre-fill a locked bundle; typing a matching title selects one automatically (§2.9)">ⓘ</span>
     </div>
   );
 }
@@ -182,14 +190,150 @@ export function effectiveFlags(timing: TimingType, flags: TaskFlags, presetActiv
 
 /* ----- shared task-spec editor state + view (template + dated editors) ----- */
 
-const TIMINGS: TimingType[] = ["budgeted", "fixed", "semi-head", "semi-tail", "unscheduled"];
-const TIMING_LABEL: Record<TimingType, string> = {
-  budgeted: "Budgeted",
-  fixed: "Fixed",
-  "semi-head": "Start-anchored",
-  "semi-tail": "End-anchored",
-  unscheduled: "Unscheduled",
+/**
+ * The ONE timing-type list (§7.0.6). Its ORDER is part of its identity — the
+ * same set in another order on another surface is a break, which is exactly how
+ * the template drawer drifted from New Task (this list used to be declared here
+ * reversed, and again in TaskDrawer as `ALL_TIMINGS`). The New Task drawer is
+ * canonical (§7.0.6.3), so this is its order. Import it — never re-declare it.
+ */
+export const TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
+
+export type FieldRole = "required" | "optional" | "not used";
+
+/**
+ * The ONE per-type role table for the time fields (§7.0.6). Drives the dynamic
+ * labels AND validation, so a surface can't disagree with the scheduler about
+ * what a type needs.
+ *
+ * This existed TWICE and had already drifted *semantically* (found 2026-07-17):
+ * TaskDrawer's `FIELD_ROLES` called a semi-head's budget "not used", while
+ * `useTaskSpec` REQUIRED one for the same type. Both were wrong — §3.9 defines a
+ * "budget-less open task (unscheduled, or a semi-head/semi-tail **with no
+ * budget**)", so a semi-head/semi-tail budget is **optional**: allowed, never
+ * demanded. Fixed derives its budget from start+end (any two give the third).
+ */
+export const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget: FieldRole }> = {
+  unscheduled: { start: "not used", end: "not used", budget: "not used" },
+  budgeted: { start: "not used", end: "not used", budget: "required" },
+  "semi-head": { start: "required", end: "not used", budget: "optional" },
+  "semi-tail": { start: "not used", end: "required", budget: "optional" },
+  fixed: { start: "required", end: "required", budget: "required" },
 };
+
+/**
+ * Role-labelled wrapper for one time/budget field (§7.0.6) — the ONE definition
+ * of the dynamic label, required-dot and tip that every surface shows. All three
+ * fields are ALWAYS rendered (dimmed when "not used" via `.role-not-used`), so
+ * the row of fields never jumps as the type changes — New Task's behaviour,
+ * which the template editor had drifted from by rendering them conditionally.
+ */
+export function RoleField({ name, timing, field, hint, children }: {
+  name: string;
+  timing: TimingType;
+  field: "start" | "end" | "budget";
+  /** Surface-specific casual-input example (a template anchor has no date). */
+  hint?: string;
+  children: JSX.Element;
+}): JSX.Element {
+  const role = FIELD_ROLES[timing][field];
+  return (
+    <div className={`field role-${role.replace(" ", "-")}`}>
+      <label data-tip={`For the ${timing} type this field is ${role}.${hint ? ` ${hint}` : ""}`}>
+        {name}
+        {role === "required" && <span className="req-dot" aria-label="required">•</span>}
+      </label>
+      {children}
+    </div>
+  );
+}
+
+/**
+ * The ONE common task-options section (§7.0.6, ruled 2026-07-17): everything
+ * from the timing types down to the flags, in the CANONICAL order —
+ * timing types → presets → title → sub-head → start → end → budget → flags.
+ *
+ * Every task create/edit surface composes this, so the sequence cannot drift
+ * again (the Add-template drawer had a different order AND was missing Start/End
+ * entirely). A surface's EXCLUSIVE fields go AFTER this section — never
+ * interleaved into it.
+ *
+ * The section owns the parts that are genuinely identical everywhere (the chip
+ * row, the pills, the flags) and takes SLOTS for the parts whose semantics
+ * legitimately differ per surface: New Task's start/end are casual date-times
+ * ("tom 7am"), while a recurring template's are time-of-day anchors with no date
+ * at all (§7.0.5 exemption). Slots keep that difference honest instead of
+ * pretending one component fits both.
+ */
+export function TaskOptionsSection({
+  timing, onTiming, preset, onTogglePreset, presetAutoId,
+  title, subhead, start, end, budget, flags, onFlags,
+}: {
+  timing: TimingType;
+  onTiming: (t: TimingType) => void;
+  preset: PresetId | null;
+  onTogglePreset: (id: PresetId) => void;
+  presetAutoId?: PresetId | null;
+  title: JSX.Element;
+  subhead: JSX.Element;
+  start: JSX.Element;
+  end: JSX.Element;
+  budget: JSX.Element;
+  flags: TaskFlags;
+  onFlags: (next: TaskFlags) => void;
+}): JSX.Element {
+  return (
+    <>
+      <TimingTypeChips value={timing} onChange={onTiming} />
+      <div className="field">
+        <label>Presets</label>
+        <PresetPills active={preset} onToggle={onTogglePreset} autoId={presetAutoId ?? null} />
+      </div>
+      {title}
+      {subhead}
+      {start}
+      {end}
+      {budget}
+      <div className="field">
+        <label>Flags</label>
+        <TaskFlagsRow timing={timing} flags={flags} presetActive={preset !== null} onChange={onFlags} />
+      </div>
+    </>
+  );
+}
+
+/**
+ * The ONE timing-type chip row (§7.0.6), including its "Timing types" heading —
+ * ruled 2026-07-16: the heading is shown on EVERY surface that offers the types,
+ * so a surface can't render the row bare (New Task used to). Composed by the New
+ * Task drawer and every other task spec editor; never re-implemented.
+ */
+export function TimingTypeChips({ value, onChange }: {
+  value: TimingType;
+  onChange: (t: TimingType) => void;
+}): JSX.Element {
+  return (
+    <div className="field">
+      <label>Timing types</label>
+      <div className="hint-row">
+        <div className="type-chips" role="radiogroup" aria-label="Timing type">
+          {TIMINGS.map((t) => (
+            <button
+              key={t}
+              type="button"
+              className={`type-chip${t === value ? " active" : ""}`}
+              data-status={t}
+              onClick={() => onChange(t)}
+            >
+              {t}
+            </button>
+          ))}
+        </div>
+        <span className="hint-glyph" tabIndex={0} aria-label="Timing type help" data-tip="Tap a type to pre-fill its fields, or just fill the time fields and the type derives itself">ⓘ</span>
+      </div>
+    </div>
+  );
+}
 
 /** The common task-spec fields shared by every spec editor (§7.0.5 parity). */
 export interface TaskSpecInit {
@@ -240,9 +384,13 @@ export function useTaskSpec(initial: TaskSpecInit) {
   const [preset, setPreset] = useState<PresetId | null>(null);
   const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(initial.sleepKind);
 
-  const needStart = timing === "fixed" || timing === "semi-head";
-  const needEnd = timing === "fixed" || timing === "semi-tail";
-  const needBudget = timing === "budgeted" || timing === "semi-head" || timing === "semi-tail";
+  // Derived from the ONE role table (§7.0.6) — never a second opinion on what a
+  // type needs. "need*" = REQUIRED; an "optional" field is still offered and
+  // captured if filled (a semi-head may have a budget, §3.9), just not demanded.
+  const roles = FIELD_ROLES[timing];
+  const needStart = roles.start === "required";
+  const needEnd = roles.end === "required";
+  const needBudget = roles.budget === "required";
 
   const togglePreset = (id: PresetId): void => {
     if (preset === id) { setPreset(null); setSleepKind(undefined); return; }
@@ -258,11 +406,12 @@ export function useTaskSpec(initial: TaskSpecInit) {
   const resolve = (): { spec: ResolvedSpec } | { error: string } => {
     if (!title.trim()) return { error: "Give it a title." };
     if (!activity.trim() || !head) return { error: "Pick a sub-head." };
-    const start = needStart ? startTod : undefined;
-    const end = needEnd ? endTod : undefined;
+    // "not used" → dropped; "optional" → kept when filled; "required" → demanded.
+    const start = roles.start !== "not used" ? startTod : undefined;
+    const end = roles.end !== "not used" ? endTod : undefined;
     if (needStart && start === undefined) return { error: "Enter a valid start time." };
     if (needEnd && end === undefined) return { error: "Enter a valid end time." };
-    let b = needBudget ? budget : undefined;
+    let b = roles.budget !== "not used" ? budget : undefined;
     if (timing === "fixed" && start !== undefined && end !== undefined) {
       b = ((end - start) % 1440 + 1440) % 1440 || 1440; // overnight-safe span
     }
@@ -295,62 +444,60 @@ export function useTaskSpec(initial: TaskSpecInit) {
 
 export type TaskSpecState = ReturnType<typeof useTaskSpec>;
 
-/** Renders the shared New-Task options block (title, presets, sub-head+ML,
- * timing chips, smart time/budget fields with steppers, validity-guarded flags)
- * from a `useTaskSpec` state. Full parity on every surface, one implementation. */
+/** Renders the shared New-Task options block from a `useTaskSpec` state — full
+ * parity on every surface, one implementation.
+ *
+ * The sequence below is CANONICAL (§7.0.6.3, ruled 2026-07-16): timing types →
+ * presets → title → sub-head → start/end/budget → flags. It is the New Task
+ * drawer's order, which every task surface conforms to. A surface's EXCLUSIVE
+ * fields go AFTER this block — never interleaved into it. This view had drifted
+ * (title first, timing fourth) until the user caught it. */
 export function TaskSpecFieldsView({ sp, hour12, titlePlaceholder }: {
   sp: TaskSpecState;
   hour12: boolean;
   titlePlaceholder?: string;
 }): JSX.Element {
+  // A recurring anchor is a time of day with no date (§7.0.5 exemption) — hence
+  // TodField, not the drawer's casual date-time. Everything else is the shared
+  // section, so the order and chrome cannot drift from New Task.
+  const anchorHint = 'Type casually ("9am", "14:30") — it formats on blur.';
   return (
-    <>
-      <div className="field">
-        <label>Title <span className="req-dot" aria-label="required">•</span></label>
-        <div className="clearable-field">
-          <input value={sp.title} aria-label="Title" onChange={(e) => sp.setTitle(e.target.value)} placeholder={titlePlaceholder ?? "e.g. Standup, Gym"} autoFocus />
-        </div>
-      </div>
-      <div className="field">
-        <label>Presets</label>
-        <PresetPills active={sp.preset} onToggle={sp.togglePreset} />
-      </div>
-      <div className="field">
-        <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-        <SubheadField activity={sp.activity} onActivity={sp.setActivity} onHead={sp.setHead} title={sp.title} />
-      </div>
-      <div className="field">
-        <label>Timing</label>
-        <div className="type-chips" role="radiogroup" aria-label="Timing">
-          {TIMINGS.map((ty) => (
-            <button key={ty} type="button" className={`type-chip${ty === sp.timing ? " active" : ""}`} data-status={ty} onClick={() => sp.setTiming(ty)}>
-              {TIMING_LABEL[ty]}
-            </button>
-          ))}
-        </div>
-      </div>
-      {sp.needStart && (
+    <TaskOptionsSection
+      timing={sp.timing}
+      onTiming={sp.setTiming}
+      preset={sp.preset}
+      onTogglePreset={sp.togglePreset}
+      flags={sp.flags}
+      onFlags={sp.setFlags}
+      title={
         <div className="field">
-          <label>Start (time of day)</label>
+          <label>Title <span className="req-dot" aria-label="required">•</span></label>
+          <div className="clearable-field">
+            <input value={sp.title} aria-label="Title" onChange={(e) => sp.setTitle(e.target.value)} placeholder={titlePlaceholder ?? "e.g. Standup, Gym"} autoFocus />
+          </div>
+        </div>
+      }
+      subhead={
+        <div className="field">
+          <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
+          <SubheadField activity={sp.activity} onActivity={sp.setActivity} onHead={sp.setHead} title={sp.title} />
+        </div>
+      }
+      start={
+        <RoleField name="Start (time of day)" timing={sp.timing} field="start" hint={anchorHint}>
           <TodField value={sp.startTod} onChange={sp.setStartTod} hour12={hour12} ariaLabel="Start time of day" />
-        </div>
-      )}
-      {sp.needEnd && (
-        <div className="field">
-          <label>End (time of day)</label>
+        </RoleField>
+      }
+      end={
+        <RoleField name="End (time of day)" timing={sp.timing} field="end" hint={anchorHint}>
           <TodField value={sp.endTod} onChange={sp.setEndTod} hour12={hour12} ariaLabel="End time of day" />
-        </div>
-      )}
-      {sp.needBudget && (
-        <div className="field">
-          <label>Budget</label>
+        </RoleField>
+      }
+      budget={
+        <RoleField name="Budget" timing={sp.timing} field="budget">
           <DurInput value={sp.budget} ariaLabel="Budget" min={1} onCommit={(m) => sp.setBudget(m ?? undefined)} allowEmpty />
-        </div>
-      )}
-      <div className="field">
-        <label>Flags</label>
-        <TaskFlagsRow timing={sp.timing} flags={sp.flags} presetActive={sp.preset !== null} onChange={sp.setFlags} />
-      </div>
-    </>
+        </RoleField>
+      }
+    />
   );
 }

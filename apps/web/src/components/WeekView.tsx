@@ -63,7 +63,7 @@ function columnsFrom(weekStart: number): WeekColumn[] {
 export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Props): JSX.Element {
   const { timeFormat, weekendDays } = useSettings();
   const hour12 = timeFormat === "12h";
-  const [mode, setMode] = useState<"week" | "budget" | "calendar">(initialMode);
+  const [mode, setMode] = useState<"week" | "calendar">(initialMode);
   const [editing, setEditing] = useState<WeekTemplate | "new" | null>(null);
   const [datedEdit, setDatedEdit] = useState<{ date: number; task: DatedTask | null } | null>(null);
   const [tplMenu, setTplMenu] = useState<{ date: number; templateId: string; title: string } | null>(null);
@@ -71,9 +71,10 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
   // Calendar week offset in weeks from this week (0 = this week).
   const [weekOff, setWeekOff] = useState(1); // default to the COMING week
   const anyOverlay = editing || datedEdit || tplMenu;
-  // Esc: overlays close first; in budget mode the panel owns Esc (expanded
-  // row collapses, else back) so this hook stands down there.
-  useEscClose(anyOverlay ? () => { setEditing(null); setDatedEdit(null); setTplMenu(null); } : mode === "budget" ? () => {} : onBack);
+  // Esc: overlays close first; in Week Plan mode the (always-visible) budget
+  // panel owns Esc when no overlay is up (expanded row collapses, else back),
+  // so this hook stands down there.
+  useEscClose(anyOverlay ? () => { setEditing(null); setDatedEdit(null); setTplMenu(null); } : mode === "week" ? () => {} : onBack);
 
   const todayWeekday = toDate(state.now).getDay();
   const started = state.week.startedAt !== null;
@@ -205,7 +206,6 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
         <h2>{mode === "calendar" ? "Calendar" : "Weekly Planning"}</h2>
         <div className="wk-mode-toggle" role="tablist" aria-label="View">
           <button role="tab" aria-selected={mode === "week"} className={`wk-mode${mode === "week" ? " active" : ""}`} onClick={() => setMode("week")}>Week Plan</button>
-          <button role="tab" aria-selected={mode === "budget"} className={`wk-mode${mode === "budget" ? " active" : ""}`} onClick={() => setMode("budget")}>Budgets</button>
           <button role="tab" aria-selected={mode === "calendar"} className={`wk-mode${mode === "calendar" ? " active" : ""}`} onClick={() => setMode("calendar")}>Calendar</button>
         </div>
         <span style={{ flex: 1 }} />
@@ -223,32 +223,13 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
         )}
       </div>
 
-      <div className="config-body">
-        {mode === "week" && (
-          <div className="config-section">
-            <p className="field-desc">
-              {started
-                ? `Week started; First Weekday ${state.week.firstWeekday !== null ? WD[state.week.firstWeekday] : "—"}. Structural changes are locked until an OFF day. This is the coming week (${rangeLabel()}).`
-                : `No week started yet — plan freely, then Start Week. Coming week: ${rangeLabel()}.`}
-            </p>
-            <div className="config-subsection">
-              <h4>OFF days <span className="field-desc">(weekend is always off; add more to lengthen it)</span></h4>
-              <div className="type-chips" role="group" aria-label="OFF days">
-                {WD.map((w, d) => {
-                  const isWeekend = weekendDays.includes(d);
-                  const isOff = state.week.offDays.includes(d) || isWeekend;
-                  return (
-                    <button key={d} type="button"
-                      className={`type-chip${isOff ? " active" : ""}${isWeekend ? " locked" : ""}`}
-                      data-status="semi-tail"
-                      onClick={() => toggleOffDay(d)}
-                      data-tip={isWeekend ? "Weekend — always off (change in Settings)" : isOff ? "OFF day — click to make it a working day" : "Working day — click to make it OFF"}>
-                      {w}{isWeekend ? " ·" : ""}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
+      <div className={`config-body${mode === "week" ? " wk-body-wide" : ""}`}>
+        {locked && (
+          <div className="form-warning" role="status">
+            <div>Mid-week structural planning is locked (the week is a commitment).</div>
+            <label className="off-urgent">
+              <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} /> Urgent override
+            </label>
           </div>
         )}
 
@@ -264,51 +245,75 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
           </div>
         )}
 
-        {locked && (
-          <div className="form-warning" role="status">
-            <div>Mid-week structural planning is locked (the week is a commitment).</div>
-            <label className="off-urgent">
-              <input type="checkbox" checked={urgent} onChange={(e) => setUrgent(e.target.checked)} /> Urgent override
-            </label>
-          </div>
-        )}
-
-        {mode === "budget" && (
-          <BudgetPanel state={state} dispatch={dispatch} locked={locked} urgent={urgent} todayWeekday={todayWeekday} onBack={onBack} />
-        )}
-
-        {mode !== "budget" && preview.conflicts.length > 0 && (
-          <div className="form-warning" role="status">
-            {preview.conflicts.map((c, i) => <div key={i}>⚠ {c}</div>)}
-          </div>
-        )}
-
-        {mode !== "budget" && <div className="config-section">
-          <div className="wk-section-head">
-            <h3>{mode === "week" ? "The week, placed" : "The week"}</h3>
-            {mode === "week" && (
-              <button className="hist-add-btn" disabled={locked} onClick={() => setEditing("new")} data-tip={locked ? "Locked until an OFF day" : "Add a recurring task template"}>
-                + Add template
-              </button>
-            )}
-          </div>
-
-          <WeekGridRBC
-            preview={preview}
-            weekStart={weekStart}
-            weekendDays={weekendDays}
-            offDays={state.week.offDays}
-            hour12={hour12}
-            today={midnightOf(toDate(state.now))}
-            mode={mode}
-            height={innerH + 56}
-            onBlockClick={onBlockClick}
-            onAddDated={(date) => setDatedEdit({ date, task: null })}
-          />
-          {mode === "week" && state.week.templates.length === 0 && (
-            <span className="config-empty">no templates yet — add recurring tasks; they appear placed across the week here</span>
+        {/* Week Plan is two columns (§11.8): budgets LEFT, the week itself RIGHT. */}
+        <div className={mode === "week" ? "wk-columns" : "wk-col-main"}>
+          {mode === "week" && (
+            <BudgetPanel state={state} dispatch={dispatch} locked={locked} urgent={urgent} todayWeekday={todayWeekday} onBack={onBack} escActive={!anyOverlay} />
           )}
-        </div>}
+
+          <div className="wk-col-main">
+            {mode === "week" && (
+              <div className="config-section">
+                <p className="field-desc">
+                  {started
+                    ? `Week started; First Weekday ${state.week.firstWeekday !== null ? WD[state.week.firstWeekday] : "—"}. Structural changes are locked until an OFF day. This is the coming week (${rangeLabel()}).`
+                    : `No week started yet — plan freely, then Start Week. Coming week: ${rangeLabel()}.`}
+                </p>
+                <div className="config-subsection">
+                  <h4>OFF days <span className="field-desc">(weekend is always off; add more to lengthen it)</span></h4>
+                  <div className="type-chips" role="group" aria-label="OFF days">
+                    {WD.map((w, d) => {
+                      const isWeekend = weekendDays.includes(d);
+                      const isOff = state.week.offDays.includes(d) || isWeekend;
+                      return (
+                        <button key={d} type="button"
+                          className={`type-chip${isOff ? " active" : ""}${isWeekend ? " locked" : ""}`}
+                          data-status="semi-tail"
+                          onClick={() => toggleOffDay(d)}
+                          data-tip={isWeekend ? "Weekend — always off (change in Settings)" : isOff ? "OFF day — click to make it a working day" : "Working day — click to make it OFF"}>
+                          {w}{isWeekend ? " ·" : ""}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {preview.conflicts.length > 0 && (
+              <div className="form-warning" role="status">
+                {preview.conflicts.map((c, i) => <div key={i}>⚠ {c}</div>)}
+              </div>
+            )}
+
+            <div className="config-section">
+              <div className="wk-section-head">
+                <h3>{mode === "week" ? "The week, placed" : "The week"}</h3>
+                {mode === "week" && (
+                  <button className="hist-add-btn" disabled={locked} onClick={() => setEditing("new")} data-tip={locked ? "Locked until an OFF day" : "Add a recurring task template"}>
+                    + Add template
+                  </button>
+                )}
+              </div>
+
+              <WeekGridRBC
+                preview={preview}
+                weekStart={weekStart}
+                weekendDays={weekendDays}
+                offDays={state.week.offDays}
+                hour12={hour12}
+                today={midnightOf(toDate(state.now))}
+                mode={mode}
+                height={innerH + 56}
+                onBlockClick={onBlockClick}
+                onAddDated={(date) => setDatedEdit({ date, task: null })}
+              />
+              {mode === "week" && state.week.templates.length === 0 && (
+                <span className="config-empty">no templates yet — add recurring tasks; they appear placed across the week here</span>
+              )}
+            </div>
+          </div>
+        </div>
       </div>
 
       {editing && (

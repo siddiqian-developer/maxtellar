@@ -430,6 +430,16 @@ gets a "lean" version that silently drops powers the drawer has. Concretely:
    inc/dec chevrons (§6, tab-skipped) belong to **every time AND duration input on every surface**
    — not just the task drawer. That includes the WeekView template/dated editors, GapFillModal,
    BudgetPanel budget/share/quota fields, and Settings duration fields; and every future input.
+   **The stepper is ONE field, not a field plus two loose chevrons (ruled 2026-07-16, violation
+   found in Week plan).** Presence is not enough — the chevrons must *read as part of the input*
+   on every surface, identically to New Task: same `.time-stepper` chrome, chevrons flush against
+   the field, heights matched. A surface may size its field (Week plan's is narrower than the
+   drawer's), but it may **never** restyle the stepper's internals. **Alignment/layout belongs on
+   the `.time-stepper` wrapper — never on the input inside it.** An auto margin on a flex child
+   absorbs the free space *and* forces its `flex-grow` to zero, silently killing the stepper's
+   layout and detaching the chevrons; this is exactly how Week plan drifted. Enforced by
+   `stepper-chrome-guard.test.ts`, which resolves the classes rendered inside a `.time-stepper` and
+   fails any CSS rule that gives one an auto margin, `float`, or `position: absolute`.
 2. **Every sub-head input** carries the **title → sub-head ML suggestion** (§7.0.1: autofill when
    empty/app-sourced, a one-click "Use this" chip when the user has typed something else, intent-
    protected so an accepted/typed value is never overwritten). **Every new-head input** carries the
@@ -458,6 +468,44 @@ not discipline** (the strong guarantee that a future edit can't silently re-hand
 piece). A running **inventory of shared primitives** lives at `docs/shared-primitives.md`; consult
 it before hand-rolling, and add a row when introducing a new one. Where duplication is likely,
 back a shared primitive with a guard test like the toast's.
+
+### 7.0.6 Composition law — a common part is a component, never a copy (LAW, 2026-07-16)
+**Binding, retroactive (grilled 2026-07-16 — the Add-template drawer had drifted from New Task:
+different field order, a different timing-chip order, a duplicated chip implementation).** The
+generalisation the user asked to be extracted from that example:
+
+1. **If two UI elements share a part, that part is componented out and both are *composed* of it.**
+   Not "written twice and kept in sync by discipline" — extracted. A drawer is composed of sections,
+   a section of fields, a field of shared primitives.
+   **Depth: optimized, NOT extreme (corrected by the user, 2026-07-16 — "do not go to extreme depth,
+   just to the optimized depth to maintain efficiency and performance to render on DOM too").** The
+   unit of extraction is a part that is **actually duplicated** and **coherent on its own** (the
+   `.time-stepper` shell, the timing-chip row, the preset pills). Stop there. Do **not** atomise
+   below that — a component per chip, per label, per checkbox is a *violation of this law, not an
+   expression of it*: it multiplies component instances and re-render work for no reuse. The test is
+   **"is this part duplicated across surfaces?"**, never "can this be split further?". One real
+   duplicate = extract; zero duplicates = leave it inline.
+2. **Copying is the bug, not the drift.** Divergence (order, label, chrome) is only the *symptom*
+   that surfaces later. Two copies of a list, a chip row, or a field are a defect **the moment they
+   are written**, before any visible difference exists — because they are guaranteed to drift.
+   Corollary: a constant that describes a domain set (the timing types, the presets, the weekdays)
+   has **exactly one definition** in the repo; every surface imports it. Its **order is part of its
+   identity** — the same set in a different order on another surface is a break.
+3. **Reference-surface rule.** When surfaces disagree, the **New Task drawer is canonical** for task
+   creation/editing: field sequence, layout, chip order, labels. Every other task surface conforms
+   *to it*, not the reverse. Its sequence is: **timing types → presets → title → sub-head →
+   start/end/budget → flags**, then any **surface-exclusive** fields *after* the common block —
+   never interleaved into it.
+4. **Retroactive by default (explicit, 2026-07-16).** This is not future-only. On encountering an
+   already-built violation while doing anything else, **correct it by default** — no need to ask.
+   This is a standing exception to "change only what is asked" ([[change-only-what-is-asked]]):
+   de-duplicating a common part is never scope creep. If the correction is large enough to need
+   staging, say so and stage it (§7.0.7 stage-gating) rather than leaving the copy in place.
+
+**Enforcement:** by construction (compose the shared component) plus **detection** — guard tests in
+the style of `snap-toast-guard.test.ts` / `stepper-chrome-guard.test.ts`, which fail when a domain
+constant or shared chrome is re-declared outside its one home. Reuse is enforced by detection, never
+by discipline. Shared primitives are inventoried in `docs/shared-primitives.md`.
 
 ### 7.1 Termination guarantees (the anti-infinite-loop contract) — R-audit
 - **Forward-only lemma:** every scheduler-caused motion of an unstarted task moves it strictly

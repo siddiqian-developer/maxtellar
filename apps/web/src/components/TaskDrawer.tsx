@@ -12,12 +12,14 @@ import { useEffect, useMemo, useState } from "react";
 import type { Event, PomodoroConfig, SleepKind, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings, type PresetId } from "../settings";
-import { PRESETS, presetById, matchPreset } from "../presets";
+import { presetById, matchPreset } from "../presets";
 import { parseCasualTime, parseCasualDuration } from "../casualTime";
 import { parseTitleGrammar, resolveHash } from "../titleGrammar";
 import { fmtDayTime, fmtDurUnits } from "../time";
 import { DatePicker } from "./DatePicker";
 import { DurInput } from "./BudgetPanel";
+import { StepperField } from "./StepperField";
+import { TaskOptionsSection, RoleField } from "./TaskSpecFields";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
@@ -154,19 +156,16 @@ function deriveDayAware(
   return { startMin: s, endMin: e, budgetMin: b, adjustments, tomorrow, err };
 }
 
-const ALL_TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
+// The timing-type list lives in ONE place (§7.0.6) — `TIMINGS` in TaskSpecFields,
+// rendered by the shared `TimingTypeChips`. It used to be re-declared here as
+// `ALL_TIMINGS`, and the copy in TaskSpecFields had already drifted to a
+// different order; that divergence is what this law exists to prevent.
 
-type FieldRole = "required" | "optional" | "not used";
-
-/** Per-type role of each time field (drives the dynamic labels). Fixed needs
- * all three, entered as any two with the third derived — all required. */
-const FIELD_ROLES: Record<TimingType, { start: FieldRole; end: FieldRole; budget: FieldRole }> = {
-  unscheduled: { start: "not used", end: "not used", budget: "not used" },
-  budgeted: { start: "not used", end: "not used", budget: "required" },
-  "semi-head": { start: "required", end: "not used", budget: "not used" },
-  "semi-tail": { start: "not used", end: "required", budget: "not used" },
-  fixed: { start: "required", end: "required", budget: "required" },
-};
+// The per-type role table lives in ONE place (§7.0.6) — `FIELD_ROLES` in
+// TaskSpecFields, rendered through the shared `RoleField`. It used to be
+// duplicated here, and the two copies had drifted *semantically*: this one
+// called a semi-head's budget "not used" while `useTaskSpec` demanded one. §3.9
+// settles it — a semi-head/semi-tail budget is optional.
 
 export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
   const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
@@ -683,8 +682,6 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     setSubtasks((xs) => xs.map((x, j) => (j === i ? { ...x, budgetStr: formatted } : x)));
   };
 
-  const roles = FIELD_ROLES[timing];
-
   const timeField = (
     name: string,
     field: "start" | "end" | "budget",
@@ -692,38 +689,26 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     set: (v: string) => void,
     placeholder: string,
   ): JSX.Element => (
-    <div className={`field role-${roles[field].replace(" ", "-")}`}>
-      <label data-tip={field === "budget"
-        ? `For the ${timing} type this field is ${roles[field]}`
-        : `For the ${timing} type this field is ${roles[field]}. Type casually ("3pm", "tom 7am", "1500") — it formats on blur.`}>
-        {name}
-        {roles[field] === "required" && <span className="req-dot" aria-label="required">•</span>}
-      </label>
-      <div className="time-stepper">
-        <input
-          value={value}
-          onChange={(e) => set(e.target.value)}
-          onBlur={() => commitField(field)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitField(field); } }}
-          placeholder={placeholder}
-          className="num"
-        />
-        {field !== "budget" && (
-          <button
-            type="button"
-            tabIndex={-1}
-            className="cal-btn"
-            aria-label={`Pick a far date for ${name}`}
-            data-tip="Pick a date (day after tomorrow onward). Today & tomorrow: just type them."
-            onClick={() => setCalendarField(field)}
-          >📅</button>
-        )}
-        <div className="time-stepper-btns">
-          <button type="button" tabIndex={-1} aria-label={`Increase ${name}`} onClick={() => step(field, 1)}>▴</button>
-          <button type="button" tabIndex={-1} aria-label={`Decrease ${name}`} onClick={() => step(field, -1)}>▾</button>
-        </div>
-      </div>
-    </div>
+    <RoleField
+      name={name}
+      timing={timing}
+      field={field}
+      {...(field === "budget" ? {} : { hint: 'Type casually ("3pm", "tom 7am", "1500") — it formats on blur.' })}
+    >
+      <StepperField
+        text={value}
+        onText={set}
+        onCommit={() => commitField(field)}
+        onStep={(dir) => step(field, dir)}
+        ariaLabel={name}
+        placeholder={placeholder}
+        calendar={field === "budget" ? undefined : {
+          onOpen: () => setCalendarField(field),
+          ariaLabel: `Pick a far date for ${name}`,
+          tip: "Pick a date (day after tomorrow onward). Today & tomorrow: just type them.",
+        }}
+      />
+    </RoleField>
   );
 
   // Scrim click does NOT close (2026-07-11) — half-typed tasks are too easy
@@ -736,46 +721,23 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
           <button className="drawer-close" aria-label="Close" onClick={onClose}>&times;</button>
         </div>
         <div className="drawer-body">
-          <div className="field">
-            <div className="hint-row">
-              <div className="type-chips" role="radiogroup" aria-label="Timing type">
-                {ALL_TIMINGS.map((t) => (
-                  <button
-                    key={t}
-                    type="button"
-                    className={`type-chip${t === timing ? " active" : ""}`}
-                    data-status={t}
-                    onClick={() => shapeTo(t)}
-                  >
-                    {t}
-                  </button>
-                ))}
-              </div>
-              <span className="hint-glyph" tabIndex={0} aria-label="Timing type help" data-tip="Tap a type to pre-fill its fields, or just fill the time fields and the type derives itself">ⓘ</span>
-            </div>
-          </div>
-          <div className="field">
-            <label>Presets</label>
-            <div className="hint-row">
-              <div className="type-chips" role="radiogroup" aria-label="Presets">
-                {PRESETS.map((p) => (
-                  <button
-                    key={p.id}
-                    type="button"
-                    className={`type-chip${p.id === activePreset ? " active" : ""}`}
-                    data-status="semi-tail"
-                    onClick={() => togglePreset(p.id)}
-                  >
-                    {p.label}
-                    {p.id === activePreset && presetAuto && (
-                      <span className="ml-tag ml-tag-auto" data-tip="Auto-selected from your title — tap the pill to undo">auto</span>
-                    )}
-                  </button>
-                ))}
-              </div>
-              <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Typing a matching title selects one automatically (§2.9)">ⓘ</span>
-            </div>
-          </div>
+          {/* The common block — timing types → flags — in ONE component (§7.0.6),
+              so no surface can re-order or omit part of it. Drawer-EXCLUSIVE
+              fields (Subtasks, Pomodoro…) come AFTER it, never interleaved. */}
+          <TaskOptionsSection
+            timing={timing}
+            onTiming={shapeTo}
+            preset={activePreset}
+            onTogglePreset={togglePreset}
+            presetAutoId={presetAuto ? activePreset : null}
+            flags={{ ommf, slideable, breakable }}
+            onFlags={(next) => {
+              // Toggling OMMF resets the derived flags to their per-type
+              // defaults — preserved from the drawer's own handler.
+              if (next.ommf !== ommf) { setOmmf(next.ommf); setFlags({}); return; }
+              setFlags({ slideable: next.slideable, breakable: next.breakable });
+            }}
+            title={
           <div className="field">
             <label>Title <span className="req-dot" aria-label="required">•</span></label>
             <div className="clearable-field">
@@ -795,6 +757,8 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
               )}
             </div>
           </div>
+            }
+            subhead={
           <div className="field">
             <label data-tip={activePreset ? "Locked by the preset" : "Search existing sub-heads, or type a new one"}>
               Sub-head <span className="req-dot" aria-label="required">•</span>
@@ -872,44 +836,11 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
               </div>
             )}
           </div>
-          {timeField("Start", "start", startStr, setStartStr, "e.g. 3pm, tom 7am")}
-          {timeField("End", "end", endStr, setEndStr, "e.g. 16:20, tomorrow 9am")}
-          {timeField("Budget", "budget", budgetStr, setBudgetStr, "e.g. 1h30, 45m")}
-          <div className="field">
-            <div className="hint-row">
-              <div className="flag-row">
-              <label className="flag" data-tip="Once missed, missed forever — the task perishes if its moment passes">
-                <input type="checkbox" checked={ommf} onChange={(e) => { setOmmf(e.target.checked); setFlags({}); }} />
-                OMMF
-              </label>
-              <label
-                className="flag"
-                data-tip={timing === "fixed" ? "Fixed tasks never slide" : timing === "budgeted" ? "Budgeted tasks always slide" : "The scheduler may move this task later"}
-              >
-                <input
-                  type="checkbox"
-                  checked={slideable}
-                  disabled={timing === "fixed" || timing === "budgeted"}
-                  onChange={(e) => setFlags((f) => ({ ...f, slideable: e.target.checked }))}
-                />
-                slideable
-              </label>
-              <label
-                className="flag"
-                data-tip={activePreset ? "Presets are never split by the scheduler" : ommf ? "OMMF tasks can never be split" : timing !== "budgeted" ? "Only budgeted tasks can be split" : "The scheduler may split this task into segments"}
-              >
-                <input
-                  type="checkbox"
-                  checked={breakable}
-                  disabled={activePreset !== null || timing !== "budgeted" || ommf}
-                  onChange={(e) => setFlags((f) => ({ ...f, breakable: e.target.checked }))}
-                />
-                breakable
-              </label>
-              </div>
-              <span className="hint-glyph" tabIndex={0} aria-label="Flags help" data-tip="Flags derive from the timing type; editable within the validity rules">ⓘ</span>
-            </div>
-          </div>
+            }
+            start={timeField("Start", "start", startStr, setStartStr, "e.g. 3pm, tom 7am")}
+            end={timeField("End", "end", endStr, setEndStr, "e.g. 16:20, tomorrow 9am")}
+            budget={timeField("Budget", "budget", budgetStr, setBudgetStr, "e.g. 1h30, 45m")}
+          />
           <div className="field">
             <div className="hint-row">
               <label data-tip="Break this task into subtasks — its budget becomes the sum of theirs (§2.7). Leaves run in order; completing the last completes the parent.">

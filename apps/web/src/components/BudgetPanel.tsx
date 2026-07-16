@@ -37,6 +37,7 @@ import { useHeads } from "../heads";
 import { parseCasualDuration } from "../casualTime";
 import { fmtDurUnits } from "../time";
 import { SnapToast, useSnapToast } from "../SnapToast";
+import { StepperField } from "./StepperField";
 
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const QUOTA_LABEL: Record<QuotaType, string> = { atLeast: "at least", atMost: "at most", exact: "exact" };
@@ -49,9 +50,11 @@ interface Props {
   urgent: boolean;
   todayWeekday: number;
   onBack: () => void;
+  /** False while the host screen has an overlay up — that overlay owns Esc. */
+  escActive: boolean;
 }
 
-export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onBack }: Props): JSX.Element {
+export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onBack, escActive }: Props): JSX.Element {
   const { plannableHeads, categoryFor } = useHeads();
   const week = state.week;
   const plannedDays = useMemo(
@@ -65,7 +68,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
   const [flash, setFlash] = useState<{ headId: string; seq: number } | null>(null);
   const dragId = useRef<string | null>(null);
 
-  useEscClose(expanded ? () => setExpanded(null) : onBack);
+  useEscClose(!escActive ? () => {} : expanded ? () => setExpanded(null) : onBack);
 
   const notify = (text: string, headId: string): void => {
     showToast(text);
@@ -577,17 +580,17 @@ export function DurInput({ value, onCommit, disabled, ariaLabel, placeholder, al
     setStr(fmtDurUnits(next));
     onCommit(next);
   };
+  // A duration has no date → no calendar (§7.0.5 exemption).
   return (
-    <div className="time-stepper">
-      <input className="num bp-input" value={str} aria-label={ariaLabel} placeholder={placeholder ?? "e.g. 1h 30m"} disabled={disabled}
-        onChange={(e) => setStr(e.target.value)}
-        onBlur={commit}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
-      <div className="time-stepper-btns">
-        <button type="button" tabIndex={-1} aria-label={`Increase ${ariaLabel}`} disabled={disabled} onClick={() => nudge(1)}>▴</button>
-        <button type="button" tabIndex={-1} aria-label={`Decrease ${ariaLabel}`} disabled={disabled} onClick={() => nudge(-1)}>▾</button>
-      </div>
-    </div>
+    <StepperField
+      text={str}
+      onText={setStr}
+      onCommit={commit}
+      onStep={nudge}
+      ariaLabel={ariaLabel}
+      disabled={disabled}
+      placeholder={placeholder ?? "e.g. 1h 30m"}
+    />
   );
 }
 

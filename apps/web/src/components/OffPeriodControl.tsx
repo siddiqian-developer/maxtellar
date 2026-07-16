@@ -17,6 +17,7 @@ import { useSettings } from "../settings";
 import { parseCasualTime, parseTimeOfDay } from "../casualTime";
 import { fmtDayTime } from "../time";
 import { DatePicker } from "./DatePicker";
+import { StepperField } from "./StepperField";
 
 interface Props {
   state: State;
@@ -97,6 +98,16 @@ function OffDialog({
     setErr(null);
   };
 
+  /** ±5-min chevron nudge (§7.0.5 — this surface carried the 📅 but had silently
+   * lost its stepper until the shared `StepperField` was composed). Steps the
+   * committed end, keeping the "an off-period ends in the future" boundary. */
+  const stepEnd = (dir: 1 | -1): void => {
+    const v = Math.max(now + 5, (endMin ?? now) + dir * 5);
+    setEndMin(v);
+    setEndStr(fmtDayTime(v, now, hour12, showWeekday));
+    setErr(null);
+  };
+
   const start = (): void => {
     if (known && endMin === null) { setErr("Enter when it ends, or switch to open-ended."); return; }
     dispatch({
@@ -137,16 +148,19 @@ function OffDialog({
           {known && (
             <div className="field">
               <label>Ends at</label>
-              <div className="time-stepper">
-                <input value={endStr} className="num" aria-label="Ends at"
-                  onChange={(e) => setEndStr(e.target.value)}
-                  onBlur={() => commitEnd(endStr)}
-                  onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitEnd(endStr); } }}
-                  placeholder="e.g. 5pm, tomorrow 9am" />
-                <button type="button" tabIndex={-1} className="cal-btn" aria-label="Pick an end date"
-                  data-tip="Pick a date (day after tomorrow onward). Today & tomorrow: just type them."
-                  onClick={() => setCalOpen(true)}>📅</button>
-              </div>
+              <StepperField
+                text={endStr}
+                onText={setEndStr}
+                onCommit={() => commitEnd(endStr)}
+                onStep={stepEnd}
+                ariaLabel="Ends at"
+                placeholder="e.g. 5pm, tomorrow 9am"
+                calendar={{
+                  onOpen: () => setCalOpen(true),
+                  ariaLabel: "Pick an end date",
+                  tip: "Pick a date (day after tomorrow onward). Today & tomorrow: just type them.",
+                }}
+              />
             </div>
           )}
           {displaced.length > 0 && (

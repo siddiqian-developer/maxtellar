@@ -22,6 +22,7 @@ import { fmtDayTime, fmtDur } from "../time";
 import { useEscClose } from "../useEscClose";
 import { SubheadField } from "./SubheadField";
 import { DatePicker } from "./DatePicker";
+import { StepperField } from "./StepperField";
 
 interface Props {
   /** The entry to edit, or null for a fresh back-logged entry. */
@@ -88,6 +89,27 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
     const localNotes = [...r.notes];
     let v = r.value;
     // The start-floor is a single-field rule → announce it here at the boundary.
+    if (field === "start" && v < floor) {
+      v = floor;
+      localNotes.push(`Start earlier than the editable window (the last day-start) — moved to ${fmtT(floor)}`);
+    }
+    if (field === "start") {
+      setStartMin(v);
+      setStartStr(fmtT(v));
+    } else {
+      setEndMin(v);
+      setEndStr(fmtT(v));
+    }
+    setNotes(localNotes);
+  };
+
+  /** ±5-min chevron nudge (§7.0.5 — every time input carries the stepper; this
+   * surface silently lacked one until the shared `StepperField` was composed).
+   * Steps the COMMITTED value and reformats, re-applying the same start-floor
+   * boundary rule `commitTime` enforces. */
+  const stepTime = (field: "start" | "end", dir: 1 | -1): void => {
+    let v = (field === "start" ? startMin : endMin) + dir * 5;
+    const localNotes: string[] = [];
     if (field === "start" && v < floor) {
       v = floor;
       localNotes.push(`Start earlier than the editable window (the last day-start) — moved to ${fmtT(floor)}`);
@@ -214,19 +236,18 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
       <label data-tip='Type casually ("2pm", "yesterday 10pm", "1500") — it formats on blur, into the past.'>
         {name} <span className="req-dot" aria-label="required">•</span>
       </label>
-      <div className="time-stepper">
-        <input
-          value={value}
-          aria-label={name}
-          onChange={(e) => set(e.target.value)}
-          onBlur={() => commitTime(field, value)}
-          onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitTime(field, value); } }}
-          className="num"
-        />
-        <button type="button" tabIndex={-1} className="cal-btn" aria-label={`Pick a date for ${name}`}
-          data-tip="Pick a past date (up to today). The time stays as typed."
-          onClick={() => setCalField(field)}>📅</button>
-      </div>
+      <StepperField
+        text={value}
+        onText={set}
+        onCommit={() => commitTime(field, value)}
+        onStep={(dir) => stepTime(field, dir)}
+        ariaLabel={name}
+        calendar={{
+          onOpen: () => setCalField(field),
+          ariaLabel: `Pick a date for ${name}`,
+          tip: "Pick a past date (up to today). The time stays as typed.",
+        }}
+      />
     </div>
   );
 

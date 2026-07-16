@@ -119,9 +119,11 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   AND ▲▼ arrows; collapse-all in the pane header) on one side, a **live 24h stacked bar** (the
   conservation gauge — fills as you allocate, flashes the offending segment on breach) on the
   other. The existing **week calendar grid** (§4.4/§4.6) remains the placement-preview surface.
-- **Placement**: the grid screen's segmented toggle becomes **`[ Week Plan | Budgets | Calendar ]`**
-  — the outliner is the *Budgets* sibling view within Weekly Planning (heading stays "Weekly
-  Planning"). The **Start Week button is disabled** (with the gate reason) while §11.2 fails.
+- **Placement (revised 2026-07-16)**: the toggle is **`[ Week Plan | Calendar ]`** — there is NO
+  separate *Budgets* tab. **Week Plan is a two-column screen**: the **LEFT column hosts the budget
+  panel** (outliner + gauge, stacked vertically), the **RIGHT column keeps the week-plan content
+  as-is** (OFF days, conflicts, the placed-week grid). Heading stays "Weekly Planning". The
+  **Start Week button is disabled** (with the gate reason) while §11.2 fails.
 - A **weekday selector** (chips; OFF days disabled) picks which day-shape the bar + roll-ups
   show; unbalanced weekdays are marked on their chips. A head's expanded editor offers a
   **this-weekday-only override** (absolute `perDay` / weekly `shares`) honoring §11.2's
