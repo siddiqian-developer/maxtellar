@@ -15,15 +15,14 @@
  * Every time/duration field inherits smart-input (§7.0.2). Esc → back.
  */
 import { useMemo, useState } from "react";
-import type { DatedTask, Event, State, TimingType, WeekTemplate } from "@maxtellar/core";
+import type { DatedTask, Event, State, WeekTemplate } from "@maxtellar/core";
 import { canPlanWeek } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
-import { parseTimeOfDay, parseCasualDuration } from "../casualTime";
-import { fmtClock, fmtDurUnits, toDate } from "../time";
+import { fmtClock, fmtTod, toDate } from "../time";
 import { weekPreview, type WeekColumn } from "../weekPreview";
-import { SubheadField } from "./SubheadField";
 import { BudgetPanel } from "./BudgetPanel";
+import { useTaskSpec, TaskSpecFieldsView } from "./TaskSpecFields";
 import { weekBudgetValidity } from "@maxtellar/core";
 
 const HOUR_PX = 30; // vertical scale: 30px per hour → 720px for the full day
@@ -38,22 +37,8 @@ interface Props {
 
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const TIMINGS: TimingType[] = ["budgeted", "fixed", "semi-head", "semi-tail", "unscheduled"];
-const TIMING_LABEL: Record<TimingType, string> = {
-  budgeted: "Budgeted",
-  fixed: "Fixed",
-  "semi-head": "Start-anchored",
-  "semi-tail": "End-anchored",
-  unscheduled: "Unscheduled",
-};
 const MIN = 60000;
 
-/** tod (minutes-into-day) → clock string per the 12/24h setting. */
-function fmtTod(tod: number, hour12: boolean): string {
-  const d = toDate(0);
-  d.setHours(0, 0, 0, 0);
-  return fmtClock(new Date(d.getTime() + tod * 60000), hour12);
-}
 /** local-midnight epoch-minute of a Date. */
 function midnightOf(d: Date): number {
   return Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / MIN);
@@ -386,55 +371,18 @@ function DatedTaskEditor({ date, task, hour12, onSave, onDelete, onClose }: {
   useEscClose(onClose);
   const isNew = task === null;
   const d = toDate(date);
-  const [title, setTitle] = useState(task?.title ?? "");
-  const [activity, setActivity] = useState(task?.activityId ?? "");
-  const [head, setHead] = useState<string | undefined>(task?.headId);
-  const [timing, setTiming] = useState<TimingType>(task?.timing ?? "budgeted");
-  const [budgetStr, setBudgetStr] = useState(task?.budget !== undefined ? fmtDurUnits(task.budget) : "");
-  const [startStr, setStartStr] = useState(task?.anchorStartTod !== undefined ? fmtTod(task.anchorStartTod, hour12) : "");
-  const [endStr, setEndStr] = useState(task?.anchorEndTod !== undefined ? fmtTod(task.anchorEndTod, hour12) : "");
+  const sp = useTaskSpec(task ?? {});
   const [err, setErr] = useState<string | null>(null);
 
-  const todOf = (s: string): number | undefined => { const t = parseTimeOfDay(s); return t ? t.hour * 60 + t.min : undefined; };
-  const needStart = timing === "fixed" || timing === "semi-head";
-  const needEnd = timing === "fixed" || timing === "semi-tail";
-  const needBudget = timing === "semi-head" || timing === "semi-tail" || timing === "budgeted";
-
   const save = (): void => {
-    if (!title.trim()) return setErr("Give it a title.");
-    if (!activity.trim() || !head) return setErr("Pick a sub-head.");
-    const start = needStart ? todOf(startStr) : undefined;
-    const end = needEnd ? todOf(endStr) : undefined;
-    if (needStart && start === undefined) return setErr("Enter a valid start time.");
-    if (needEnd && end === undefined) return setErr("Enter a valid end time.");
-    let budget = needBudget ? parseCasualDuration(budgetStr) : undefined;
-    if (timing === "fixed" && start !== undefined && end !== undefined) budget = Math.max(1, end - start);
-    if (needBudget && (budget === undefined || budget <= 0)) return setErr("Enter a valid budget.");
+    const r = sp.resolve();
+    if ("error" in r) return setErr(r.error);
     onSave({
       ...(task?.id ? { id: task.id, rank: task.rank } : {}),
-      title: title.trim(),
-      headId: head,
-      activityId: activity.trim(),
-      timing,
       tier: task?.tier ?? "normal",
-      ommf: task?.ommf ?? false,
-      slideable: timing !== "fixed",
-      breakable: timing === "budgeted",
-      ...(budget !== undefined ? { budget } : {}),
-      ...(start !== undefined ? { anchorStartTod: start } : {}),
-      ...(end !== undefined ? { anchorEndTod: end } : {}),
+      ...r.spec,
     });
   };
-
-  const timeField = (label: string, value: string, set: (v: string) => void): JSX.Element => (
-    <div className="field">
-      <label>{label}</label>
-      <input value={value} className="num" aria-label={label}
-        onChange={(e) => set(e.target.value)}
-        onBlur={() => { const t = todOf(value); if (t !== undefined) set(fmtTod(t, hour12)); }}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const t = todOf(value); if (t !== undefined) set(fmtTod(t, hour12)); } }} />
-    </div>
-  );
 
   return (
     <div className="drawer-overlay">
@@ -444,37 +392,7 @@ function DatedTaskEditor({ date, task, hour12, onSave, onDelete, onClose }: {
           <button className="drawer-close" aria-label="Close" onClick={onClose}>&times;</button>
         </div>
         <div className="drawer-body">
-          <div className="field">
-            <label>Title <span className="req-dot" aria-label="required">•</span></label>
-            <div className="clearable-field">
-              <input value={title} aria-label="Activity title" onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Dentist, Wedding" autoFocus />
-            </div>
-          </div>
-          <div className="field">
-            <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} title={title} />
-          </div>
-          <div className="field">
-            <label>Timing</label>
-            <div className="type-chips" role="radiogroup" aria-label="Timing">
-              {TIMINGS.map((ty) => (
-                <button key={ty} type="button" className={`type-chip${ty === timing ? " active" : ""}`} data-status={ty} onClick={() => setTiming(ty)}>
-                  {TIMING_LABEL[ty]}
-                </button>
-              ))}
-            </div>
-          </div>
-          {needStart && timeField("Start (time of day)", startStr, setStartStr)}
-          {needEnd && timeField("End (time of day)", endStr, setEndStr)}
-          {needBudget && (
-            <div className="field">
-              <label>Budget</label>
-              <input value={budgetStr} className="num" aria-label="Budget"
-                onChange={(e) => setBudgetStr(e.target.value)}
-                onBlur={() => { const b = parseCasualDuration(budgetStr); if (b !== undefined) setBudgetStr(fmtDurUnits(b)); }}
-                placeholder="e.g. 1h 30m" />
-            </div>
-          )}
+          <TaskSpecFieldsView sp={sp} hour12={hour12} titlePlaceholder="e.g. Dentist, Wedding" />
           {err && <div className="form-warning" role="status">{err}</div>}
         </div>
         <div className="drawer-footer">
@@ -498,61 +416,23 @@ function TemplateEditor({ template, hour12, onSave, onDelete, onClose }: {
 }): JSX.Element {
   useEscClose(onClose);
   const isNew = template === null;
-  const [title, setTitle] = useState(template?.title ?? "");
-  const [activity, setActivity] = useState(template?.activityId ?? "");
-  const [head, setHead] = useState<string | undefined>(template?.headId);
-  const [timing, setTiming] = useState<TimingType>(template?.timing ?? "budgeted");
+  const sp = useTaskSpec(template ?? {});
   const [weekdays, setWeekdays] = useState<number[]>(template?.weekdays ?? [1, 2, 3, 4, 5]);
-  const [budgetStr, setBudgetStr] = useState(template?.budget !== undefined ? fmtDurUnits(template.budget) : "");
-  const [startStr, setStartStr] = useState(template?.anchorStartTod !== undefined ? fmtTod(template.anchorStartTod, hour12) : "");
-  const [endStr, setEndStr] = useState(template?.anchorEndTod !== undefined ? fmtTod(template.anchorEndTod, hour12) : "");
   const [err, setErr] = useState<string | null>(null);
-
-  const todOf = (s: string): number | undefined => { const t = parseTimeOfDay(s); return t ? t.hour * 60 + t.min : undefined; };
-  const needStart = timing === "fixed" || timing === "semi-head";
-  const needEnd = timing === "fixed" || timing === "semi-tail";
-  const needBudget = timing === "semi-head" || timing === "semi-tail" || timing === "budgeted";
   const toggleDay = (d: number): void => setWeekdays((w) => (w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort()));
 
   const save = (): void => {
-    if (!title.trim()) return setErr("Give it a title.");
-    if (!activity.trim() || !head) return setErr("Pick a sub-head.");
     if (weekdays.length === 0) return setErr("Pick at least one weekday.");
-    const start = needStart ? todOf(startStr) : undefined;
-    const end = needEnd ? todOf(endStr) : undefined;
-    if (needStart && start === undefined) return setErr("Enter a valid start time.");
-    if (needEnd && end === undefined) return setErr("Enter a valid end time.");
-    let budget = needBudget ? parseCasualDuration(budgetStr) : undefined;
-    if (timing === "fixed" && start !== undefined && end !== undefined) budget = Math.max(1, end - start);
-    if (needBudget && (budget === undefined || budget <= 0)) return setErr("Enter a valid budget.");
-    const t: WeekTemplate = {
+    const r = sp.resolve();
+    if ("error" in r) return setErr(r.error);
+    onSave({
       id: template?.id ?? `tpl-${Date.now().toString(36)}`,
       rank: template?.rank ?? "m",
-      title: title.trim(),
-      headId: head,
-      activityId: activity.trim(),
-      timing,
       tier: template?.tier ?? "normal",
-      ommf: template?.ommf ?? false,
-      slideable: timing !== "fixed",
-      breakable: timing === "budgeted",
       weekdays: weekdays.slice().sort(),
-      ...(budget !== undefined ? { budget } : {}),
-      ...(start !== undefined ? { anchorStartTod: start } : {}),
-      ...(end !== undefined ? { anchorEndTod: end } : {}),
-    };
-    onSave(t);
+      ...r.spec,
+    });
   };
-
-  const timeField = (label: string, value: string, set: (v: string) => void): JSX.Element => (
-    <div className="field">
-      <label>{label}</label>
-      <input value={value} className="num" aria-label={label}
-        onChange={(e) => set(e.target.value)}
-        onBlur={() => { const t = todOf(value); if (t !== undefined) set(fmtTod(t, hour12)); }}
-        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); const t = todOf(value); if (t !== undefined) set(fmtTod(t, hour12)); } }} />
-    </div>
-  );
 
   return (
     <div className="drawer-overlay">
@@ -562,37 +442,7 @@ function TemplateEditor({ template, hour12, onSave, onDelete, onClose }: {
           <button className="drawer-close" aria-label="Close" onClick={onClose}>&times;</button>
         </div>
         <div className="drawer-body">
-          <div className="field">
-            <label>Title <span className="req-dot" aria-label="required">•</span></label>
-            <div className="clearable-field">
-              <input value={title} aria-label="Template title" onChange={(e) => setTitle(e.target.value)} placeholder="e.g. Standup, Gym" autoFocus />
-            </div>
-          </div>
-          <div className="field">
-            <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-            <SubheadField activity={activity} onActivity={setActivity} onHead={setHead} title={title} />
-          </div>
-          <div className="field">
-            <label>Timing</label>
-            <div className="type-chips" role="radiogroup" aria-label="Timing">
-              {TIMINGS.map((ty) => (
-                <button key={ty} type="button" className={`type-chip${ty === timing ? " active" : ""}`} data-status={ty} onClick={() => setTiming(ty)}>
-                  {TIMING_LABEL[ty]}
-                </button>
-              ))}
-            </div>
-          </div>
-          {needStart && timeField("Start (time of day)", startStr, setStartStr)}
-          {needEnd && timeField("End (time of day)", endStr, setEndStr)}
-          {needBudget && (
-            <div className="field">
-              <label>Budget</label>
-              <input value={budgetStr} className="num" aria-label="Budget"
-                onChange={(e) => setBudgetStr(e.target.value)}
-                onBlur={() => { const b = parseCasualDuration(budgetStr); if (b !== undefined) setBudgetStr(fmtDurUnits(b)); }}
-                placeholder="e.g. 1h 30m" />
-            </div>
-          )}
+          <TaskSpecFieldsView sp={sp} hour12={hour12} titlePlaceholder="e.g. Standup, Gym" />
           <div className="field">
             <label>Repeats on <span className="req-dot" aria-label="required">•</span></label>
             <div className="type-chips" role="group" aria-label="Weekdays">

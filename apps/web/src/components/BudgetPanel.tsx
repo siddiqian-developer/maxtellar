@@ -538,13 +538,20 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
 /** Smart duration input (§7.0.2 parity): casual parse, reformat on blur/Enter.
  * `allowEmpty` maps a cleared field to null (remove the value). Exported —
  * every duration field app-wide must ride this (smart-input parity law). */
-export function DurInput({ value, onCommit, disabled, ariaLabel, placeholder, allowEmpty }: {
+/** The shared smart DURATION field (§7.0.2 smart-input + §7.0.5 symmetry):
+ * casual parse → snap → reformat on blur, PLUS the ±5-min stepper every
+ * time/duration input carries (ruled 2026-07-16 — steppers on every surface,
+ * not just the drawer). Reuses the `.time-stepper` chrome (tab-skipped chevrons).
+ * `step` is the nudge granularity (default 5); `min` floors the stepped value. */
+export function DurInput({ value, onCommit, disabled, ariaLabel, placeholder, allowEmpty, step = 5, min = 0 }: {
   value: number | undefined;
   onCommit: (minutes: number | null) => void;
   disabled?: boolean;
   ariaLabel: string;
   placeholder?: string;
   allowEmpty?: boolean;
+  step?: number;
+  min?: number;
 }): JSX.Element {
   const [str, setStr] = useState(value !== undefined ? fmtDurUnits(value) : "");
   const [prev, setPrev] = useState(value);
@@ -563,11 +570,24 @@ export function DurInput({ value, onCommit, disabled, ariaLabel, placeholder, al
     setStr(fmtDurUnits(m));
     onCommit(m);
   };
+  const nudge = (dir: 1 | -1): void => {
+    if (disabled) return;
+    const base = parseCasualDuration(str.trim()) ?? value ?? 0;
+    const next = Math.max(min, base + dir * step);
+    setStr(fmtDurUnits(next));
+    onCommit(next);
+  };
   return (
-    <input className="num bp-input" value={str} aria-label={ariaLabel} placeholder={placeholder ?? "e.g. 1h 30m"} disabled={disabled}
-      onChange={(e) => setStr(e.target.value)}
-      onBlur={commit}
-      onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
+    <div className="time-stepper">
+      <input className="num bp-input" value={str} aria-label={ariaLabel} placeholder={placeholder ?? "e.g. 1h 30m"} disabled={disabled}
+        onChange={(e) => setStr(e.target.value)}
+        onBlur={commit}
+        onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commit(); } }} />
+      <div className="time-stepper-btns">
+        <button type="button" tabIndex={-1} aria-label={`Increase ${ariaLabel}`} disabled={disabled} onClick={() => nudge(1)}>▴</button>
+        <button type="button" tabIndex={-1} aria-label={`Decrease ${ariaLabel}`} disabled={disabled} onClick={() => nudge(-1)}>▾</button>
+      </div>
+    </div>
   );
 }
 

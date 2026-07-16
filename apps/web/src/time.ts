@@ -22,6 +22,14 @@ export function fmtClock(d: Date, hour12: boolean): string {
   return `${pad(h12)}:${pad(d.getMinutes())} ${h24 >= 12 ? "PM" : "AM"}`;
 }
 
+/** Minutes-into-day (0..1439) → clock string per the 12/24h setting. Shared by
+ *  every time-of-day input (WeekView anchors, the shared TodField). */
+export function fmtTod(tod: number, hour12: boolean): string {
+  const d = toDate(0);
+  d.setHours(0, 0, 0, 0);
+  return fmtClock(new Date(d.getTime() + (((tod % 1440) + 1440) % 1440) * 60000), hour12);
+}
+
 /** Absolute time: bare HH:mm (or 12h+am/pm); date labels only for non-current
  *  calendar dates ("yesterday"/"tomorrow"/exact) — never a label for today. */
 export function fmtAbs(m: Min, opts: { now?: Min; hour12?: boolean } = {}): string {

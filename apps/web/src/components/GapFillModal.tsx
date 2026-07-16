@@ -12,7 +12,7 @@
  */
 import { useMemo, useState } from "react";
 import type { Event, HistoryEntry } from "@maxtellar/core";
-import { RECHARGE, WASTED_TIME } from "@maxtellar/core";
+import { FOOD, RECHARGE, WASTED_TIME } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
 import { fmtDayTime, fmtDur } from "../time";
@@ -92,6 +92,7 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
             <div className="type-chips" role="group" aria-label="Quick fill">
               <button type="button" className="type-chip" data-status="semi-tail" onClick={() => book("Sleep", RECHARGE, "Sleep", "sleep")}>Sleep</button>
               <button type="button" className="type-chip" data-status="semi-tail" onClick={() => book("Nap", RECHARGE, "Nap", "nap")}>Nap</button>
+              <button type="button" className="type-chip" data-status="semi-tail" onClick={() => book("Food", FOOD, "Food")}>Food</button>
               <button type="button" className="type-chip" data-status="fixed" onClick={() => book("Wasted", WASTED_TIME, "")}>Wasted</button>
             </div>
           </div>
