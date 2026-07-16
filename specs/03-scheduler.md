@@ -212,6 +212,23 @@ displacement tiers: **Normal < Protected (fixed) < Inviolable (Sleep, Off-period
 break only the ties the timing-type laws don't already decide. (1–100 rejected: double-governs
 and invites per-task micro-decisions.)
 
+**Reorder is a LAYERED override (ruled 2026-07-16).** Priority rank and the time projection are
+two layers. At rest the pipeline and timeline render in **time order** (§6). A user **drag or
+▲▼ arrow** is an explicit **priority override**: it computes the between-key (`RERANK`) and the
+plan re-settles — then **time order re-activates** over the new rank. So a reorder does not pin a
+card to where it was dropped; it changes the *rank layer*, the scheduler re-projects, and the
+view re-sorts by the new placement. Because §3.4's signal hierarchy puts an **explicit time
+coordinate above list position**, reordering only moves tasks that have no time anchor of their
+own (a fixed task keeps its clock); the reorder decides the fill order among the free tasks.
+- **Ripple (forward-only).** A valid reorder re-runs the settle-pass — **the timings of the tasks
+  BELOW the moved one change** (they slide later/earlier as the new fill order dictates), exactly
+  the §3.13 downward ripple. Maximum reuse: reorder is `RERANK` → the **same** settle/placement
+  path, never a bespoke reordering engine.
+- **Valid stays, invalid snaps back (universal snap-notify, §7.0.2).** A reorder that can't
+  produce a legal rank change — dropping above the running task (always #1), onto history/started
+  work, or a no-op — **snaps back** to the prior order with a notify explaining why. A valid drop
+  commits and the ripple runs. Same accept-then-never-scold discipline as every other input.
+
 ### 3.12 Editing/injection architecture — THE FORK — E5
 The legacy died from live-ticking (gliding) and editing mutating one list concurrently.
 **Fix = fork:**

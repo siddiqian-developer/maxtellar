@@ -361,6 +361,19 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 /* ---------- pipeline ---------- */
 .pipeline { overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 8px; }
 .pipeline h2 { font-size: 14px; color: var(--ink-soft); margin: 4px 0; }
+/* §3.11/§6 layered reorder: drag handle + ▲▼ priority arrows beside a card. */
+.reorderable-row { display: flex; align-items: stretch; gap: 6px; }
+.reorderable-row > .card { flex: 1; min-width: 0; }
+.reorder-controls { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; }
+.reorder-controls button {
+  background: none; border: none; color: var(--ink-faint); cursor: pointer;
+  padding: 0; line-height: 1; font-size: 12px; width: 18px; height: 16px;
+  display: flex; align-items: center; justify-content: center; border-radius: 4px;
+}
+.reorder-controls .drag-handle { cursor: grab; font-size: 13px; letter-spacing: -2px; }
+.reorder-controls .drag-handle:active { cursor: grabbing; }
+.reorder-controls button:hover:not(:disabled) { color: var(--ink); background: var(--paper-raised); }
+.reorder-controls button:disabled { opacity: 0.3; cursor: default; }
 .card {
   background: var(--paper-raised);
   border: 1px solid var(--hairline);

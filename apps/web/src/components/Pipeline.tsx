@@ -11,14 +11,48 @@
  * All read-only — editing stays in the drawer/fork, never inline on the card.
  */
 
+import type { CSSProperties, ReactNode } from "react";
 import type { Dur, Event, Min, State, TimingType, UnstartedTask } from "@maxtellar/core";
 import { pomodoroView, runningView } from "@maxtellar/core";
+import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import { fmtAbs, fmtDur } from "../time";
 import { useSettings } from "../settings";
 
 interface Props {
   state: State;
   dispatch: (e: Event) => void;
+}
+
+/** §3.11/§6 layered reorder: a sortable wrapper giving each top-level unstarted
+ * card a drag handle (dnd-kit) + ▲▼ priority arrows. Dragging/tapping is an
+ * explicit priority override → RERANK → resettle ripple → time-order reactivates
+ * (so the card is NOT pinned where dropped; it re-sorts by its new placement). */
+function SortableCard({ id, canRaise, canLower, onRaise, onLower, children }: {
+  id: string;
+  canRaise: boolean;
+  canLower: boolean;
+  onRaise: () => void;
+  onLower: () => void;
+  children: ReactNode;
+}): JSX.Element {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id });
+  const style: CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.65 : 1,
+  };
+  return (
+    <div ref={setNodeRef} style={style} className="reorderable-row">
+      <div className="reorder-controls">
+        <button type="button" className="drag-handle" {...attributes} {...listeners} aria-label="Drag to reprioritize" data-tip="Drag to reprioritize">⋮⋮</button>
+        <button type="button" className="reorder-arrow" disabled={!canRaise} onClick={onRaise} aria-label="Raise priority" data-tip="Raise priority">▲</button>
+        <button type="button" className="reorder-arrow" disabled={!canLower} onClick={onLower} aria-label="Lower priority" data-tip="Lower priority">▼</button>
+      </div>
+      {children}
+    </div>
+  );
 }
 
 /** Padlock on a non-slideable card (2026-07-13): neutral, text-sized, sits
@@ -204,6 +238,44 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
   })) {
     walk(item, 0);
   }
+
+  // §3.11/§6 layered reorder. Reorderable units = TOP-LEVEL standalone unstarted
+  // cards (not the running card, not gaps, not composed brackets or their nested
+  // leaves — composition reordering is a later slice). Arrows step one rank in
+  // RANK order; drag drops set the rank to the drop's visual intent. Both →
+  // RERANK → resettle ripple (§3.13), then the list re-sorts by TIME.
+  const byRank = (a: UnstartedTask, b: UnstartedTask): number => (a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : 0);
+  const reorderables = state.plan.filter(
+    (i): i is UnstartedTask => i.kind === "task" && !i.parentId && !isParentId(i.id),
+  );
+  const rankOrder = [...reorderables].sort(byRank);
+  const rankPos = new Map(rankOrder.map((t, i) => [t.id, i] as const));
+  // Display (time) order of the reorderable ids — the SortableContext order.
+  const reorderIds = nodes.filter((n) => n.kind === "card" && n.depth === 0).map((n) => n.item.id);
+  const raise = (taskId: string): void => {
+    const i = rankPos.get(taskId);
+    if (i === undefined || i <= 0) return;
+    dispatch({ type: "RERANK", taskId, afterId: i >= 2 ? rankOrder[i - 2]!.id : null });
+  };
+  const lower = (taskId: string): void => {
+    const i = rankPos.get(taskId);
+    if (i === undefined || i >= rankOrder.length - 1) return;
+    dispatch({ type: "RERANK", taskId, afterId: rankOrder[i + 1]!.id });
+  };
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+  const onDragEnd = (e: DragEndEvent): void => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const oldIndex = reorderIds.indexOf(active.id as string);
+    const newIndex = reorderIds.indexOf(over.id as string);
+    if (oldIndex < 0 || newIndex < 0) return;
+    const moved = arrayMove(reorderIds, oldIndex, newIndex);
+    const pos = moved.indexOf(active.id as string);
+    dispatch({ type: "RERANK", taskId: active.id as string, afterId: pos > 0 ? moved[pos - 1]! : null });
+  };
 
   /** One unstarted-task card (leaf or standalone). Indented by `depth`. EVERY
    * card shows the pipeline #idx; a leaf ALSO shows a "Subtask # N of <Parent>"
@@ -420,16 +492,32 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
       <h2>Up next</h2>
       {/* Cards follow TIME order (first placed part), mirroring the timeline.
           §2.7 (G24): a parent renders as a bracket header with its leaves
-          nested one level deeper; only leaves/standalones carry an index. */}
-      {nodes.map((n) =>
-        n.kind === "gap" ? (
-          <div key={n.item.id} className="gap-spacer" title={`buffer ${n.item.budget}m`} />
-        ) : n.kind === "bracket" ? (
-          renderBracket(n.item, n.depth)
-        ) : (
-          renderCard(n.item, n.depth, n.idx, n.ordinal, n.parentTitle)
-        ),
-      )}
+          nested one level deeper; only leaves/standalones carry an index.
+          §3.11/§6: top-level standalone cards are drag+arrow reorderable. */}
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <SortableContext items={reorderIds} strategy={verticalListSortingStrategy}>
+          {nodes.map((n) =>
+            n.kind === "gap" ? (
+              <div key={n.item.id} className="gap-spacer" title={`buffer ${n.item.budget}m`} />
+            ) : n.kind === "bracket" ? (
+              renderBracket(n.item, n.depth)
+            ) : n.depth === 0 ? (
+              <SortableCard
+                key={n.item.id}
+                id={n.item.id}
+                canRaise={(rankPos.get(n.item.id) ?? 0) > 0}
+                canLower={(rankPos.get(n.item.id) ?? 0) < rankOrder.length - 1}
+                onRaise={() => raise(n.item.id)}
+                onLower={() => lower(n.item.id)}
+              >
+                {renderCard(n.item, n.depth, n.idx, n.ordinal, n.parentTitle)}
+              </SortableCard>
+            ) : (
+              renderCard(n.item, n.depth, n.idx, n.ordinal, n.parentTitle)
+            ),
+          )}
+        </SortableContext>
+      </DndContext>
     </div>
   );
 }

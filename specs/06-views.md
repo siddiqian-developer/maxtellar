@@ -136,9 +136,19 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
      splits (`N parts`) and squeeze (`squeezed Nm`).
    Explicitly **not** on the card (rejected from the reference): inline field editing /
    steppers (drawer's job), calendar-provenance tags (no external calendar in MVP),
-   re-open/refine-timing corrections, drag-to-reorder, twin spent/remaining split cards
+   re-open/refine-timing corrections, twin spent/remaining split cards
    (a pause = history entry + one remainder card), done/locked states (pipeline never
    shows finished work).
+   **Reorder-to-reprioritize IS on the card now (ruled 2026-07-16, supersedes the earlier
+   "drag-to-reorder rejected").** Every unstarted card carries a **▲▼ priority pair** (raise/
+   lower one rank) AND a **drag handle** (dnd-kit) for coarse reordering; both dispatch `RERANK`
+   (§3.11) and the plan re-settles with the downward **ripple**. This is the **layered** model
+   (§3.11): the reorder overrides time-order for that action, then time order re-activates over
+   the new rank — so a dropped card is not pinned in place, it re-sorts by its new placement. An
+   invalid reorder (above the running card, onto started work) **snaps back with a notify**. The
+   running card (#1) is never reorderable. The **timeline** blocks carry the same pointer-drag
+   reorder (§6.1). Built on **dnd-kit** (§7.0.4 buy-first — the specced DnD lib, healthy on a live
+   check 2026-07-16).
    **The split is user-resizable (2026-07-11):** a 6px drag handle between the columns
    (hairline at rest, accent-soft on hover/drag) sets the pipeline width — clamped
    240px…60% of the window, persisted locally (`pipelineWidth`), default 340px. The new-task
