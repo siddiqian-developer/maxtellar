@@ -11,6 +11,7 @@ parallel copy. Adding a genuinely new shared primitive? Add a row here so the ne
 | `DurInput` | `./BudgetPanel` | Smart **duration** input (casual parse → snap → reformat on blur, §7.0.2) | smart-input parity law |
 | `DatePicker` + smart date/time field | `./DatePicker` | Smart **date/time** input + direction-aware 📅 picker (§7.0.5) | §7.0.5 symmetry |
 | `SubheadField` | `./SubheadField` | Sub-head input with title→sub-head ML suggestion (§7.0.1) | §7.0.5 symmetry |
+| `parseTitleGrammar` / `resolveHash` | `../titleGrammar` | Title **shorthand** parser (`#head`/`@time`/`15:50-16:20`/`1h30`) — recognizes + strips tokens, delegates time/dur values to `casualTime` (never re-parses), §06 | smart-input parity law |
 | `SnapToast` / `useSnapToast` | `../SnapToast` | The one snap-notify toast (§7.0.2) — transient status line for a snap/meaning-change | `snap-toast-guard.test.ts` |
 | `useHeads` | `../heads` | Head + sub-head registry (built-ins, defaults, user additions) | — |
 

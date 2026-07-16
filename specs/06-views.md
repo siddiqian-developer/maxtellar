@@ -208,7 +208,31 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
 
 **Task entry:** FAB → drawer (Title / Sub-head / Start / End / Budget), live type-morph
 chip, inline physics-snapping, `[Start now ⚡]`. Title accepts deterministic shorthand tokens
-("1h30", "@18:00", "15:50-16:20", "#head") parsed by a plain grammar.
+("1h30", "@18:00", "15:50-16:20", "#head") parsed by a plain grammar (`titleGrammar.ts`).
+**Title shorthand grammar (rulings, grilled 2026-07-16).** The grammar is **purely
+syntactic** — it recognizes and strips tokens, then hands the raw time/duration substrings to
+the *same* casual parsers a typed field uses; it never re-implements time/duration parsing.
+Recognition itself delegates to `casualTime` (`parseTimeOfDay`/`parseCasualDuration`), so a
+token is only stripped once those confirm it really is a time/duration — ordinary title text
+(`e-mail`, a bare `12`, a plain `18:00` with no `@`) is left in place.
+- **Fires on Title commit** (blur/Enter), never per-keystroke (it must not fight the live
+  title→sub-head suggester mid-type). Recognized tokens are **stripped from the title in
+  place** — `Write report #work @18:00 1h30` → title `Write report`, whitespace collapsed.
+- **Token → field map:** `@18:00`/`@6pm` → **start**; a `15:50-16:20` / `9am-11am` range →
+  **start AND end** (a scheduled window); a unit-bearing `1h30`/`45m`/`2h`/`1d` → **budget**
+  (a bare number is never a duration). Extracted times/duration are then run through the exact
+  **§3.6 derivation + universal snap-notify pipeline** (`deriveDayAware`) — so forward-snap,
+  overnight wrap, the tomorrow-offer chip, and the MIN_FRAGMENT floor all apply unchanged.
+- **`#token` smart-resolves** against the head/sub-head registry: a confident **existing
+  sub-head** wins (exact case-insensitive, else the tightest `fuzzy.ts` subsequence hit) and
+  its head auto-derives; otherwise it's a **new sub-head** named as typed — and if the token
+  also names an existing **head**, that head is seeded so the new sub-head lands under it.
+  Single word only (`[A-Za-z0-9][\w-]*`); multi-word sub-heads stay in the dropdown. First
+  `#token` wins; every `#token` is stripped.
+- Grammar-filled sub-head/head is marked **user-sourced** (`subheadSource:"user"`) so ML never
+  overwrites it (§7.0.1). A token **wins over an already-filled field** it names (typing it is
+  an explicit act); fields it doesn't name are untouched. The whole grammar is **suppressed
+  under an active preset** (Sleep/Nap/Food) — the preset's locked bundle owns those fields.
 **AI/ML policy (amended 2026-07-10, supersedes "No AI/LLM anywhere"):** cloud LLM/AI only in
 very late stages and only where it provides real value, always with local fallbacks — even
 cloud-exclusive features must never block the app's regular functionality. **On-device ML

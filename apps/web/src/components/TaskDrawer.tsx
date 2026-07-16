@@ -14,6 +14,7 @@ import { useHeads } from "../heads";
 import { useSettings, type PresetId } from "../settings";
 import { PRESETS, presetById, matchPreset } from "../presets";
 import { parseCasualTime, parseCasualDuration } from "../casualTime";
+import { parseTitleGrammar, resolveHash } from "../titleGrammar";
 import { fmtDayTime, fmtDurUnits } from "../time";
 import { DatePicker } from "./DatePicker";
 import { DurInput } from "./BudgetPanel";
@@ -404,6 +405,59 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     commitTrio(deriveDayAware(changed, { startMin: s, endMin: e, budgetMin: b }, explicitDay, now, minFragment, fmtT));
   };
 
+  /** §06 title shorthand: on Title commit, pull `#head` / `@time` / `15:50-16:20`
+   * / `1h30` tokens out of the title, strip them, and pre-fill the fields —
+   * delegating time/duration VALUES to the same casualTime + §3.6 pipeline a
+   * typed field uses (so snap-notify and the tomorrow-offer apply unchanged).
+   * Grammar-filled sub-head/head is user-sourced so ML never overwrites it
+   * (§7.0.1). Suppressed under an active preset (its locked bundle owns those
+   * fields). Token wins over an already-filled field it names. */
+  const commitTitle = (): void => {
+    if (activePreset) return;
+    const t = parseTitleGrammar(title);
+    if (t.hash === undefined && t.start === undefined && t.end === undefined && t.budget === undefined) return;
+
+    if (t.title !== title) setTitle(t.title);
+
+    if (t.hash !== undefined) {
+      const r = resolveHash(t.hash, plannableActivities, plannableHeads);
+      if (r) {
+        setActivity(r.subhead);
+        setSubheadSource("user"); // grammar-filled = user intent, protected from ML (§7.0.1)
+        if (!r.matchedExisting && r.head) { setNewHeadChoice(r.head); setNewHeadTouched(true); }
+      }
+    }
+
+    if (t.start !== undefined || t.end !== undefined || t.budget !== undefined) {
+      let s = startMin;
+      let e = endMin;
+      let b = budgetMin;
+      const explicitDay = { start: false, end: false };
+      let ok = true;
+      if (t.start !== undefined) {
+        const p = parseCasualTime(t.start, now);
+        if (p.value === undefined) ok = false;
+        else { s = p.value; explicitDay.start = p.explicitDay; }
+      }
+      if (t.end !== undefined) {
+        const p = parseCasualTime(t.end, now);
+        if (p.value === undefined) ok = false;
+        else { e = p.value; explicitDay.end = p.explicitDay; }
+      }
+      if (t.budget !== undefined) {
+        const p = parseCasualDuration(t.budget);
+        if (p === undefined) ok = false;
+        else b = p;
+      }
+      if (ok) {
+        // Authoritative field mirrors typing order: an end anchor (or range)
+        // derives budget/wrap; else a start anchor; else the bare duration.
+        const changed = t.end !== undefined ? "end" : t.start !== undefined ? "start" : "budget";
+        commitTrio(deriveDayAware(changed, { startMin: s, endMin: e, budgetMin: b }, explicitDay, now, minFragment, fmtT));
+      }
+    }
+  };
+
   /** Tapping a chip pre-fills its fields (the app never says no — SPEC VI). */
   const shapeTo = (t: TimingType): void => {
     setError(null);
@@ -732,6 +786,8 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
                 className={titleLocked ? "locked" : undefined}
                 data-tip={titleLocked ? "Locked by the preset — tap the pill to unlock" : undefined}
                 onChange={(e) => setTitle(e.target.value)}
+                onBlur={commitTitle}
+                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); commitTitle(); } }}
                 placeholder="What are you doing?"
               />
               {title && !titleLocked && (
