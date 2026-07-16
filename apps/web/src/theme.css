@@ -1179,6 +1179,8 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .ledger-table .num-col { text-align: right; }
 .ledger-table .totals td { font-weight: 600; border-top: 1px solid var(--ink-soft); }
+/* R5: the still-forming sleep-cycle day column (the "now" header). */
+.ledger-table th.day-forming { color: var(--accent-strong); }
 
 /* ---------- heads & sub-heads config screen (full page, not a modal) ---------- */
 .config-screen {

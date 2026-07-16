@@ -3,13 +3,48 @@
  * Today: hero Accounted / Wasted / Lost (elapsed wall = accounted + lost) +
  * per-head achieved table. This week: per-head × last-7-days achieved grid.
  * Time-blind: durations only, never start/end times. Target/Remaining columns
- * arrive with quotas (§5.1); days are calendar days until §4 sleep-cycles.
+ * arrive with quotas (§5.1).
+ *
+ * DAYS ARE SLEEP-CYCLE DAYS (§4, R5 2026-07-16): once the first SOD seals a
+ * DayRecord, "Today" is the FORMING day (last DayRecord.end → now) and "This
+ * week" is the last 7 sealed cycles + the forming one — a cycle can run 30–100h,
+ * so windows are the real [start,end) boundaries, never clipped to 24h. Before
+ * any SOD (no DayRecords) it falls back to CALENDAR days so the screen still
+ * reads on a fresh install.
  */
 
 import type { Dur, Min, State } from "@maxtellar/core";
 import { LOST_HOURS, SLEEP_HEAD, budgetEntries, trimDeficit, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
+
+/** One day column: its window + a label + whether it is the still-forming day. */
+export interface DayWin {
+  start: Min;
+  end: Min;
+  /** local-midnight stamp used for the weekday label (reportDate for a sealed
+   * cycle; the calendar day in fallback). */
+  label: Min;
+  forming: boolean;
+}
+
+/** The ordered day windows for analytics (oldest → newest). Sleep-cycle days
+ * (sealed DayRecords + the forming day) once any SOD has run; else calendar
+ * days as a pre-SOD fallback. Always the most recent 7. */
+export function analyticsDays(state: State): DayWin[] {
+  const DAY = 24 * 60;
+  if (state.days.length === 0) {
+    const today = dayStart(state.now);
+    return Array.from({ length: 7 }, (_, i) => {
+      const ws = today - (6 - i) * DAY;
+      return { start: ws, end: ws + DAY, label: ws, forming: false };
+    });
+  }
+  const sealed: DayWin[] = state.days.map((d) => ({ start: d.start, end: d.end, label: d.reportDate, forming: false }));
+  const formingStart = state.days[state.days.length - 1]!.end;
+  const forming: DayWin = { start: formingStart, end: state.now, label: dayStart(state.now), forming: true };
+  return [...sealed, forming].slice(-7);
+}
 
 interface Props {
   state: State;
@@ -54,9 +89,10 @@ function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, D
  * plus weekly-quota fulfillment with the §5.1 type semantics: at-least "to go",
  * at-most warn-on-over (track, never block), exact both ways. Redistributed
  * shares (the SOD ledger) are shown so a moved share is never a silent change. */
-function BudgetSection({ state, todayStart, todayByHead }: {
+function BudgetSection({ state, todayStart, todayEnd, todayByHead }: {
   state: State;
   todayStart: Min;
+  todayEnd: Min;
   todayByHead: Map<string, Dur>;
 }): JSX.Element | null {
   const week = state.week;
@@ -68,7 +104,7 @@ function BudgetSection({ state, todayStart, todayByHead }: {
 
   const sleepToday = state.history
     .filter((h) => h.kind === "occupancy" && h.sleepKind === "sleep")
-    .reduce((a, h) => a + overlap(h.start, h.end, todayStart, todayStart + DAY), 0);
+    .reduce((a, h) => a + overlap(h.start, h.end, todayStart, todayEnd), 0);
   const achievedFor = (headId: string): Dur => (headId === SLEEP_HEAD ? sleepToday : todayByHead.get(headId) ?? 0);
 
   // Weekly quotas: achieved since the week started (or the last 7 days when no
@@ -172,24 +208,28 @@ function BudgetSection({ state, todayStart, todayByHead }: {
 export function AnalyticsScreen({ state, onBack }: Props): JSX.Element {
   useEscClose(onBack);
 
-  const todayStart = dayStart(state.now);
-  const wall = state.now - todayStart; // elapsed wall today
+  // "Today" = the FORMING sleep-cycle day (last DayRecord.end → now); the last
+  // window of analyticsDays is always the forming/most-recent day.
+  const days = analyticsDays(state);
+  const today = days[days.length - 1]!;
+  const todayStart = today.start;
+  const wall = today.end - today.start; // elapsed wall this cycle
 
-  const todayByHead = achievedByHead(state, todayStart, todayStart + DAY);
+  const todayByHead = achievedByHead(state, today.start, today.end);
   const accounted = [...todayByHead.values()].reduce((a, b) => a + b, 0);
   const lost = Math.max(0, wall - accounted); // zero-sum: wall = accounted + lost
 
   // Wasted is a channel within accounted work, reported alongside (§2.6).
   const wasted =
     state.history
-      .filter((h) => h.kind === "occupancy" && h.start >= todayStart)
+      .filter((h) => h.kind === "occupancy" && h.end > today.start && h.start < today.end)
       .reduce((a, h) => a + h.channels.wasted, 0) + (state.running?.channels.wasted ?? 0);
 
-  // This week: today and the 6 days before it, oldest → newest.
-  const weekDays: Min[] = Array.from({ length: 7 }, (_, i) => todayStart - (6 - i) * DAY);
-  const weekByDay = weekDays.map((ws) => achievedByHead(state, ws, ws + DAY));
+  // This week: the sleep-cycle days (sealed + forming), oldest → newest.
+  const weekByDay = days.map((d) => achievedByHead(state, d.start, d.end));
   const weekHeads = [...new Set(weekByDay.flatMap((m) => [...m.keys()]))].sort();
-  const dayLabel = (ws: Min): string => toDate(ws).toLocaleDateString(undefined, { weekday: "short" });
+  const dayLabel = (d: DayWin): string =>
+    d.forming ? "now" : toDate(d.label).toLocaleDateString(undefined, { weekday: "short" });
 
   return (
     <div className="config-screen">
@@ -246,7 +286,7 @@ export function AnalyticsScreen({ state, onBack }: Props): JSX.Element {
           )}
         </div>
 
-        <BudgetSection state={state} todayStart={todayStart} todayByHead={todayByHead} />
+        <BudgetSection state={state} todayStart={todayStart} todayEnd={today.end} todayByHead={todayByHead} />
 
         <div className="config-section">
           <h3>This week</h3>
@@ -258,8 +298,8 @@ export function AnalyticsScreen({ state, onBack }: Props): JSX.Element {
                 <thead>
                   <tr>
                     <th>Head</th>
-                    {weekDays.map((ws) => (
-                      <th key={ws} className="num-col">{dayLabel(ws)}</th>
+                    {days.map((d, i) => (
+                      <th key={i} className={`num-col${d.forming ? " day-forming" : ""}`}>{dayLabel(d)}</th>
                     ))}
                     <th className="num-col">Total</th>
                   </tr>

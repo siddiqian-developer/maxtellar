@@ -170,7 +170,11 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
      the accounted total. **This week** — per-head × last-7-days grid of achieved minutes
      with row/column totals. Durations only (time-blind), `fmtDur`. **Target/Remaining
      columns arrive with quotas (§5.1)** — omitted until quotas exist, not shown empty.
-     Days are calendar days for now; sleep-cycle days land with the §4 ceremonies.
+     **Days are SLEEP-CYCLE days (R5, 2026-07-16):** once the first SOD seals a `DayRecord`,
+     **Today** is the forming day (last `DayRecord.end` → `now`) and **This week** is the last 7
+     sealed cycles + the forming one, each windowed on its real `[start,end)` (a cycle may run
+     30–100 h, never clipped to 24 h). The forming column is marked "now". Before any SOD (no
+     `DayRecord`s) it falls back to **calendar days** so a fresh install still reads.
    - **Sheet mapping (reference):** sheet "heads" (Main Work, Self-Management, Health, Job,
      Core Work, Self-Learning, Kitchen Work, Sleep, Rest, Meditation, …, Time-Wasted subtree)
      → app **Heads**; sheet per-day columns → app **days (sleep-cycles)**; sheet Budgeting
