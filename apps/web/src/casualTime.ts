@@ -425,3 +425,80 @@ export function parseCasualDuration(input: string): Dur | undefined {
 export function fallbackParse(_input: string, _now: Min): CasualTime | null {
   return null;
 }
+
+/* ---------------------------------------------------------------------------
+ * §4.4 template END anchor — "next day, 11am"
+ * ------------------------------------------------------------------------- */
+
+/**
+ * Fold every two-word spelling of "next day" ("next day", "next-day", "nxt day",
+ * "next  days") into the single token `nextday`, so one token test then covers
+ * every variation instead of a brittle alternation.
+ */
+const NEXT_DAY_PHRASE = /\bne?xt?\s*-?\s*da?ys?\b/gi;
+/** The numeric spellings, which also split into two tokens: "+1 day", "1 day". */
+const PLUS_ONE_DAY_PHRASE = /\+?\s*\b1\s*-?\s*da?ys?\b/gi;
+
+/**
+ * Is this token a way of saying "the day after the one this fires on"?
+ *
+ * Reuses `matchDayWord` — the SAME fuzzy day matcher the casual date parser uses
+ * (§7.0.6: one definition, never a second list) — so every "tomorrow" variation
+ * it already tolerates, including genuine misspellings ("tomorow", "tommorow",
+ * "tmorow"), is understood here for free. On top of it: the `nextday` forms and
+ * the numeric/overnight shorthands.
+ */
+function isNextDayToken(token: string): boolean {
+  const w = token.toLowerCase().replace(/[.,;:!]+$/, "");
+  if (!w) return false;
+  if (matchDayWord(w) === 1) return true; // tomorrow & friends, fuzzy included
+  if (["nextday", "nd", "overnight", "onight", "nite"].includes(w)) return true;
+  if (/^\+?\s*1\s*d(?:ay)?s?$/.test(w)) return true; // +1d, 1d, +1day, 1days
+  if (/^\+\s*1$/.test(w)) return true; // +1
+  // fuzzy for typed-fast spellings of the folded token ("nextady", "nexday")
+  if (w.length >= 5 && editDistance(w, "nextday") <= 2) return true;
+  return false;
+}
+
+/** Is this token an explicit "same day"? ("today", "same day" → folded below.) */
+function isSameDayToken(token: string): boolean {
+  const w = token.toLowerCase().replace(/[.,;:!]+$/, "");
+  return w === "sameday" || matchDayWord(w) === 0;
+}
+
+/**
+ * §4.4/§7.0.2 smart input for a template's END anchor: a time of day plus an
+ * optional day qualifier saying which day it lands on. A template has no date
+ * (§7.0.5) — it repeats — so "tomorrow" here means "the next day", not a
+ * calendar date, and planning stops at 24h so there is nothing past it.
+ *
+ * All of these parse to the next day: "next day, 11am", "nextday 11am",
+ * "next-day 11am", "tomorrow 7:30", "tom 7am", "tmrw 6", "tomorow 6am" (typo),
+ * "+1d 6am", "1 day 6am", "overnight 6am", "nd 6am" — in any position
+ * ("11am next day" too). A bare "11am" is the same day.
+ *
+ * Lives here with the other casual parsers (`smart-input-guard.test.ts` keeps
+ * parsers out of bespoke surfaces) so the anchor field can't hand-roll one.
+ */
+export function parseAnchorEnd(
+  input: string,
+): { dayOffset: 0 | 1; tod: number } | undefined {
+  const raw = input.trim();
+  if (!raw) return undefined;
+  // Fold multi-word qualifiers to single tokens first, so position and spelling
+  // stop mattering.
+  const folded = raw
+    .replace(NEXT_DAY_PHRASE, "nextday")
+    .replace(PLUS_ONE_DAY_PHRASE, "nextday")
+    .replace(/\bsame\s*-?\s*day\b/gi, "sameday");
+  const tokens = folded.split(/[\s,;]+/).filter(Boolean);
+
+  const nextIdx = tokens.findIndex(isNextDayToken);
+  const sameIdx = nextIdx === -1 ? tokens.findIndex(isSameDayToken) : -1;
+  const dayIdx = nextIdx !== -1 ? nextIdx : sameIdx;
+
+  const rest = dayIdx === -1 ? folded : tokens.filter((_, i) => i !== dayIdx).join(" ");
+  const t = parseTimeOfDay(rest);
+  if (!t) return undefined;
+  return { dayOffset: nextIdx !== -1 ? 1 : 0, tod: t.hour * 60 + t.min };
+}

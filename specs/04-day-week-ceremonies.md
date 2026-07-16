@@ -128,19 +128,29 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
   slideable, breakable, budget?, **anchor time-of-day** `anchorStartTod`/`anchorEndTod` (0..1439 —
   a "9am meeting", NOT an absolute epoch), sleepKind?, `weekdays: number[]` (0=Sun…6=Sat), and a
   LexoRank.
-  **Multi-day span — `anchorEndDayOffset` (ruled 2026-07-17, model pending confirmation).** A
-  template anchor has no date (§7.0.5 exemption — hence no 📅), so today a template can only reach
-  into the next day by INFERENCE (`end <= start` → overnight), which silently caps every template at
-  24h. That's wrong for a real spanning task. The END anchor therefore gains an explicit
-  **`anchorEndDayOffset`** (0 = same day, 1 = next day, 2 = +2 days, …): the number of days after the
-  template's fired day on which `anchorEndTod` falls. **Span = `offset*1440 + endTod − startTod`,
-  which must be > 0.** Shown as a compact selector on the End field (same day / next day / +2 days /
-  …), only where End is in play (fixed / semi-tail). Per §7.0.2 **snap-at-entry**: entering an End at
-  or before Start with offset 0 snaps the offset to **next day** and NOTIFIES — the old overnight
-  inference, made explicit and visible instead of silent. Absent/0 on legacy templates keeps today's
-  behaviour. **Open (must be settled before implementing):** the scheduler/`weekPreview` currently
-  assume a template occupies one day — a >24h span touches placement, and §11 day-attribution needs
-  a rule for which day(s) a spanning task's minutes count against. Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
+  **Overnight span — `anchorEndDayOffset` (ruled 2026-07-17).** A template anchor has no date
+  (§7.0.5 exemption — hence no 📅), so it can only cross midnight by DAY COUNT. That crossing used to
+  be an INFERENCE (`end <= start` → overnight) — invisible to the user. The END anchor therefore
+  gains an explicit **`anchorEndDayOffset`**: the number of days after the template's fired day on
+  which `anchorEndTod` falls. **Span = `offset*1440 + endTod − startTod`, which must be > 0 and
+  ≤ 1440.** Shown as a compact selector on the End field (same day / next day), only where End is in
+  play (fixed / semi-tail). Per §7.0.2 **snap-at-entry**: an End at or before Start with offset 0
+  snaps to **next day** and is SHOWN as such ("auto") — the old inference, made explicit and
+  overridable instead of silent. Absent/0 on legacy templates keeps today's behaviour.
+  - **Range: 0..1 — `same day` | `next day` (ruled 2026-07-17; supersedes an earlier 0..6 answer,
+    corrected by the user: "planning is for no more than 24 hours").** A plan never reaches past
+    tomorrow's clock, so there is nothing beyond "next day" to offer, and **a planned task spans at
+    most 24h**. Consequence: "next day" only resolves when the End sits at or before the Start (11pm
+    → 7am = 8h); a "next day" End *after* the Start would be a 24h+ span and is refused **at the
+    boundary** (the chip is disabled with the reason), never accepted-then-scolded.
+  - **Day-attribution: SPLIT across the two days (confirmed 2026-07-17).** An overnight task's
+    minutes count against **each day they physically fall on** — an 11pm→7am sleep spends 1h of
+    Monday's capacity and 7h of Tuesday's, not 8h of Monday's. Rationale: §11 budgets are per-day
+    **capacity**; attributing a whole span to its start day would leave Tuesday looking empty while
+    its hours are already occupied, letting the user over-book a day invisibly. `weekPreview` and the
+    §11 quota/budget math therefore slice an overnight occupancy at local midnight and attribute each
+    slice to its own day. The task remains ONE task (one id, one budget, one completion) — the split
+    is an accounting view, never a structural break (it is not a §2.5 `breakable` split). Recurrence = the weekday set (daily = all 7, weekend = [0,6]); **one-time/ranged:
   ruled IN scope (2026-07-16, supersedes the 2026-07-15 "future extension" deferral).** A template
   gains an optional **validity**: **one-time** (fires on its next weekday occurrence, then retires —
   never fires again; the retired template stays listed, marked, until deleted) or **ranged**

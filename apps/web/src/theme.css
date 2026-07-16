@@ -887,6 +887,36 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 }
 .cal-btn:hover { color: var(--ink); background: var(--hairline); }
 
+/* §4.4 END anchor — the day is TYPED into the field ("next day, 7am") per the
+ * smart-input law; this little menu is the secondary, point-and-click path,
+ * hanging off the field's day button. */
+.anchor-end { position: relative; }
+.day-menu {
+  position: absolute;
+  right: 0;
+  z-index: 5;
+  margin-top: 4px;
+  display: flex;
+  flex-direction: column;
+  min-width: 120px;
+  background: var(--paper-raised);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  overflow: hidden;
+  box-shadow: 0 6px 18px rgb(0 0 0 / .18);
+}
+.day-menu-item {
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 7px 10px;
+  font: inherit;
+  color: var(--ink);
+  cursor: pointer;
+}
+.day-menu-item:hover { background: var(--hairline); }
+.day-menu-item.active { color: var(--accent); font-weight: 600; }
+
 /* §1.6 month-grid date picker — nested overlay above the drawer. */
 .datepicker {
   position: relative;

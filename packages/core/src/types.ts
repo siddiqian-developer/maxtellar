@@ -219,6 +219,13 @@ export interface RunningTask {
   pomodoro?: PomodoroState;
 }
 
+/**
+ * §4.4 which day an anchored END lands on, counting from the day the task fires:
+ * `0` = same day, `1` = next day. There is no `2` — **planning is for no more
+ * than 24 hours**, so a plan never reaches past tomorrow's clock.
+ */
+export type EndDayOffset = 0 | 1;
+
 /** §4.4/§4.6: the schedulable shape shared by a recurring template and a dated
  * one-off. Anchored coordinates are MINUTES-INTO-THE-DAY [0,1440) (a "9am
  * meeting"), converted to an absolute epoch for the target day at injection. */
@@ -236,6 +243,17 @@ export interface TaskSpec {
   /** Anchored time-of-day [0,1440) for fixed/semi-head start, fixed/semi-tail end. */
   anchorStartTod?: number;
   anchorEndTod?: number;
+  /**
+   * §4.4 overnight span: days AFTER the fired day on which `anchorEndTod` falls.
+   * **0 = same day, 1 = next day — and that's the ceiling: planning is for no
+   * more than 24 hours.** Absent = 0.
+   *
+   * A template anchor has no date (§7.0.5), so it crosses midnight by day count,
+   * not by calendar. This makes the crossing EXPLICIT; it used to be inferred
+   * silently from `end <= start`. Span = `offset*1440 + endTod - startTod`,
+   * always > 0 and <= 1440.
+   */
+  anchorEndDayOffset?: EndDayOffset;
   sleepKind?: SleepKind;
 }
 

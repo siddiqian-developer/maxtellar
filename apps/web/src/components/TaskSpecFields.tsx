@@ -18,8 +18,8 @@
  * hand-roll a raw time input that silently drops snap/steppers.
  */
 import { useState } from "react";
-import type { SleepKind, TimingType } from "@maxtellar/core";
-import { parseTimeOfDay } from "../casualTime";
+import type { EndDayOffset, SleepKind, TimingType } from "@maxtellar/core";
+import { parseTimeOfDay, parseAnchorEnd } from "../casualTime";
 import { fmtTod, toDate } from "../time";
 import { PRESETS, presetById } from "../presets";
 import type { PresetId } from "../settings";
@@ -199,6 +199,236 @@ export function effectiveFlags(timing: TimingType, flags: TaskFlags, presetActiv
  */
 export const TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
 
+/**
+ * §4.4 end-day offset: 0 = same day, 1 = next day. **Capped at 1 — planning is
+ * for no more than 24 hours** (ruled 2026-07-17; supersedes the same-day +6
+ * range, which was wrong: a plan never reaches past tomorrow's clock).
+ */
+export const MAX_END_DAY_OFFSET = 1;
+/** §4.4 a planned task spans at most 24 hours. */
+export const MAX_SPAN_MIN = 1440;
+export const clampDayOffset = (d: number): EndDayOffset =>
+  (Math.max(0, Math.min(MAX_END_DAY_OFFSET, Math.round(d))) as EndDayOffset);
+
+/** "same day" / "next day" / "+2 days"… — one label set, used wherever the
+ * offset is shown (§7.0.6). */
+export function dayOffsetLabel(d: number): string {
+  return d === 1 ? "Next Day" : "Same Day";
+}
+
+/**
+ * §4.4/§7.0.2 — the offset the entered times IMPLY. An end at or before the
+ * start with the offset still on "same day" can only mean the next day; that
+ * used to be assumed silently, and is now snapped AND shown (the "auto" tag), so
+ * the user sees the correction and can override it. Any explicit offset wins.
+ */
+export function impliedEndDayOffset(
+  offset: EndDayOffset,
+  startTod: number | undefined,
+  endTod: number | undefined,
+): EndDayOffset {
+  return offset === 0 && startTod !== undefined && endTod !== undefined && endTod <= startTod
+    ? 1
+    : offset;
+}
+
+/**
+ * §4.4 span implied by a start, an end and the end's day offset. `undefined`
+ * when the span isn't a valid plan: never zero/negative, and **never more than
+ * 24 hours** — planning doesn't reach further than that. So "next day" only
+ * resolves when the end sits at/before the start (11pm → 7am = 8h); a "next day"
+ * end AFTER the start would be a 24h+ span, which is not a plan.
+ */
+export function spanOfAnchors(
+  startTod: number | undefined,
+  endTod: number | undefined,
+  offset: number,
+): number | undefined {
+  if (startTod === undefined || endTod === undefined) return undefined;
+  const raw = offset * 1440 + endTod - startTod;
+  return raw > 0 && raw <= MAX_SPAN_MIN ? raw : undefined;
+}
+
+/** §4.4 the END anchor as text: "Next Day, 10:00 AM", or just "10:00 AM" when it
+ * lands the same day. Round-trips through `parseAnchorEnd`, so what the field
+ * shows is always something the field accepts (a smart-input requirement). */
+export function fmtAnchorEnd(
+  tod: number | undefined,
+  dayOffset: EndDayOffset,
+  hour12: boolean,
+): string {
+  // Picking "Next Day" before typing a time leaves the qualifier WAITING for it
+  // ("Next Day, ") rather than inventing a time the user never chose — the app
+  // never fills a value the user didn't pick.
+  if (tod === undefined) return dayOffset === 1 ? "Next Day, " : "";
+  return dayOffset === 1 ? `Next Day, ${fmtTod(tod, hour12)}` : fmtTod(tod, hour12);
+}
+
+/**
+ * §4.4 END anchor field — the time AND the day it lands on, in one smart input.
+ *
+ * A template has no date (§7.0.5), so instead of a calendar it offers the only
+ * choice that exists: same day or next day (planning stops at 24h). Two ways in,
+ * both equal — type it (`"next day, 11am"`, `"tomorrow 7:30"`, `"+1d 6am"`, and
+ * every variation `parseAnchorEnd` knows), or pick it from the 🌙 button. Either
+ * way the field reformats to the explicit `"Next Day, 11:00 AM"` on blur, so the
+ * day is never implicit.
+ */
+export function AnchorEndField({ tod, dayOffset, onChange, hour12 }: {
+  tod: number | undefined;
+  dayOffset: EndDayOffset;
+  onChange: (next: { tod: number | undefined; dayOffset: EndDayOffset }) => void;
+  hour12: boolean;
+}): JSX.Element {
+  const str = fmtAnchorEnd(tod, dayOffset, hour12);
+  const [draft, setDraft] = useState(str);
+  const [prev, setPrev] = useState(str);
+  const [pick, setPick] = useState(false);
+  if (str !== prev) { setPrev(str); setDraft(str); }
+
+  const commit = (): void => {
+    if (!draft.trim()) { onChange({ tod: undefined, dayOffset: 0 }); setDraft(""); return; }
+    const r = parseAnchorEnd(draft);
+    if (!r) {
+      // A lone qualifier ("Next Day,") isn't nonsense — it's a chosen day still
+      // waiting for its time. Keep it; only real garbage snaps back.
+      const bare = parseAnchorEnd(`${draft} 12pm`);
+      if (bare) { onChange({ tod: undefined, dayOffset: bare.dayOffset }); setDraft(fmtAnchorEnd(undefined, bare.dayOffset, hour12)); return; }
+      setDraft(str);
+      return;
+    }
+    onChange({ tod: r.tod, dayOffset: r.dayOffset });
+    setDraft(fmtAnchorEnd(r.tod, r.dayOffset, hour12));
+  };
+  const nudge = (dir: 1 | -1): void => {
+    const base = tod ?? 9 * 60;
+    const next = base + dir * 5;
+    // Nudging past midnight moves the END onto the next day (and back again) —
+    // the day is part of this field's value, so the stepper carries it too.
+    const wrapped = ((next % 1440) + 1440) % 1440;
+    const carried: EndDayOffset = next >= 1440 ? 1 : next < 0 ? 0 : dayOffset;
+    onChange({ tod: wrapped, dayOffset: carried });
+  };
+  // Picking a day sets ONLY the day. With no time yet the field becomes
+  // "Next Day, " and waits — it never invents a time on the user's behalf.
+  const choose = (d: EndDayOffset): void => {
+    setPick(false);
+    onChange({ tod, dayOffset: d });
+  };
+
+  return (
+    <div className="anchor-end">
+      <StepperField
+        text={draft}
+        onText={setDraft}
+        onCommit={commit}
+        onStep={nudge}
+        ariaLabel="End time of day"
+        placeholder='e.g. 7am, or "next day, 7am"'
+        calendar={{
+          onOpen: () => setPick((p) => !p),
+          ariaLabel: "Choose the end day",
+          tip: 'Which day the end lands on. You can also just type it — "next day, 7am".',
+        }}
+      />
+      {pick && (
+        <div className="day-menu" role="menu" aria-label="End day">
+          {([0, 1] as EndDayOffset[]).map((d) => (
+            <button
+              key={d}
+              type="button"
+              role="menuitemradio"
+              aria-checked={d === dayOffset}
+              className={`day-menu-item${d === dayOffset ? " active" : ""}`}
+              onClick={() => choose(d)}
+            >
+              {dayOffsetLabel(d)}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** §6 type-morph prefill: tapping a timing type pre-fills its fields. ONE value,
+ * shared with the New Task drawer — 30 minutes. */
+export const DEFAULT_BUDGET = 30;
+/** A template has no `now` to anchor to (it repeats), so its default anchor is a
+ * plain 9am — the drawer's `now` twin in time-of-day space. */
+export const DEFAULT_ANCHOR_TOD = 9 * 60;
+
+/** Split an absolute minutes-from-fired-day value back into tod + day offset. */
+function splitDay(total: number): { tod: number; dayOffset: EndDayOffset } {
+  const wrapped = ((total % 1440) + 1440) % 1440;
+  return { tod: wrapped, dayOffset: total >= 1440 ? 1 : 0 };
+}
+
+/**
+ * §6 type-morph prefill — the fields a timing type starts with. The New Task
+ * drawer's `shapeTo`, in time-of-day space: budget 30m, anchors at the default
+ * 9am (a template has no `now`). Pure, so it seeds BOTH a fresh editor and a
+ * later type change — a new template opens with a usable draft, not blanks.
+ */
+export function morphDefaults(t: TimingType): {
+  startTod: number | undefined; endTod: number | undefined;
+  endDayOffset: EndDayOffset; budget: number | undefined;
+} {
+  if (t === "budgeted") return { startTod: undefined, endTod: undefined, endDayOffset: 0, budget: DEFAULT_BUDGET };
+  if (t === "semi-head") return { startTod: DEFAULT_ANCHOR_TOD, endTod: undefined, endDayOffset: 0, budget: undefined };
+  if (t === "semi-tail") return { startTod: undefined, endTod: DEFAULT_ANCHOR_TOD + DEFAULT_BUDGET, endDayOffset: 0, budget: undefined };
+  if (t === "fixed") {
+    const d = splitDay(DEFAULT_ANCHOR_TOD + DEFAULT_BUDGET);
+    return { startTod: DEFAULT_ANCHOR_TOD, endTod: d.tod, endDayOffset: d.dayOffset, budget: DEFAULT_BUDGET };
+  }
+  return { startTod: undefined, endTod: undefined, endDayOffset: 0, budget: undefined };
+}
+
+/**
+ * §3.6 the 3→1 law, in TIME-OF-DAY space — the template's twin of the New Task
+ * drawer's day-aware trio. **Any two of start / end / budget derive the third.**
+ * The field the user just changed is authoritative; a second present field
+ * derives the third.
+ *
+ * This is the drawer's law, not a new one (§7.0.6: the same rule may not have two
+ * implementations). It differs only in coordinates: the drawer works in absolute
+ * epoch minutes anchored to `now`, a template in minutes-into-the-day anchored to
+ * the day it fires — so the END carries a day offset instead of a date, and the
+ * whole span is capped at 24h (planning reaches no further).
+ */
+export function deriveAnchorTrio(
+  changed: "start" | "end" | "budget",
+  v: { startTod?: number | undefined; endTod?: number | undefined; endDayOffset: EndDayOffset; budget?: number | undefined },
+): { startTod: number | undefined; endTod: number | undefined; endDayOffset: EndDayOffset; budget: number | undefined } {
+  let { startTod, endTod, budget } = v;
+  let endDayOffset = v.endDayOffset;
+  const endAbs = (): number | undefined =>
+    endTod === undefined ? undefined : endDayOffset * 1440 + endTod;
+
+  if (changed === "start" && startTod !== undefined) {
+    if (budget !== undefined) {
+      const d = splitDay(startTod + budget);
+      endTod = d.tod; endDayOffset = d.dayOffset;
+    } else if (endTod !== undefined) {
+      budget = spanOfAnchors(startTod, endTod, endDayOffset);
+    }
+  } else if (changed === "end" && endTod !== undefined) {
+    if (startTod !== undefined) {
+      budget = spanOfAnchors(startTod, endTod, endDayOffset);
+    } else if (budget !== undefined) {
+      startTod = splitDay(endAbs()! - budget).tod;
+    }
+  } else if (changed === "budget" && budget !== undefined) {
+    if (startTod !== undefined) {
+      const d = splitDay(startTod + budget);
+      endTod = d.tod; endDayOffset = d.dayOffset;
+    } else if (endTod !== undefined) {
+      startTod = splitDay(endAbs()! - budget).tod;
+    }
+  }
+  return { startTod, endTod, endDayOffset, budget };
+}
+
 export type FieldRole = "required" | "optional" | "not used";
 
 /**
@@ -344,6 +574,8 @@ export interface TaskSpecInit {
   budget?: number;
   anchorStartTod?: number;
   anchorEndTod?: number;
+  /** §4.4 overnight span — 0 = same day, 1 = next day (the 24h ceiling). */
+  anchorEndDayOffset?: EndDayOffset;
   ommf?: boolean;
   slideable?: boolean;
   breakable?: boolean;
@@ -361,6 +593,8 @@ export interface ResolvedSpec {
   budget?: number;
   anchorStartTod?: number;
   anchorEndTod?: number;
+  /** §4.4 overnight span — omitted when 0 (same day). */
+  anchorEndDayOffset?: EndDayOffset;
   sleepKind?: SleepKind;
 }
 
@@ -373,9 +607,18 @@ export function useTaskSpec(initial: TaskSpecInit) {
   const [activity, setActivity] = useState(initial.activityId ?? "");
   const [head, setHead] = useState<string | undefined>(initial.headId);
   const [timing, setTiming] = useState<TimingType>(initial.timing ?? "budgeted");
-  const [startTod, setStartTod] = useState<number | undefined>(initial.anchorStartTod);
-  const [endTod, setEndTod] = useState<number | undefined>(initial.anchorEndTod);
-  const [budget, setBudget] = useState<number | undefined>(initial.budget);
+  // §6 a NEW editor opens pre-filled for its type (budgeted → 30m), exactly like
+  // New Task — never a row of blanks. An EXISTING spec's own values always win.
+  // Only a NEW editor gets the prefill; an existing spec is shown as it is, and
+  // its own values always win (an empty field on a saved spec means "empty").
+  const seed = initial.timing === undefined
+    ? morphDefaults("budgeted")
+    : { startTod: undefined, endTod: undefined, endDayOffset: 0 as EndDayOffset, budget: undefined };
+  const [startTod, setStartTod] = useState<number | undefined>(initial.anchorStartTod ?? seed.startTod);
+  const [endTod, setEndTod] = useState<number | undefined>(initial.anchorEndTod ?? seed.endTod);
+  // §4.4 multi-day span: which day the END anchor lands on (0 = same day).
+  const [endDayOffset, setEndDayOffsetRaw] = useState<EndDayOffset>(initial.anchorEndDayOffset ?? seed.endDayOffset);
+  const [budget, setBudget] = useState<number | undefined>(initial.budget ?? seed.budget);
   const [flags, setFlags] = useState<TaskFlags>({
     ommf: initial.ommf ?? false,
     slideable: initial.slideable ?? true,
@@ -391,6 +634,51 @@ export function useTaskSpec(initial: TaskSpecInit) {
   const needStart = roles.start === "required";
   const needEnd = roles.end === "required";
   const needBudget = roles.budget === "required";
+
+  // §7.0.2 snap-at-entry: correct an out-of-range offset AT the boundary.
+  const setEndDayOffset = (d: number): void => setEndDayOffsetRaw(clampDayOffset(d));
+
+  /**
+   * §3.6 3→1 derivation — the drawer's law, same behaviour here (§7.0.5 parity).
+   * Editing any one of start/end/budget derives the third from whichever other
+   * field is already set, instead of leaving the user to do the arithmetic.
+   */
+  const applyTrio = (changed: "start" | "end" | "budget", patch: {
+    startTod?: number | undefined; endTod?: number | undefined;
+    endDayOffset?: EndDayOffset; budget?: number | undefined;
+  }): void => {
+    const next = deriveAnchorTrio(changed, {
+      startTod: "startTod" in patch ? patch.startTod : startTod,
+      endTod: "endTod" in patch ? patch.endTod : endTod,
+      endDayOffset: patch.endDayOffset ?? endDayOffset,
+      budget: "budget" in patch ? patch.budget : budget,
+    });
+    setStartTod(next.startTod);
+    setEndTod(next.endTod);
+    setEndDayOffsetRaw(next.endDayOffset);
+    setBudget(next.budget);
+  };
+  const changeStart = (tod: number | undefined): void => applyTrio("start", { startTod: tod });
+  const changeEnd = (e: { tod: number | undefined; dayOffset: EndDayOffset }): void =>
+    applyTrio("end", { endTod: e.tod, endDayOffset: e.dayOffset });
+  const changeBudget = (b: number | undefined): void => applyTrio("budget", { budget: b });
+
+  /**
+   * §6 type-morph prefill — tapping a type pre-fills its fields, exactly as the
+   * New Task drawer does (budget 30m; anchors at the default 9am instead of the
+   * drawer's `now`, since a template has no `now`). Without this the template
+   * editor handed back empty fields where New Task handed back a usable draft.
+   */
+  const morphTo = (t: TimingType): void => {
+    setTiming(t);
+    const d = morphDefaults(t);
+    setStartTod(d.startTod);
+    setEndTod(d.endTod);
+    setEndDayOffsetRaw(d.endDayOffset);
+    setBudget(d.budget);
+  };
+  /** The offset these times IMPLY — snapped and shown, never assumed silently. */
+  const impliedOffset = (): EndDayOffset => impliedEndDayOffset(endDayOffset, startTod, endTod);
 
   const togglePreset = (id: PresetId): void => {
     if (preset === id) { setPreset(null); setSleepKind(undefined); return; }
@@ -411,9 +699,15 @@ export function useTaskSpec(initial: TaskSpecInit) {
     const end = roles.end !== "not used" ? endTod : undefined;
     if (needStart && start === undefined) return { error: "Enter a valid start time." };
     if (needEnd && end === undefined) return { error: "Enter a valid end time." };
+    // §4.4: the end may land on a later day — the span follows the OFFSET, not an
+    // implicit overnight guess. `impliedEndDayOffset` snaps a same-day end that
+    // sits at/before the start to "next day" (announced by the editor).
+    const off = impliedOffset();
     let b = roles.budget !== "not used" ? budget : undefined;
     if (timing === "fixed" && start !== undefined && end !== undefined) {
-      b = ((end - start) % 1440 + 1440) % 1440 || 1440; // overnight-safe span
+      const span = spanOfAnchors(start, end, off);
+      if (span === undefined) return { error: "A planned task spans at most 24 hours — check the start, the end and its day." };
+      b = span;
     }
     if (needBudget && (b === undefined || b <= 0)) return { error: "Enter a valid budget." };
     const eff = effectiveFlags(timing, flags, preset !== null);
@@ -429,14 +723,21 @@ export function useTaskSpec(initial: TaskSpecInit) {
         ...(b !== undefined ? { budget: b } : {}),
         ...(start !== undefined ? { anchorStartTod: start } : {}),
         ...(end !== undefined ? { anchorEndTod: end } : {}),
+        // Only meaningful with an end; 0 is the default, so don't persist noise.
+        ...(end !== undefined && off > 0 ? { anchorEndDayOffset: off } : {}),
         ...(sleepKind ? { sleepKind } : {}),
       },
     };
   };
 
   return {
-    title, setTitle, activity, setActivity, head, setHead, timing, setTiming,
-    startTod, setStartTod, endTod, setEndTod, budget, setBudget,
+    title, setTitle, activity, setActivity, head, setHead, timing,
+    // §6 type-morph: setting the type pre-fills its fields, like the drawer.
+    setTiming: morphTo,
+    startTod, endTod, budget,
+    // §3.6 3→1: these derive the third field, they don't just assign.
+    setStartTod: changeStart, setEndTod: changeEnd, setBudget: changeBudget,
+    endDayOffset, setEndDayOffset, impliedOffset,
     flags, setFlags, preset, togglePreset, sleepKind,
     needStart, needEnd, needBudget, resolve,
   };
@@ -489,8 +790,18 @@ export function TaskSpecFieldsView({ sp, hour12, titlePlaceholder }: {
         </RoleField>
       }
       end={
-        <RoleField name="End (time of day)" timing={sp.timing} field="end" hint={anchorHint}>
-          <TodField value={sp.endTod} onChange={sp.setEndTod} hour12={hour12} ariaLabel="End time of day" />
+        <RoleField
+          name="End"
+          timing={sp.timing}
+          field="end"
+          hint='Type casually — "7am", or "next day, 7am" when it runs past midnight.'
+        >
+          <AnchorEndField
+            tod={sp.endTod}
+            dayOffset={sp.endDayOffset}
+            hour12={hour12}
+            onChange={sp.setEndTod}
+          />
         </RoleField>
       }
       budget={
