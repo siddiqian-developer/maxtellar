@@ -1624,39 +1624,67 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .wk-cal-nav .link-btn { font-size: 22px; line-height: 1; padding: 0 6px; }
 .wk-cal-nav .wk-today { font-size: 12px; }
 
-.wk-grid { display: grid; grid-template-columns: 46px repeat(7, minmax(0, 1fr)); gap: 4px; margin-top: 4px; align-items: start; }
-.wk-axis-col { display: flex; flex-direction: column; }
-.wk-axis-head { border-bottom: 1px solid var(--hairline); min-height: 34px; }
-.wk-axis { position: relative; }
-.wk-axis-label { position: absolute; right: 4px; transform: translateY(-50%); font-size: 9px; color: var(--ink-faint); white-space: nowrap; }
-.wk-col { display: flex; flex-direction: column; min-width: 0; border-radius: 6px; }
-.wk-col.weekend { background: color-mix(in srgb, var(--accent) 7%, transparent); }
+/* ---- Week/Calendar grid — react-big-calendar bound to our tokens (§7.0.4) ----
+   RBC ships its own stylesheet (imported by WeekGridRBC.tsx); everything below
+   re-skins it to the app's paper/ink/accent. The blocks themselves keep the
+   timing-hue language of the Day timeline. */
+.wk-rbc { margin-top: 4px; }
+.wk-rbc .rbc-time-view { border: none; background: transparent; }
+.wk-rbc .rbc-time-header.rbc-overflowing { border-right: none; }
+.wk-rbc .rbc-time-header-content, .wk-rbc .rbc-time-header-cell { border: none; }
+.wk-rbc .rbc-header { border: none; border-bottom: 1px solid var(--hairline); padding: 0; }
+.wk-rbc .rbc-header + .rbc-header { border-left: none; }
+/* No all-day row: §4.1 head sleeps stay on the time axis (allDayAccessor=false). */
+.wk-rbc .rbc-allday-cell { display: none; }
+.wk-rbc .rbc-time-content { border-top: 1px solid var(--hairline); }
+.wk-rbc .rbc-time-content > * + * > * { border-left: 1px solid var(--hairline); }
+.wk-rbc .rbc-timeslot-group { border-bottom: 1px solid var(--hairline); min-height: 30px; }
+.wk-rbc .rbc-time-slot { border: none; }
+.wk-rbc .rbc-day-slot { background: var(--paper-raised); }
+.wk-rbc .rbc-time-gutter .rbc-timeslot-group { border-bottom: none; }
+.wk-rbc .rbc-label { font-size: 9px; color: var(--ink-faint); padding: 0 4px; }
+.wk-rbc .rbc-time-gutter { width: 46px; }
+/* §4.4a weekend / OFF column tints (dayPropGetter). */
+.wk-rbc .rbc-day-slot.wk-day-weekend { background: color-mix(in srgb, var(--accent) 7%, var(--paper-raised)); }
+.wk-rbc .rbc-day-slot.wk-day-off { background: color-mix(in srgb, var(--ink-faint) 9%, var(--paper-raised)); }
+.wk-rbc .rbc-day-slot.wk-day-off-empty { position: relative; }
+.wk-rbc .rbc-day-slot.wk-day-off-empty::after {
+  content: "off"; position: absolute; top: 8px; left: 0; right: 0; text-align: center;
+  color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: .05em;
+  pointer-events: none;
+}
+/* The now-line is the DAY timeline's law (§6), not this planning grid's. */
+.wk-rbc .rbc-current-time-indicator { display: none; }
+
+/* Blocks — same timing-hue language as .block.plan / the old .wk-block. */
+.wk-rbc .rbc-event { border: none; border-radius: 4px; padding: 0; background: transparent; outline: none; }
+.wk-rbc .rbc-event.rbc-selected { background: transparent; }
+.wk-rbc .rbc-event-label { display: none; }
+.wk-rbc .rbc-event-content { overflow: hidden; }
+.wk-ev-in {
+  position: relative; height: 100%; border-radius: 4px; padding: 2px 5px; overflow: hidden;
+  display: flex; flex-direction: column; gap: 1px; text-align: left;
+  border-left: 3px solid var(--st-budgeted);
+  background: color-mix(in srgb, var(--st-budgeted) 14%, var(--paper));
+}
+.wk-ev:hover .wk-ev-in { filter: brightness(1.06); }
+.wk-ev--unscheduled .wk-ev-in { border-left-color: var(--st-unscheduled); background: color-mix(in srgb, var(--st-unscheduled) 14%, var(--paper)); }
+.wk-ev--semi-head .wk-ev-in, .wk-ev--semi-tail .wk-ev-in { border-left-color: var(--st-semi); background: color-mix(in srgb, var(--st-semi) 14%, var(--paper)); }
+.wk-ev--fixed .wk-ev-in { border-left-color: var(--st-fixed); background: color-mix(in srgb, var(--st-fixed) 14%, var(--paper)); }
+/* §4.6 dated one-off: doubled left edge + a faint frame to read as "pinned". */
+.wk-ev.dated .wk-ev-in { border-left-style: double; border-left-width: 5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
+.wk-ev.squeezed .wk-ev-in { outline: 1px dashed var(--accent); outline-offset: -1px; }
+/* §4.4b: the full working-day label under the date. */
+.wk-col-wdn { font-size: 8px; color: var(--ink-faint); letter-spacing: .02em; white-space: nowrap; line-height: 1.2; min-height: 10px; }
+.wk-col-head.weekend { background: color-mix(in srgb, var(--accent) 7%, transparent); border-radius: 6px 6px 0 0; }
+.wk-col-head.weekend .wk-col-wd { color: var(--accent); }
 .wk-col-head { position: relative; display: flex; flex-direction: column; align-items: center; gap: 0; padding: 3px 0; border-bottom: 1px solid var(--hairline); min-height: 34px; }
 .wk-col-wd { font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--ink-soft); }
 .wk-col-date { font-size: 13px; font-weight: 600; color: var(--ink); }
-.wk-col.weekend .wk-col-wd { color: var(--accent); }
 .wk-col-head.today { background: var(--accent-soft); border-radius: 6px 6px 0 0; }
 .wk-col-head.today .wk-col-date { color: var(--accent); }
 .wk-col-add { position: absolute; right: 2px; top: 2px; border: none; background: transparent; color: var(--ink-faint); cursor: pointer; font-size: 15px; line-height: 1; padding: 0 4px; border-radius: 4px; }
 .wk-col-add:hover { background: var(--accent-soft); color: var(--accent); }
-.wk-col-body { position: relative; background: var(--paper-raised); border-radius: 0 0 6px 6px; overflow: hidden; }
-.wk-col.off .wk-col-body { background: color-mix(in srgb, var(--ink-faint) 9%, var(--paper-raised)); }
-.wk-hourline { position: absolute; left: 0; right: 0; border-top: 1px solid var(--hairline); opacity: 0.5; }
-.wk-col-empty { position: absolute; top: 8px; left: 0; right: 0; text-align: center; color: var(--ink-faint); font-size: 11px; text-transform: uppercase; letter-spacing: .05em; }
-.wk-block {
-  position: absolute; left: 2px; right: 2px;
-  border: none; border-left: 3px solid var(--st-budgeted);
-  background: color-mix(in srgb, var(--st-budgeted) 14%, var(--paper));
-  border-radius: 4px; padding: 2px 5px; cursor: pointer; overflow: hidden;
-  text-align: left; font: inherit; display: flex; flex-direction: column; gap: 1px;
-}
-.wk-block:hover { filter: brightness(1.06); }
-.wk-block[data-timing="unscheduled"] { border-left-color: var(--st-unscheduled); background: color-mix(in srgb, var(--st-unscheduled) 14%, var(--paper)); }
-.wk-block[data-timing="semi-head"], .wk-block[data-timing="semi-tail"] { border-left-color: var(--st-semi); background: color-mix(in srgb, var(--st-semi) 14%, var(--paper)); }
-.wk-block[data-timing="fixed"] { border-left-color: var(--st-fixed); background: color-mix(in srgb, var(--st-fixed) 14%, var(--paper)); }
-/* §4.6 dated one-off: doubled left edge + a faint frame to read as "pinned". */
-.wk-block.dated { border-left-style: double; border-left-width: 5px; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ink) 14%, transparent); }
-.wk-block.squeezed { outline: 1px dashed var(--accent); outline-offset: -1px; }
 .wk-block-title { font-size: 10px; font-weight: 600; color: var(--ink); line-height: 1.15; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
 .wk-block-time { font-size: 9px; color: var(--ink-soft); }
 .type-chip.locked { cursor: default; }

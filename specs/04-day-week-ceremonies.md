@@ -187,6 +187,37 @@ Two distinct concepts, deliberately not merged:
   chips are OFF and **locked-on**; non-weekend days toggle freely; the set can never drop below the
   weekend or below one OFF day. Toggling OFF a day **clears that column's placement in the preview**
   but **preserves the templates** (re-enabling the day restores them — nothing is deleted).
+- **Adjacent OFF days are automatically weekend (locked 2026-07-16).** An OFF day directly adjacent
+  (pre or post, wrapping the week) to the weekend set is **counted as weekend** — that is what
+  "lengthen the weekend" means. The rule is transitive: the **weekend run** = the maximal contiguous
+  run of OFF weekdays reachable from `weekendDays` by adjacency. Those days get weekend treatment
+  (styling included), not merely weekend arithmetic. An OFF day **not** reachable that way is a
+  **non-weekend off** (a mid-week rest, e.g. Thursday) — see §4.4b.
+
+### 4.4b Working days — the numbering shown on the calendar (locked 2026-07-16)
+The week's working days are **numbered**, and the number is written in full on every calendar
+column head: **"1st working day"**, "2nd working day", … (full label, not abbreviated).
+
+- **The 1st working day is where the user WAKES.** After the weekend run's last day, the user
+  sleeps — that sleep is the **head sleep of the 1st working day's cycle** (§4.1: day =
+  Sleep-start → Sleep-start, so the sleep *opens* the day it heads). The day the sleep *starts* on
+  is **not** the 1st working day; the calendar day the user **wakes up on** is, because that is
+  where work begins. Generally: a cycle's label sits on the column where its head sleep **ends**.
+- **Counting.** Walk forward from the first working day after the weekend run. Each day that is
+  neither a weekend-run day nor a non-weekend off takes the next number.
+- **Non-weekend offs are skipped — no number, and no reset.** Example (OFF = Sat, Sun + Mon, Tue
+  lengthening the weekend; Thursday taken off): run = Sat→Tue, so **Wed = 1st working day**, Thu is
+  skipped, **Fri = 2nd working day**. A non-weekend off may be a **recurrence** (every Thursday) or
+  a **one-off** (this Thursday only) — the user gets both; numbering treats them identically.
+- **Weekend-run columns carry no number.**
+- **This definition WINS over the declared `firstWeekday` (ruling 2026-07-16).** §4.4's weekly
+  planning declares a First Weekday at `START_WEEK`; where that declaration and the derivation above
+  disagree, **the derivation above is authoritative** for what the 1st working day is. (`firstWeekday`
+  still feeds weekly-quota week-position (`weekdayPos`); reconciling that to this definition is an
+  open item, not a silent rewire — §10.)
+- **The numbering is plan-side and nominal.** Calendar columns are wall-clock dates, one cycle each;
+  lived days drift (30–100h — no sleep, no new day, §4.1). Real cycles are counted in Analytics
+  (§6), which uses sealed `DayRecord`s. The label is the intended cycle, not the lived one.
 
 ### 4.6 Dated override layer — the Calendar screen — G28 (feedback 2026-07-15)
 The Week Plan is the **recurring** structure for the **coming week only**. Alongside it, a
@@ -216,6 +247,16 @@ adds/skips/overrides, and settles. **Conflicts are surfaced (notify the user)** 
 collides with the recurring plan (a fixed-anchor overlap or a squeezed placement) raises a preview
 warning naming the day. Dates **beyond** the coming week are stored and shown on the Calendar, and
 inject at their own SOD (they are not placed on the live spine early).
+
+**Rendering — our days laid OVER the calendar (clarified 2026-07-16).** The grid is **wall-clock
+truth**: a block draws where it actually occurs. Our sleep-cycle days (§4.1) are laid **over** those
+standard calendar days, so the two do not align 1:1 — a head sleep starts on the previous calendar
+column and runs into the one it heads. Therefore **a block that crosses midnight legitimately spans
+two calendar columns**, and one column legitimately shows two different cycles' material (the tail of
+today's head sleep in the morning, the start of tomorrow's at night — they never overlap). This is
+correct, not a conflict. Implementation: react-big-calendar with `showMultiDayTimes` and
+`allDayAccessor={() => false}` (§7.0.4) — the default all-day banner row is **forbidden here**: it
+would strip the day's head sleep off the time axis entirely.
 
 **Navigation.** The grid screen hosts a segmented **`[ Week Plan | Calendar ]`** toggle (same grid
 chrome, seamless): *Week Plan* = recurring, coming-week, heading **"Weekly Planning"** (toggle label stays "Week

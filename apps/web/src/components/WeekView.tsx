@@ -18,15 +18,15 @@ import { useMemo, useState } from "react";
 import type { DatedTask, Event, State, WeekTemplate } from "@maxtellar/core";
 import { canPlanWeek } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
+import { WeekGridRBC } from "./WeekGridRBC";
 import { useSettings } from "../settings";
-import { fmtClock, fmtTod, toDate } from "../time";
+import { fmtClock, toDate } from "../time";
 import { weekPreview, type WeekColumn } from "../weekPreview";
 import { BudgetPanel } from "./BudgetPanel";
 import { useTaskSpec, TaskSpecFieldsView, DateField } from "./TaskSpecFields";
 import { weekBudgetValidity } from "@maxtellar/core";
 
 const HOUR_PX = 30; // vertical scale: 30px per hour → 720px for the full day
-const AXIS_W = 46; // px, the hour-label gutter
 
 interface Props {
   state: State;
@@ -162,9 +162,6 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
 
   const span = preview.winEnd - preview.winStart;
   const innerH = (span / 60) * HOUR_PX;
-  const pxPerMin = innerH / span;
-  const hours: number[] = [];
-  for (let m = Math.ceil(preview.winStart / 60) * 60; m <= preview.winEnd; m += 60) hours.push(m);
 
   return (
     <div className="config-screen">
@@ -260,50 +257,18 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
             )}
           </div>
 
-          <div className="wk-grid" style={{ gridTemplateColumns: `${AXIS_W}px repeat(7, 1fr)` }}>
-            <div className="wk-axis-col">
-              <div className="wk-col-head wk-axis-head" />
-              <div className="wk-axis" style={{ height: innerH }}>
-                {hours.map((h) => (
-                  <span key={h} className="wk-axis-label num" style={{ top: (h - preview.winStart) * pxPerMin }}>{fmtTod(h % 1440, hour12)}</span>
-                ))}
-              </div>
-            </div>
-            {preview.days.map((day) => {
-              const dd = toDate(day.date);
-              const isWeekend = weekendDays.includes(day.weekday);
-              const isToday = day.date === midnightOf(toDate(state.now));
-              return (
-                <div key={day.date} className={`wk-col${isWeekend ? " weekend" : ""}${day.isOff ? " off" : ""}`}>
-                  <div className={`wk-col-head${isToday ? " today" : ""}`}>
-                    <span className="wk-col-wd">{WD[day.weekday]}</span>
-                    <span className="wk-col-date num">{dd.getDate() === 1 || day.weekday === 0 ? `${MONTHS[dd.getMonth()]} ` : ""}{dd.getDate()}</span>
-                    {mode === "calendar" && (
-                      <button className="wk-col-add" aria-label={`Add activity on ${WD[day.weekday]}`} data-tip="Add a one-off activity on this day" onClick={() => setDatedEdit({ date: day.date, task: null })}>+</button>
-                    )}
-                  </div>
-                  <div className="wk-col-body" style={{ height: innerH }}>
-                    {hours.map((h) => (
-                      <div key={h} className="wk-hourline" style={{ top: (h - preview.winStart) * pxPerMin }} />
-                    ))}
-                    {day.isOff && day.blocks.length === 0 && <span className="wk-col-empty">off</span>}
-                    {day.blocks.map((b) => (
-                      <button
-                        key={`${day.date}-${b.templateId}`}
-                        className={`wk-block${b.dated ? " dated" : ""}${b.squeezed > 0 ? " squeezed" : ""}`}
-                        data-timing={b.timing}
-                        style={{ top: (b.start - preview.winStart) * pxPerMin, height: Math.max(16, (b.end - b.start) * pxPerMin - 2) }}
-                        onClick={() => onBlockClick(day.date, b)}
-                        data-tip={`${b.dated ? "◆ " : ""}${b.title} · ${fmtTod(((b.start % 1440) + 1440) % 1440, hour12)}–${fmtTod(((b.end % 1440) + 1440) % 1440, hour12)}${b.squeezed > 0 ? " · squeezed" : ""}${mode === "calendar" && !b.dated ? " · click to skip/move" : ""}`}>
-                        <span className="wk-block-title">{b.dated ? "◆ " : ""}{b.title}</span>
-                        <span className="wk-block-time num">{fmtTod(((b.start % 1440) + 1440) % 1440, hour12)}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <WeekGridRBC
+            preview={preview}
+            weekStart={weekStart}
+            weekendDays={weekendDays}
+            offDays={state.week.offDays}
+            hour12={hour12}
+            today={midnightOf(toDate(state.now))}
+            mode={mode}
+            height={innerH + 56}
+            onBlockClick={onBlockClick}
+            onAddDated={(date) => setDatedEdit({ date, task: null })}
+          />
           {mode === "week" && state.week.templates.length === 0 && (
             <span className="config-empty">no templates yet — add recurring tasks; they appear placed across the week here</span>
           )}

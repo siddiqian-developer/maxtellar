@@ -1,0 +1,178 @@
+/**
+ * The Week Plan / Calendar 7-column grid (§4.4/§4.6), rendered by react-big-calendar
+ * (adopted 2026-07-16 — see the §7.0.4 named-decisions table).
+ *
+ * RBC ONLY RENDERS. Placement authority stays with core `settle` via `weekPreview`;
+ * nothing here computes a time. RBC's own drag/resize/select powers stay off — the
+ * plan is not edited by dragging a block on this grid.
+ *
+ * Two things this file must get right, both from §4.1 (day = Sleep-start → Sleep-start):
+ *  1. The grid is WALL-CLOCK truth with our sleep-cycle days laid OVER it. A head sleep
+ *     starts on the previous calendar column and runs into the day it heads, so a block
+ *     crossing midnight legitimately SPANS two columns (`showMultiDayTimes`), and one
+ *     column legitimately shows two cycles' material (last night's tail in the morning,
+ *     tomorrow's head at night — they never overlap). RBC's default all-day banner row is
+ *     forbidden (`allDayAccessor={() => false}`): it would strip the day's head sleep off
+ *     the time axis entirely.
+ *  2. The working-day number (§4.4b) sits on the column where the user WAKES.
+ */
+import { Calendar, dayjsLocalizer, type Event } from "react-big-calendar";
+import dayjs from "dayjs";
+import "react-big-calendar/lib/css/react-big-calendar.css";
+import { fmtTod } from "../time";
+import { weekendRun, workingDayLabel, workingDayNumber } from "../workingDays";
+import type { WeekBlock, WeekPreview } from "../weekPreview";
+
+// RBC cannot run without a localizer built on a date library; the app has none by
+// design (it speaks epoch minutes, §7.0.2). dayjs is the lightest of the five RBC
+// supports and is already one of its dependencies. It is used ONLY for RBC's own
+// chrome — never for the app's parsing/formatting, which stays `casualTime`/`time.ts`.
+const localizer = dayjsLocalizer(dayjs);
+
+const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
+interface BlockEvent extends Event {
+  start: Date;
+  end: Date;
+  block: WeekBlock;
+  /** local-midnight epoch-minute of the column this block BELONGS to (§4.6 edits
+   * target the owning column, which is not always the column it draws in). */
+  date: number;
+}
+
+/**
+ * weekPreview blocks → RBC events. Each block's minutes-into-day are relative to the
+ * column that OWNS it; `end` may exceed 1440 (a head sleep running past midnight), and
+ * that is exactly what produces the correct cross-column span.
+ */
+export function toEvents(preview: WeekPreview): BlockEvent[] {
+  const out: BlockEvent[] = [];
+  for (const day of preview.days) {
+    for (const b of day.blocks) {
+      out.push({
+        title: b.title,
+        start: new Date((day.date + b.start) * 60000),
+        end: new Date((day.date + b.end) * 60000),
+        block: b,
+        date: day.date,
+      });
+    }
+  }
+  return out;
+}
+
+interface Props {
+  preview: WeekPreview;
+  /** local-midnight epoch-minute of the first column. */
+  weekStart: number;
+  weekendDays: number[];
+  offDays: number[];
+  hour12: boolean;
+  /** local-midnight epoch-minute of today, for the today marker. */
+  today: number;
+  mode: "week" | "calendar";
+  height: number;
+  onBlockClick: (date: number, block: WeekBlock) => void;
+  onAddDated: (date: number) => void;
+}
+
+export function WeekGridRBC({
+  preview, weekStart, weekendDays, offDays, hour12, today, mode, height, onBlockClick, onAddDated,
+}: Props): JSX.Element {
+  const events = toEvents(preview);
+  // §4.4a: the weekend RUN (weekendDays grown through adjacent OFF days) is what
+  // "weekend" means everywhere below — tint included.
+  const run = weekendRun(weekendDays, offDays);
+  const dayMin = (d: Date): number => Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 60000);
+
+  // The vertical window (§4.6) — RBC reads only the TIME off these Dates.
+  const at = (min: number): Date => new Date(2000, 0, 1, Math.floor(min / 60), min % 60);
+  const min = at(preview.winStart);
+  const max = preview.winEnd >= 1440 ? new Date(2000, 0, 1, 23, 59, 59) : at(preview.winEnd);
+
+  /** Column head: weekday · date · the FULL working-day label (§4.4b) · + add. */
+  const Header = ({ date }: { date: Date }): JSX.Element => {
+    const d = dayMin(date);
+    const wd = date.getDay();
+    const n = workingDayNumber(wd, weekendDays, offDays);
+    const label = workingDayLabel(n);
+    // §4.4a: an OFF day adjacent to the weekend IS weekend — so the tint follows the
+    // RUN, not the raw `weekendDays` setting ("count them as weekend", incl. styling).
+    const isWeekend = run.has(wd);
+    const isOff = offDays.includes(wd);
+    return (
+      <div className={`wk-col-head${d === today ? " today" : ""}${isWeekend ? " weekend" : ""}${isOff ? " off" : ""}`}>
+        <span className="wk-col-wd">{WD[wd]}</span>
+        <span className="wk-col-date num">
+          {date.getDate() === 1 || wd === 0 ? `${MONTHS[date.getMonth()]} ` : ""}{date.getDate()}
+        </span>
+        {/* §4.4b: written in full, never abbreviated. Off/weekend columns carry none. */}
+        <span className="wk-col-wdn">{label ?? ""}</span>
+        {mode === "calendar" && (
+          <button className="wk-col-add" aria-label={`Add activity on ${WD[wd]}`}
+            data-tip="Add a one-off activity on this day"
+            onClick={(e) => { e.stopPropagation(); onAddDated(d); }}>+</button>
+        )}
+      </div>
+    );
+  };
+
+  const EventCell = ({ event }: { event: BlockEvent }): JSX.Element => {
+    const b = event.block;
+    const tod = (m: number): string => fmtTod(((m % 1440) + 1440) % 1440, hour12);
+    const tip = `${b.dated ? "◆ " : ""}${b.title} · ${tod(b.start)}–${tod(b.end)}`
+      + `${b.squeezed > 0 ? " · squeezed" : ""}`
+      + `${mode === "calendar" && !b.dated ? " · click to skip/move" : ""}`;
+    return (
+      <div className="wk-ev-in" data-tip={tip}>
+        <span className="wk-block-title">{b.dated ? "◆ " : ""}{b.title}</span>
+        <span className="wk-block-time num">{tod(b.start)}</span>
+      </div>
+    );
+  };
+
+  return (
+    <div className="wk-rbc" style={{ height }}>
+      <Calendar
+        localizer={localizer}
+        events={events}
+        view="week"
+        views={["week"]}
+        onView={() => undefined}
+        date={new Date(weekStart * 60000)}
+        onNavigate={() => undefined}
+        toolbar={false}
+        // §4.1: a cycle's head sleep crosses midnight — keep it ON the time axis,
+        // spanning its true span, instead of RBC's all-day banner row.
+        showMultiDayTimes
+        allDayAccessor={() => false}
+        min={min}
+        max={max}
+        step={60}
+        timeslots={1}
+        components={{ header: Header as never, event: EventCell as never }}
+        // Placement is core's; RBC must not offer to re-place anything.
+        selectable={false}
+        onSelectEvent={(e) => onBlockClick((e as BlockEvent).date, (e as BlockEvent).block)}
+        eventPropGetter={(e) => {
+          const b = (e as BlockEvent).block;
+          return { className: `wk-ev wk-ev--${b.timing}${b.dated ? " dated" : ""}${b.squeezed > 0 ? " squeezed" : ""}` };
+        }}
+        dayPropGetter={(d) => {
+          const wd = d.getDay();
+          const isOff = offDays.includes(wd);
+          // An OFF column with nothing placed says so, as the hand-rolled grid did.
+          // (Dated one-offs still fire on OFF days, §4.4a — so it must be per-column.)
+          const empty = isOff && (preview.days.find((p) => p.date === dayMin(d))?.blocks.length ?? 0) === 0;
+          return {
+            className: `${run.has(wd) ? "wk-day-weekend " : ""}${isOff ? "wk-day-off " : ""}${empty ? "wk-day-off-empty" : ""}`.trim(),
+          };
+        }}
+        formats={{
+          timeGutterFormat: (d: Date) => fmtTod(d.getHours() * 60 + d.getMinutes(), hour12),
+        }}
+      />
+    </div>
+  );
+}
