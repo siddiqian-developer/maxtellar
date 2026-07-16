@@ -76,11 +76,16 @@ const DEFAULT_REGISTRY: HeadsRegistry = {
   [OFF_PERIOD]: [],
 };
 
-/** Merge a persisted registry over the defaults so every built-in head — and
- * its seeded built-in sub-heads — is always present, without dropping the
- * user's own additions (unions sub-head lists for built-in heads). */
+/** Merge a persisted registry so every UNDELETABLE built-in head — and its
+ * seeded built-in sub-heads — is always present, without dropping the user's own
+ * additions (unions sub-head lists for built-in heads). Starts from `stored`, NOT
+ * from DEFAULT_REGISTRY: the only non-built-in default seed ("Main Work") is a
+ * deletable starter head, so once a stored registry exists it must not be
+ * force-re-added — a deleted "Main Work" would otherwise silently resurrect
+ * (empty) on every reload (bug fixed 2026-07-16). First run (nothing stored) still
+ * gets the full DEFAULT_REGISTRY via the caller. */
 function mergeRegistry(stored: HeadsRegistry): HeadsRegistry {
-  const merged: HeadsRegistry = { ...DEFAULT_REGISTRY, ...stored };
+  const merged: HeadsRegistry = { ...stored };
   for (const head of BUILT_IN_HEADS) {
     const seeded = BUILT_IN_SUBHEADS[head] ?? [];
     const existing = stored[head] ?? [];

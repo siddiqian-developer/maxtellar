@@ -430,7 +430,10 @@ ones (`Self-Management`, `Recharge` with its Sleep/Nap sub-heads, `Food`) show *
 the **system** ones (`Wasted Time`, `Lost Hours`) show a quiet one-line note in front —
 "system head — logged, never planned" / "system head — auto-booked at day close" — since
 their non-plannability is the thing worth surfacing. (`Main Work` is a convenience default
-seed, not a built-in, so it CAN be deleted.) **Built-in heads sort first** in the registry
+seed, not a built-in, so it CAN be deleted — **and a deletion sticks across reloads**: the
+persisted-registry merge re-guarantees only the undeletable built-ins, never the `Main Work`
+seed, so it does not silently reappear once the user has removed it. The full default seed set
+is used only on a first run with nothing stored. Fixed 2026-07-16.) **Built-in heads sort first** in the registry
 listing, marked by a very subtle dot (`docs/design-tokens.md` "built-in marker") — the
 delete button's absence is the primary signal, the dot and any note secondary. The system
 built-ins are **excluded from the drawer's planning pickers** (Sub-head / head fields); only
