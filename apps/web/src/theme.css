@@ -1125,6 +1125,13 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   padding-bottom: 6px;
   border-bottom: 1px solid var(--hairline);
 }
+/* §7.0.4 virtualized history: items are absolutely positioned inside a spacer of
+   the full list height, so `.config-body`'s flex `gap` must not apply to them (it
+   would double-space the window) and each item owns its own spacing. */
+.hist-virt { width: 100%; }
+.hist-virt-item .history-day { margin: 14px 0 4px; }
+.hist-virt-item:first-child .history-day { margin-top: 0; }
+
 .history-row {
   display: flex;
   align-items: center;

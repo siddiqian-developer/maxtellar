@@ -14,7 +14,8 @@
  * immediate per-entry (EDIT_HISTORY for edit/delete, BACKLOG for inserts).
  */
 
-import { useState } from "react";
+import { useRef, useState } from "react";
+import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Event, HistoryEntry, State } from "@maxtellar/core";
 import { formingDayStart } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
@@ -63,11 +64,19 @@ function nextMidnight(min: number): number {
   return Math.floor(d.getTime() / 60000);
 }
 
-type Row =
-  | { type: "entry"; h: HistoryEntry }
-  | { type: "gap"; start: number; end: number; trailing?: boolean };
+type EntryRow = { type: "entry"; h: HistoryEntry };
+type GapRow = { type: "gap"; start: number; end: number; trailing?: boolean };
+type Row = EntryRow | GapRow;
+
+/** The flattened list the virtualizer indexes: day headings and rows in one
+ * sequence (a nested group render can't be windowed). */
+type Item =
+  | { kind: "header"; key: string; at: number }
+  | { kind: "row"; r: Row };
 
 export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
+  // The scroll container is `.config-screen` (it owns overflow-y), not `.config-body`.
+  const scrollRef = useRef<HTMLDivElement>(null);
   const [editing, setEditing] = useState<HistoryEntry | "new" | null>(null);
   const [filling, setFilling] = useState<{ from: number; to: number } | null>(null);
   // Esc closes the innermost overlay first (editor/modal), else goes back.
@@ -117,7 +126,9 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
     }
   }
 
-  // Group by day, oldest day first (rows are already chronological).
+  // Group by day, oldest day first (rows are already chronological), then FLATTEN
+  // to a single item list so the virtualizer can size day headings and rows in one
+  // pass — a grouped render can't be windowed without measuring every group.
   const groups = new Map<string, Row[]>();
   for (const r of rows) {
     const key = dayKey(r.type === "entry" ? r.h.start : r.start);
@@ -125,9 +136,30 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
     if (list) list.push(r);
     else groups.set(key, [r]);
   }
+  const items: Item[] = [];
+  for (const [key, dayRows] of groups) {
+    const first = dayRows[0]!;
+    items.push({ kind: "header", key, at: first.type === "entry" ? first.h.start : first.start });
+    for (const r of dayRows) items.push({ kind: "row", r });
+  }
+
+  // History is unbounded — it grows for the life of the app — so only the visible
+  // window is in the DOM (§7.0.4: @tanstack/react-virtual). Rows vary in height
+  // (a gap row, a wrapped title), so each is measured rather than assumed:
+  // `estimateSize` is only the pre-measure guess.
+  const virt = useVirtualizer({
+    count: items.length,
+    getScrollElement: () => scrollRef.current,
+    estimateSize: (i) => (items[i]!.kind === "header" ? 40 : 34),
+    overscan: 10,
+    getItemKey: (i) => {
+      const it = items[i]!;
+      return it.kind === "header" ? `h-${it.key}` : it.r.type === "gap" ? `g-${it.r.start}` : it.r.h.id;
+    },
+  });
 
   return (
-    <div className="config-screen">
+    <div className="config-screen" ref={scrollRef}>
       <div className="config-header">
         <button className="theme-toggle" onClick={onBack} aria-label="Back">
           <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round">
@@ -139,52 +171,60 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
         <button className="hist-add-btn" onClick={() => setEditing("new")} data-tip="Back-log a past entry by hand">+ Add entry</button>
       </div>
       <div className="config-body">
-        {groups.size === 0 && <span className="config-empty">nothing has happened yet — history fills as work completes</span>}
-        {[...groups.entries()].map(([key, dayRows]) => {
-          const first = dayRows[0]!;
-          return (
-            <div key={key}>
-              <h3 className="history-day">{dayHeading(first.type === "entry" ? first.h.start : first.start)}</h3>
-              {dayRows.map((r) =>
-                r.type === "gap" ? (
-                  <div key={`gap-${r.start}`} className={`history-row history-gap${r.trailing ? " trailing" : ""}`}>
-                    <span className="hr-range num">{`${clock(r.start)} – ${clock(r.end)}`}</span>
-                    <span className="hr-title">{r.trailing ? "unaccounted (forming)" : "gap"}</span>
-                    <span className="hr-dur num">{fmtDur(r.end - r.start)}</span>
-                    {r.end - r.start > GAP_THRESHOLD && (
+        {items.length === 0 && <span className="config-empty">nothing has happened yet — history fills as work completes</span>}
+        {/* The virtualizer positions items absolutely inside a spacer of the full
+            list height, so the scrollbar still reflects ALL of history. */}
+        <div className="hist-virt" style={{ height: virt.getTotalSize(), position: "relative" }}>
+          {virt.getVirtualItems().map((v) => {
+            const it = items[v.index]!;
+            return (
+              <div
+                key={v.key}
+                data-index={v.index}
+                ref={virt.measureElement}
+                className="hist-virt-item"
+                style={{ position: "absolute", top: 0, left: 0, width: "100%", transform: `translateY(${v.start}px)` }}
+              >
+                {it.kind === "header" ? (
+                  <h3 className="history-day">{dayHeading(it.at)}</h3>
+                ) : it.r.type === "gap" ? (
+                  <div className={`history-row history-gap${it.r.trailing ? " trailing" : ""}`}>
+                    <span className="hr-range num">{`${clock(it.r.start)} – ${clock(it.r.end)}`}</span>
+                    <span className="hr-title">{it.r.trailing ? "unaccounted (forming)" : "gap"}</span>
+                    <span className="hr-dur num">{fmtDur(it.r.end - it.r.start)}</span>
+                    {it.r.end - it.r.start > GAP_THRESHOLD && (
                       <button
                         className="fill-btn"
-                        onClick={() => setFilling({ from: r.start, to: r.end })}
+                        onClick={() => setFilling({ from: (it.r as GapRow).start, to: (it.r as GapRow).end })}
                         data-tip="What happened? Fill this unaccounted span"
                       >fill</button>
                     )}
                   </div>
                 ) : (
                   <div
-                    key={r.h.id}
-                    className={`history-row clickable${r.h.outcome === "skipped" ? " skipped" : ""}`}
+                    className={`history-row clickable${it.r.h.outcome === "skipped" ? " skipped" : ""}`}
                     role="button"
                     tabIndex={0}
-                    onClick={() => setEditing(r.h)}
-                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing(r.h); } }}
+                    onClick={() => setEditing((it.r as EntryRow).h)}
+                    onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setEditing((it.r as EntryRow).h); } }}
                     data-tip="Click to edit this entry"
                   >
                     <span className="hr-range num">
-                      {r.h.kind === "skipped" ? clock(r.h.start) : `${clock(r.h.start)} – ${clock(r.h.end)}`}
+                      {it.r.h.kind === "skipped" ? clock(it.r.h.start) : `${clock(it.r.h.start)} – ${clock(it.r.h.end)}`}
                     </span>
-                    <span className="hr-title">{r.h.title}</span>
+                    <span className="hr-title">{it.r.h.title}</span>
                     <span className="badge head-badge">
-                      {r.h.headId}
-                      {r.h.activityId && ` · ${r.h.activityId}`}
+                      {it.r.h.headId}
+                      {it.r.h.activityId && ` · ${it.r.h.activityId}`}
                     </span>
-                    <span className="outcome-pill" data-outcome={r.h.outcome}>{OUTCOME_LABEL[r.h.outcome]}</span>
-                    <span className="hr-dur num">{fmtDur(r.h.end - r.h.start)}</span>
+                    <span className="outcome-pill" data-outcome={it.r.h.outcome}>{OUTCOME_LABEL[it.r.h.outcome]}</span>
+                    <span className="hr-dur num">{fmtDur(it.r.h.end - it.r.h.start)}</span>
                   </div>
-                ),
-              )}
-            </div>
-          );
-        })}
+                )}
+              </div>
+            );
+          })}
+        </div>
       </div>
 
       {editing && (
