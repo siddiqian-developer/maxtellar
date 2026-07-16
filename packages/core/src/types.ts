@@ -239,13 +239,26 @@ export interface TaskSpec {
   sleepKind?: SleepKind;
 }
 
+/** §4.4 one-time/ranged template validity (ruled in-scope 2026-07-16). Absent =
+ * recurs on its weekday set forever.
+ *  - `once`   → fires on its next matching-weekday occurrence, then RETIRES
+ *    (`firedOn` = the day-midnight it fired; set at injection, never fires again;
+ *    the retired template stays listed, marked, until deleted).
+ *  - `ranged` → the weekday set fires only within [`from`, `to`] (inclusive
+ *    local-midnight epoch-minutes; either edge may be open). */
+export type TemplateValidity =
+  | { kind: "once"; firedOn?: Min }
+  | { kind: "ranged"; from?: Min; to?: Min };
+
 /** §4.4 weekly planning (G19). A reusable task template that SOD injection
  * instantiates onto matching weekdays. Recurrence = the weekday set it fires on. */
 export interface WeekTemplate extends TaskSpec {
   id: string;
   /** Recurrence: weekdays it instantiates on (0=Sun … 6=Sat). daily = all 7,
-   * weekend = [0,6]. One-time/ranged is a future extension (§4.4). */
+   * weekend = [0,6]. */
   weekdays: number[];
+  /** §4.4: one-time/ranged bound on when the weekday set fires (absent = always). */
+  validity?: TemplateValidity;
   /** LexoRank among templates — injection preserves this relative order. */
   rank: string;
 }

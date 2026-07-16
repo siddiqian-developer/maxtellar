@@ -1577,6 +1577,15 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .wk-template:hover { border-color: var(--accent); }
 .wk-days { font-size: 11px; color: var(--ink-soft); letter-spacing: 0.02em; }
 .wk-shortcuts { display: flex; gap: 12px; margin-top: 8px; }
+/* §4.4 template validity range (From/To date pickers). */
+.wk-range { display: flex; gap: 16px; margin-top: 8px; flex-wrap: wrap; }
+.wk-range > label { display: flex; align-items: center; gap: 8px; font-size: 12px; color: var(--ink-soft); }
+.date-field { display: inline-flex; align-items: center; gap: 4px; position: relative; }
+.date-pick-btn {
+  background: var(--paper-raised); border: 1px solid var(--hairline); border-radius: var(--radius);
+  padding: 5px 10px; color: var(--ink); cursor: pointer; font-size: 13px;
+}
+.date-pick-btn:hover { border-color: var(--accent-soft); }
 .link-btn {
   background: none;
   border: none;

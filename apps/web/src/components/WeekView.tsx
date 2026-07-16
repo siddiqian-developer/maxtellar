@@ -22,7 +22,7 @@ import { useSettings } from "../settings";
 import { fmtClock, fmtTod, toDate } from "../time";
 import { weekPreview, type WeekColumn } from "../weekPreview";
 import { BudgetPanel } from "./BudgetPanel";
-import { useTaskSpec, TaskSpecFieldsView } from "./TaskSpecFields";
+import { useTaskSpec, TaskSpecFieldsView, DateField } from "./TaskSpecFields";
 import { weekBudgetValidity } from "@maxtellar/core";
 
 const HOUR_PX = 30; // vertical scale: 30px per hour → 720px for the full day
@@ -311,7 +311,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
       </div>
 
       {editing && (
-        <TemplateEditor template={editing === "new" ? null : editing} hour12={hour12} onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
+        <TemplateEditor template={editing === "new" ? null : editing} hour12={hour12} now={state.now} onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
       )}
       {datedEdit && (
         <DatedTaskEditor date={datedEdit.date} task={datedEdit.task} hour12={hour12}
@@ -407,9 +407,10 @@ function DatedTaskEditor({ date, task, hour12, onSave, onDelete, onClose }: {
 }
 
 /** Add/edit one recurring template — smart-input on time/duration. */
-function TemplateEditor({ template, hour12, onSave, onDelete, onClose }: {
+function TemplateEditor({ template, hour12, now, onSave, onDelete, onClose }: {
   template: WeekTemplate | null;
   hour12: boolean;
+  now: number;
   onSave: (t: WeekTemplate) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -421,15 +422,34 @@ function TemplateEditor({ template, hour12, onSave, onDelete, onClose }: {
   const [err, setErr] = useState<string | null>(null);
   const toggleDay = (d: number): void => setWeekdays((w) => (w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort()));
 
+  // §4.4 one-time/ranged validity. UI mode: every week / once / date range.
+  const initialMode: "always" | "once" | "ranged" =
+    template?.validity?.kind === "once" ? "once" : template?.validity?.kind === "ranged" ? "ranged" : "always";
+  const [validMode, setValidMode] = useState<"always" | "once" | "ranged">(initialMode);
+  const [rangeFrom, setRangeFrom] = useState<number | undefined>(template?.validity?.kind === "ranged" ? template.validity.from : undefined);
+  const [rangeTo, setRangeTo] = useState<number | undefined>(template?.validity?.kind === "ranged" ? template.validity.to : undefined);
+  // Preserve an already-fired once template's firedOn so editing it doesn't un-retire it.
+  const priorFiredOn = template?.validity?.kind === "once" ? template.validity.firedOn : undefined;
+
+  const buildValidity = (): WeekTemplate["validity"] => {
+    if (validMode === "once") return { kind: "once", ...(priorFiredOn !== undefined ? { firedOn: priorFiredOn } : {}) };
+    if (validMode === "ranged") return { kind: "ranged", ...(rangeFrom !== undefined ? { from: rangeFrom } : {}), ...(rangeTo !== undefined ? { to: rangeTo } : {}) };
+    return undefined;
+  };
+
   const save = (): void => {
     if (weekdays.length === 0) return setErr("Pick at least one weekday.");
+    if (validMode === "ranged" && rangeFrom !== undefined && rangeTo !== undefined && rangeTo < rangeFrom)
+      return setErr("The range's end is before its start.");
     const r = sp.resolve();
     if ("error" in r) return setErr(r.error);
+    const validity = buildValidity();
     onSave({
       id: template?.id ?? `tpl-${Date.now().toString(36)}`,
       rank: template?.rank ?? "m",
       tier: template?.tier ?? "normal",
       weekdays: weekdays.slice().sort(),
+      ...(validity !== undefined ? { validity } : {}),
       ...r.spec,
     });
   };
@@ -457,6 +477,25 @@ function TemplateEditor({ template, hour12, onSave, onDelete, onClose }: {
               <button type="button" className="link-btn" onClick={() => setWeekdays([1, 2, 3, 4, 5])}>Weekdays</button>
               <button type="button" className="link-btn" onClick={() => setWeekdays([0, 6])}>Weekend</button>
             </div>
+          </div>
+          <div className="field">
+            <label>Recurrence <span className="hint-glyph" tabIndex={0} data-tip="Every week = recurs on its weekdays forever. Once = fires on the next matching day, then retires. Date range = only fires within the chosen dates (§4.4).">ⓘ</span></label>
+            <div className="type-chips" role="radiogroup" aria-label="Recurrence">
+              {(["always", "once", "ranged"] as const).map((m) => (
+                <button key={m} type="button" className={`type-chip${validMode === m ? " active" : ""}`} data-status="budgeted" onClick={() => setValidMode(m)}>
+                  {m === "always" ? "Every week" : m === "once" ? "Once" : "Date range"}
+                </button>
+              ))}
+            </div>
+            {validMode === "once" && priorFiredOn !== undefined && (
+              <p className="field-desc">Already fired — retired. Switch to another mode to re-activate it.</p>
+            )}
+            {validMode === "ranged" && (
+              <div className="wk-range">
+                <label>From <DateField now={now} value={rangeFrom} onChange={setRangeFrom} ariaLabel="Range start date" /></label>
+                <label>To <DateField now={now} value={rangeTo} onChange={setRangeTo} ariaLabel="Range end date" /></label>
+              </div>
+            )}
           </div>
           {err && <div className="form-warning" role="status">{err}</div>}
         </div>

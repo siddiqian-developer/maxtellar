@@ -1080,11 +1080,27 @@ export function reduce(state: State, event: Event): State {
           s = ns;
           return id;
         };
-        const { tasks: injected, spilled, notes } = injectTodayDetailed(s, midnight, weekday, mkId, rankBelow);
+        const { tasks: injected, spilled, firedOnceIds, notes } = injectTodayDetailed(s, midnight, weekday, mkId, rankBelow);
         if (injected.length > 0) {
           const plan = [...s.plan, ...injected].sort(byRank);
           s = applyAmputations({ ...s, plan });
           s = resettle(s);
+        }
+        // §4.4: retire the `once` templates that just fired — mark firedOn so
+        // they never inject again (they stay listed, marked, until deleted).
+        if (firedOnceIds.length > 0) {
+          const fired = new Set(firedOnceIds);
+          s = {
+            ...s,
+            week: {
+              ...s.week,
+              templates: s.week.templates.map((t) =>
+                fired.has(t.id) && t.validity?.kind === "once"
+                  ? { ...t, validity: { kind: "once", firedOn: midnight } }
+                  : t,
+              ),
+            },
+          };
         }
         // §11.7 spill: push what didn't fit to the NEXT day's dated adds.
         if (spilled.length > 0) {
@@ -1145,6 +1161,7 @@ export function reduce(state: State, event: Event): State {
           slideable: t.slideable,
           breakable: t.breakable,
           weekdays: [...t.weekdays],
+          ...(t.validity !== undefined ? { validity: t.validity } : {}),
           ...(t.budget !== undefined ? { budget: t.budget } : {}),
           ...(t.anchorStartTod !== undefined ? { anchorStartTod: t.anchorStartTod } : {}),
           ...(t.anchorEndTod !== undefined ? { anchorEndTod: t.anchorEndTod } : {}),

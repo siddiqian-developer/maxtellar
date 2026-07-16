@@ -60,6 +60,19 @@ export function achievedByHead(history: HistoryEntry[], start: Min, end: Min): R
 /** Position of a weekday within the week that starts at `firstWeekday`. */
 const weekdayPos = (wd: number, first: number): number => ((wd - first) % 7 + 7) % 7;
 
+/** §4.4 one-time/ranged validity: whether a template's weekday set may fire on
+ * the day at `midnight`. Absent validity = always. A `once` template that has
+ * already fired (`firedOn` set) is retired; a `ranged` one fires only inside its
+ * [from, to] window (either edge open). */
+export function templateValidOn(t: WeekTemplate, midnight: Min): boolean {
+  const v = t.validity;
+  if (!v) return true;
+  if (v.kind === "once") return v.firedOn === undefined;
+  if (v.from !== undefined && midnight < v.from) return false;
+  if (v.to !== undefined && midnight > v.to) return false;
+  return true;
+}
+
 /**
  * §5.1 redistribution at SOD: the day the SOD sweep just sealed is compared
  * against each weekly-quota head's share on that day's weekday. at-least/exact
@@ -149,6 +162,10 @@ export interface InjectionResult {
   /** §11.7 spill: whole tasks that no longer fit their head's day budget —
    * the reducer pushes them to the NEXT day's dated adds, never drops them. */
   spilled: TaskSpec[];
+  /** §4.4: ids of `once` templates that fired this injection — the reducer
+   * marks them retired (`validity.firedOn = midnight`) so they never fire again.
+   * The web's placement PREVIEW ignores this (it never retires). */
+  firedOnceIds: string[];
   notes: string[];
 }
 
@@ -177,6 +194,8 @@ export function injectTodayDetailed(
   const notes: string[] = [];
   const spilled: TaskSpec[] = [];
   const raw = collectDue(s, midnight, weekday);
+  // §4.4: `once` templates that fired this injection retire (reducer marks them).
+  const firedOnceIds = raw.due.filter((t) => t.validity?.kind === "once").map((t) => t.id);
   // Head rank = position in week.budgets (§11.5); unbudgeted heads go last.
   const headIdx = new Map(s.week.budgets.map((b, i) => [b.headId, i] as const));
   const due = raw.due
@@ -226,7 +245,7 @@ export function injectTodayDetailed(
     }
   }
   for (const d of raw.adds) push(d);
-  return { tasks: out, spilled, notes };
+  return { tasks: out, spilled, firedOnceIds, notes };
 }
 
 /** Back-compat wrapper (the web's placement preview reads tasks only). */
@@ -255,7 +274,7 @@ function collectDue(s: State, midnight: Min, weekday: number): { due: WeekTempla
   const due = isOff
     ? []
     : s.week.templates
-        .filter((t) => t.weekdays.includes(weekday) && !skips.has(t.id))
+        .filter((t) => t.weekdays.includes(weekday) && !skips.has(t.id) && templateValidOn(t, midnight))
         .slice()
         .sort(byRank)
         .map((t) => {

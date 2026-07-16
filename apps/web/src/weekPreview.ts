@@ -12,7 +12,7 @@
  * overrides) is surfaced so the UI can notify the user.
  */
 import type { Dur, DatedEntry, PlanItem, WeekTemplate } from "@maxtellar/core";
-import { initialState, injectToday, rankAfter, settle } from "@maxtellar/core";
+import { initialState, injectTodayDetailed, rankAfter, settle } from "@maxtellar/core";
 
 const MIN_PER_DAY = 1440;
 /** Notional day-start the fill cursor uses when nothing is anchored earlier. */
@@ -70,19 +70,24 @@ export function weekPreview(
   semiTailFloor: Dur,
   full24 = true,
 ): WeekPreview {
-  // A minimal State the pure injector reads (templates + offDays + dated layer).
-  const base = {
-    ...initialState(0),
-    week: { ...initialState(0).week, startedAt: 0, offDays, templates },
-    dated,
-  };
-
   const days: WeekDayPreview[] = [];
   const conflicts: string[] = [];
   let winStart = full24 ? 0 : WEEK_DAY_START;
   let winEnd = full24 ? MIN_PER_DAY : 22 * 60;
 
+  // §4.4: a `once` template must preview on its FIRST matching date only — after
+  // it "fires" on an earlier column it retires, exactly as real SOD injection
+  // will. Columns run in date order, so retire fired once-templates in a working
+  // copy as we advance (using the core's own firedOnceIds).
+  let workTemplates = templates;
+
   for (const col of columns) {
+    // A minimal State the pure injector reads (templates + offDays + dated layer).
+    const base = {
+      ...initialState(0),
+      week: { ...initialState(0).week, startedAt: 0, offDays, templates: workTemplates },
+      dated,
+    };
     let n = 0;
     let lo: string | null = null;
     const rankBelow = (prev: string | null): string => {
@@ -95,7 +100,15 @@ export function weekPreview(
     // the final `addsCount` tasks are the §4.6 one-offs (ids are reassigned).
     const entry = dated.find((e) => e.date === col.date);
     const addsCount = entry?.adds.length ?? 0;
-    const tasks = injectToday(base, col.date, col.weekday, () => `pv-${col.date}-${++n}`, rankBelow);
+    const injected = injectTodayDetailed(base, col.date, col.weekday, () => `pv-${col.date}-${++n}`, rankBelow);
+    const tasks = injected.tasks;
+    // Retire any `once` template that fired on this column so later columns skip it.
+    if (injected.firedOnceIds.length > 0) {
+      const fired = new Set(injected.firedOnceIds);
+      workTemplates = workTemplates.map((t) =>
+        fired.has(t.id) && t.validity?.kind === "once" ? { ...t, validity: { kind: "once" as const, firedOn: col.date } } : t,
+      );
+    }
     const datedIds = new Set(tasks.slice(tasks.length - addsCount).map((t) => t.id));
     const hasDated = addsCount > 0 || (entry?.skips.length ?? 0) > 0 || (entry?.overrides.length ?? 0) > 0;
 

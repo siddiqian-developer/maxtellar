@@ -20,11 +20,46 @@
 import { useState } from "react";
 import type { SleepKind, TimingType } from "@maxtellar/core";
 import { parseTimeOfDay } from "../casualTime";
-import { fmtTod } from "../time";
+import { fmtTod, toDate } from "../time";
 import { PRESETS, presetById } from "../presets";
 import type { PresetId } from "../settings";
 import { SubheadField } from "./SubheadField";
 import { DurInput } from "./BudgetPanel";
+import { DatePicker } from "./DatePicker";
+
+const DOW = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MON = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+/** Compact local date label for a local-midnight epoch-minute. */
+function fmtDateLabel(dayMin: number): string {
+  const d = toDate(dayMin);
+  return `${DOW[d.getDay()]} ${MON[d.getMonth()]} ${d.getDate()}`;
+}
+
+/** Shared calendar DATE field (§7.0.5): a 📅 button showing the picked date (or
+ * "Any"), opening the direction-aware DatePicker; clearable to leave the edge
+ * open. Used for template validity ranges (§4.4). */
+export function DateField({ now, value, onChange, ariaLabel, direction = "future" }: {
+  now: number;
+  value: number | undefined;
+  onChange: (v: number | undefined) => void;
+  ariaLabel: string;
+  direction?: "future" | "past";
+}): JSX.Element {
+  const [open, setOpen] = useState(false);
+  return (
+    <div className="date-field">
+      <button type="button" className="date-pick-btn num" aria-label={ariaLabel} onClick={() => setOpen(true)}>
+        {value !== undefined ? fmtDateLabel(value) : "Any"} <span aria-hidden>📅</span>
+      </button>
+      {value !== undefined && (
+        <button type="button" className="clear-btn" tabIndex={-1} aria-label={`Clear ${ariaLabel}`} onClick={() => onChange(undefined)}>&times;</button>
+      )}
+      {open && (
+        <DatePicker now={now} direction={direction} onPick={(d) => { onChange(d); setOpen(false); }} onClose={() => setOpen(false)} />
+      )}
+    </div>
+  );
+}
 
 /** Smart time-of-day field (0..1439) + ±5-min stepper. `value`/`onChange` in
  * minutes-into-day; empty is `undefined`. */
