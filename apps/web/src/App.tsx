@@ -160,6 +160,9 @@ export function App(): JSX.Element {
     alarmBehavior: AlarmBehavior;
     alarmSound: SoundChoice;
     customSounds: CustomSound[];
+    /** §11.4 Sleep is edited here too (SET_SLEEP_BUDGET) — core state, so it needs
+     * the same revert as minFragment/openCap/tailFloor. */
+    sleepMinutes: number;
   }
   const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSnapshot | null>(null);
   const openSettings = (): void => {
@@ -181,6 +184,7 @@ export function App(): JSX.Element {
         alarmBehavior: settings.alarmBehavior,
         alarmSound: settings.alarmSound,
         customSounds: settings.customSounds,
+        sleepMinutes: state.week.sleepMinutes,
       });
     }
     setSettingsOpen(true);
@@ -195,6 +199,7 @@ export function App(): JSX.Element {
       if (s.minFragment !== state.minFragment) dispatch({ type: "SET_MIN_FRAGMENT", minutes: s.minFragment });
       if (s.openExtentCap !== state.openExtentCap) dispatch({ type: "SET_OPEN_CAP", minutes: s.openExtentCap });
       if (s.semiTailFloor !== state.semiTailFloor) dispatch({ type: "SET_TAIL_FLOOR", minutes: s.semiTailFloor });
+      if (s.sleepMinutes !== state.week.sleepMinutes) dispatch({ type: "SET_SLEEP_BUDGET", minutes: s.sleepMinutes });
       settings.setTimeFormat(s.timeFormat);
       settings.setGridGranularity(s.gridGranularity);
       settings.setDevSandbox(s.devSandboxVal);

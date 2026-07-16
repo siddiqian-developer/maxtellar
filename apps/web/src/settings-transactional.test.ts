@@ -49,6 +49,20 @@ describe("§06 — Esc/×/scrim revert EVERY settings field", () => {
     expect(missing, `SettingsPanel can change these, but a cancel does NOT revert them: ${missing.join(", ")}`).toEqual([]);
   });
 
+  it("every CORE event the panel dispatches is also reverted", () => {
+    // The first version of this guard only scanned `setX(` calls and MISSED
+    // `SET_SLEEP_BUDGET` — a real unreverted field (§11.4 Sleep is edited here as
+    // well as in weekly planning). Settings reach core two ways; both must revert.
+    const panel = read("components/SettingsPanel.tsx");
+    const app = read("App.tsx");
+    const revert = app.slice(app.indexOf("const revertSettings"), app.indexOf("const [theme, setTheme]"));
+
+    const dispatched = new Set([...panel.matchAll(/type:\s*"(SET_[A-Z_]+)"/g)].map((m) => m[1]!));
+    const restored = new Set([...revert.matchAll(/type:\s*"(SET_[A-Z_]+)"/g)].map((m) => m[1]!));
+    const missing = [...dispatched].filter((e) => !restored.has(e));
+    expect(missing, `SettingsPanel dispatches these to core, but a cancel does NOT revert them: ${missing.join(", ")}`).toEqual([]);
+  });
+
   it("the weekend edit reverts core's OFF set too (§4.4a: weekend ⊆ offDays)", () => {
     // Reverting the setting without the days it forced OFF would just re-drift them.
     const app = read("App.tsx");
