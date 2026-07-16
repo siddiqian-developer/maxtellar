@@ -70,6 +70,15 @@ the back-navigation stack rule below — History/Analytics opened from the menu 
 2. **Pipeline:** Running + unstarted only; uniform cards; gaps as subtle spacing; a **control
    surface** (Start/Pause/Cancel sync to timeline unconditionally; scroll-sync only when
    co-displayed). Desktop shows timeline + pipeline side-by-side; mobile uses bottom tabs.
+   **BUILT (2026-07-16):** below **720px** the two panes become bottom tabs — one at a time, no
+   resizer, the FAB lifted clear of the bar. Both panes stay **mounted** (CSS hides one), so the
+   timeline keeps its follow-scroll position and nothing re-settles on a tab switch; Start/Pause/
+   Cancel "sync to timeline unconditionally" for free, since they go through the same state. (No
+   cross-pane scroll-sync exists to disable — the timeline only follows `now` itself.) The `.app`
+   grid uses `minmax(0, 1fr)` on mobile: plain `1fr` floors the track at the topbar's min-content
+   (~760px) and drags the whole page into a horizontal scroll. **Known gap:** the topbar's own
+   controls still exceed a phone's width and scroll horizontally within the bar — a topbar
+   redesign is its own task.
    **Cards follow TIME order (2026-07-11), mirroring the timeline** — sorted by each item's
    first placed part, not by raw priority rank (an anchored task can be placed earlier in
    time than a higher-priority float; the two projections must agree). Unplaced items sink

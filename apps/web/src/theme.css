@@ -173,6 +173,54 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
   grid-template-rows: 48px 1fr;
   height: 100%;
 }
+/* §6: mobile uses bottom tabs — one pane at a time, no side-by-side, no resizer.
+   Both panes stay mounted; only visibility changes, so the timeline keeps its
+   follow-scroll and nothing re-settles when you switch tab. */
+.bottom-tabs { display: none; }
+@media (max-width: 720px) {
+  .app {
+    /* The desktop track widths are set INLINE from React state (the resizable
+       pipeline), so this must override them. `minmax(0, 1fr)` — not `1fr` — or the
+       track floors at its content's min-content width (the topbar's controls are
+       ~760px) and drags the whole PAGE into a horizontal scroll. */
+    grid-template-columns: minmax(0, 1fr) !important;
+    grid-template-rows: 48px 1fr 52px;
+  }
+  /* The topbar's own controls still exceed a phone's width — let IT scroll rather
+     than the document. */
+  .topbar { overflow-x: auto; scrollbar-width: none; }
+  .topbar::-webkit-scrollbar { display: none; }
+  .col-resizer { display: none; }
+  .app.mtab-timeline .pipeline { display: none; }
+  .app.mtab-pipeline .timeline-wrap { display: none; }
+  .bottom-tabs {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    grid-column: 1 / -1;
+    border-top: 1px solid var(--line);
+    background: var(--paper-raised);
+  }
+  .bottom-tab {
+    border: none;
+    background: transparent;
+    padding: 14px 0;
+    font: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--ink-faint);
+    cursor: pointer;
+    border-top: 2px solid transparent;
+    margin-top: -1px;
+  }
+  .bottom-tab.active { color: var(--accent); border-top-color: var(--accent); }
+  /* The FAB's desktop offset is inline (clears the pipeline pane); on one column
+     it just sits in the corner — lifted clear of the 52px tab bar, which it would
+     otherwise cover. */
+  /* !important on both: this block sits ABOVE `.fab`'s own rule in the file, so at
+     equal specificity the later one would otherwise win. */
+  .fab { right: 20px !important; bottom: calc(52px + 16px) !important; }
+}
+
 .topbar {
   position: relative;
   grid-column: 1 / -1;

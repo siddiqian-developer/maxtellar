@@ -105,6 +105,12 @@ export function App(): JSX.Element {
   }, [splashPhase]);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [view, setView] = useState<View>("main");
+  // §6: "Desktop shows timeline + pipeline side-by-side; mobile uses bottom tabs."
+  // Which of the two panes a small screen is showing. Purely presentational — both
+  // stay MOUNTED (CSS hides one), so the timeline keeps its follow-scroll position
+  // and nothing re-settles on a tab switch. Start/Pause/Cancel "sync to timeline
+  // unconditionally" already, because they go through the same state.
+  const [mobileTab, setMobileTab] = useState<"timeline" | "pipeline">("timeline");
   // §4.2 SOD ceremony overlay. `sodOpen` alone controls visibility so Esc/Back
   // can dismiss it (one level back to the Day) even mid-ceremony — the committed
   // sweep/day-record and `state.ceremony` phase survive, resumable via the Day's
@@ -299,7 +305,7 @@ export function App(): JSX.Element {
   }[theme];
 
   return (
-    <div className="app" style={{ gridTemplateColumns: `1fr 6px ${pipelineWidth}px` }}>
+    <div className={`app mtab-${mobileTab}`} style={{ gridTemplateColumns: `1fr 6px ${pipelineWidth}px` }}>
       <div className="topbar">
         <h1>maxtellar</h1>
         {/* Screen navigation (SPEC VI): quiet icon menu — Day / History / Analytics */}
@@ -429,6 +435,22 @@ export function App(): JSX.Element {
             onMouseDown={startColResize}
           />
           <Pipeline state={state} dispatch={(e) => void dispatch(e)} />
+
+          {/* §6 mobile bottom tabs — CSS-hidden on desktop, where both panes are
+              co-displayed and no tab is needed. */}
+          <nav className="bottom-tabs" role="tablist" aria-label="Day panes">
+            {(["timeline", "pipeline"] as const).map((t) => (
+              <button
+                key={t}
+                role="tab"
+                aria-selected={mobileTab === t}
+                className={`bottom-tab${mobileTab === t ? " active" : ""}`}
+                onClick={() => setMobileTab(t)}
+              >
+                {t === "timeline" ? "Timeline" : "Pipeline"}
+              </button>
+            ))}
+          </nav>
 
           <button
             className="fab primary"
