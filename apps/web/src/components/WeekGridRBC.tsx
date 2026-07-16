@@ -3,8 +3,17 @@
  * (adopted 2026-07-16 — see the §7.0.4 named-decisions table).
  *
  * RBC ONLY RENDERS. Placement authority stays with core `settle` via `weekPreview`;
- * nothing here computes a time. RBC's own drag/resize/select powers stay off — the
- * plan is not edited by dragging a block on this grid.
+ * nothing here computes a time.
+ *
+ * Week Plan mode ADDS gcal-style authoring gestures (2026-07-17) — but they do not
+ * bend that rule. A gesture is an INPUT: this file reports the raw observed values
+ * (weekday, minutes-into-day) and dispatches nothing; the caller authors an anchor,
+ * core re-settles, and the block re-renders from the new `events`. A block may
+ * therefore land somewhere other than where the mouse was released (squeezed, or the
+ * 24h wall) — that snap is correct, and the caller notifies. RBC's addon is safe here
+ * precisely because it drops its own drag state (`reset()`) BEFORE firing `onEnd`, so
+ * it never holds a competing opinion about placement.
+ * Calendar mode keeps every gesture off.
  *
  * Two things this file must get right, both from §4.1 (day = Sleep-start → Sleep-start):
  *  1. The grid is WALL-CLOCK truth with our sleep-cycle days laid OVER it. A head sleep
@@ -17,8 +26,10 @@
  *  2. The working-day number (§4.4b) sits on the column where the user WAKES.
  */
 import { Calendar, dayjsLocalizer, type Event } from "react-big-calendar";
+import withDragAndDrop, { type EventInteractionArgs } from "react-big-calendar/lib/addons/dragAndDrop";
 import dayjs from "dayjs";
 import "react-big-calendar/lib/css/react-big-calendar.css";
+import "react-big-calendar/lib/addons/dragAndDrop/styles.css";
 import { fmtTod } from "../time";
 import { weekendRun, workingDayLabel, workingDayNumber } from "../workingDays";
 import type { WeekBlock, WeekPreview } from "../weekPreview";
@@ -40,6 +51,10 @@ interface BlockEvent extends Event {
    * target the owning column, which is not always the column it draws in). */
   date: number;
 }
+
+// Wrapped ONCE at module scope: doing this inside the component would remount the
+// whole calendar on every render (losing scroll and any in-flight drag).
+const DnDCalendar = withDragAndDrop<BlockEvent>(Calendar as never);
 
 /**
  * weekPreview blocks → RBC events. Each block's minutes-into-day are relative to the
@@ -73,12 +88,20 @@ interface Props {
   today: number;
   mode: "week" | "calendar";
   height: number;
+  /** §4.4 mid-week structural lock — gestures render but stay inert (Stage 4). */
+  locked?: boolean;
   onBlockClick: (date: number, block: WeekBlock) => void;
   onAddDated: (date: number) => void;
+  /** Week Plan authoring gestures. All three report RAW observed values — the grid
+   * never snaps, clamps, or judges legality; that is the caller's + core's job. */
+  onSlotSelect?: (weekdays: number[], startTod: number, endTod: number, isClick: boolean) => void;
+  onBlockResize?: (date: number, block: WeekBlock, endTod: number) => void;
+  onBlockMove?: (date: number, block: WeekBlock, startTod: number, toWeekday: number) => void;
 }
 
 export function WeekGridRBC({
-  preview, weekStart, weekendDays, offDays, hour12, today, mode, height, onBlockClick, onAddDated,
+  preview, weekStart, weekendDays, offDays, hour12, today, mode, height, locked = false,
+  onBlockClick, onAddDated, onSlotSelect, onBlockResize, onBlockMove,
 }: Props): JSX.Element {
   const events = toEvents(preview);
   // §4.4a: the weekend RUN (weekendDays grown through adjacent OFF days) is what
@@ -118,6 +141,25 @@ export function WeekGridRBC({
     );
   };
 
+  const gesturesOn = mode === "week" && !locked;
+  /** Minutes-into-day of `d` RELATIVE to the column that owns the block (`ownerDate`).
+   * Not `getHours()*60`: a block dragged onto the next calendar column (or a head sleep
+   * past midnight) must read as >1440 against its owner, which is what core anchors on. */
+  const todFor = (d: Date, ownerDate: number): number => Math.round(d.getTime() / 60000) - ownerDate;
+
+  const handleResize = ({ event, end }: EventInteractionArgs<BlockEvent>): void => {
+    onBlockResize?.(event.date, event.block, todFor(new Date(end), event.date));
+  };
+
+  const handleDrop = ({ event, start }: EventInteractionArgs<BlockEvent>): void => {
+    const s = new Date(start);
+    // The two axes are reported INDEPENDENTLY, which means `startTod` must be measured
+    // against the column the block LANDED in — not its original owner. Measured against
+    // the owner, a same-time Wed→Thu drop would read as +1440 and be indistinguishable
+    // from "24h later", and the caller would retime a block that only changed weekday.
+    onBlockMove?.(event.date, event.block, todFor(s, dayMin(s)), s.getDay());
+  };
+
   const EventCell = ({ event }: { event: BlockEvent }): JSX.Element => {
     const b = event.block;
     const tod = (m: number): string => fmtTod(((m % 1440) + 1440) % 1440, hour12);
@@ -133,8 +175,8 @@ export function WeekGridRBC({
   };
 
   return (
-    <div className="wk-rbc" style={{ height }}>
-      <Calendar
+    <div className={`wk-rbc${mode === "week" && locked ? " locked" : ""}`} style={{ height }}>
+      <DnDCalendar
         localizer={localizer}
         events={events}
         view="week"
@@ -152,8 +194,21 @@ export function WeekGridRBC({
         step={60}
         timeslots={1}
         components={{ header: Header as never, event: EventCell as never }}
-        // Placement is core's; RBC must not offer to re-place anything.
-        selectable={false}
+        // Week Plan authors; Calendar mode never does. These only ARM the gestures —
+        // RBC still computes no final placement (see the file header).
+        selectable={gesturesOn}
+        resizable={gesturesOn}
+        draggableAccessor={(e) => gesturesOn && !e.block.dated}
+        resizableAccessor={(e) => gesturesOn && !e.block.dated}
+        onSelectSlot={(s) => {
+          if (!gesturesOn) return;
+          const wds = [...new Set((s.slots ?? []).map((d) => new Date(d).getDay()))];
+          const startD = new Date(s.start);
+          const owner = dayMin(startD);
+          onSlotSelect?.(wds, todFor(startD, owner), todFor(new Date(s.end), owner), s.action === "click");
+        }}
+        onEventResize={handleResize}
+        onEventDrop={handleDrop}
         // Week is the only view, so a header drill-down goes nowhere. Disabling it
         // also stops RBC wrapping the column head in its own <button> — which our
         // header's "+" button would then nest inside (invalid DOM).

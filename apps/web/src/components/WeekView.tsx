@@ -305,8 +305,12 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
                 today={midnightOf(toDate(state.now))}
                 mode={mode}
                 height={innerH + 56}
+                locked={locked}
                 onBlockClick={onBlockClick}
                 onAddDated={(date) => setDatedEdit({ date, task: null })}
+                onSlotSelect={(wds, s, e, isClick) => console.log("[stage1] slotSelect", { weekdays: wds, startTod: s, endTod: e, isClick })}
+                onBlockResize={(date, b, endTod) => console.log("[stage1] resize", { date, title: b.title, timing: b.timing, from: b.end, to: endTod })}
+                onBlockMove={(date, b, startTod, toWeekday) => console.log("[stage1] move", { date, title: b.title, timing: b.timing, fromStart: b.start, toStart: startTod, toWeekday })}
               />
               {mode === "week" && state.week.templates.length === 0 && (
                 <span className="config-empty">no templates yet — add recurring tasks; they appear placed across the week here</span>
