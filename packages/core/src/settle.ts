@@ -17,6 +17,19 @@
 
 import type { Dur, Min, Part, Placement, PlanItem, UnstartedTask } from "./types.js";
 
+/** §7.1 global safety net: the settle-pass proves termination by construction
+ * (forward-only, check-before-split, monotone wall pointer). This is the circuit
+ * breaker that guarantees a bug can never SILENTLY loop forever — if the
+ * structural-op count ever exceeds a generous ceiling, settle throws instead of
+ * spinning. A throw discards the batch upstream (the fork/EDIT_COMMIT backstop),
+ * so live state is never corrupted; the event log stays replayable for a report. */
+export class CircuitBreakerError extends Error {
+  constructor(public readonly ops: number) {
+    super(`settle circuit breaker tripped after ${ops} structural ops (§7.1)`);
+    this.name = "CircuitBreakerError";
+  }
+}
+
 interface Wall {
   itemId: string;
   start: Min;
@@ -57,15 +70,28 @@ const isOpen = (t: UnstartedTask): boolean => t.budget === undefined;
 
 /** A task acts as a WALL when it has an anchored coordinate it cannot leave.
  * `soft` walls are budget-less anchored tasks whose (presumed) tail may be
- * clamped by a following wall so it never overlaps a real commitment. */
-function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur, tailFloor: Dur): Wall | null {
+ * clamped by a following wall so it never overlaps a real commitment.
+ * `cap` is the OPEN presumed-extent this task is entitled to — the fair-share
+ * value from §3.9 (10h uncontested / 2h yielding / an even split among peers),
+ * precomputed per-task; it defaults to `openCap` when this task is not part of a
+ * fair-share group (e.g. a lone open semi-tail contested by a firm task, which
+ * keeps its full balloon and is handled by G27 compression, §3.9.1). */
+function wallOf(
+  t: UnstartedTask,
+  minFragment: Dur,
+  openCap: Dur,
+  tailFloor: Dur,
+  cap: Dur = openCap,
+): Wall | null {
   switch (t.timing) {
     case "fixed":
       return { itemId: t.id, start: t.anchorStart!, end: t.anchorEnd! };
     case "semi-head": {
-      // Start anchored; tail floats. Budget-less → reserve the capped presumed
-      // extent (§3.9, clamped later to the next wall); budgeted → its budget.
-      const extent = t.budget ?? openCap;
+      // Start anchored; tail floats. Budget-less → reserve the FAIR-SHARE
+      // presumed extent (§3.9 — 10h alone, 2h with a firm task below, its split
+      // share among open peers; clamped later to the next wall); budgeted → its
+      // budget. (Was the flat `openCap` soft-wall clamp — completed 2026-07-16.)
+      const extent = t.budget ?? cap;
       return {
         itemId: t.id,
         start: t.anchorStart!,
@@ -75,7 +101,11 @@ function wallOf(t: UnstartedTask, minFragment: Dur, openCap: Dur, tailFloor: Dur
       };
     }
     case "semi-tail": {
-      const budget = t.budget ?? openCap;
+      // Budget-less → the fair-share presumed extent when this tail is a PEER in
+      // a fair-share group (an open subject splits the free space with it, §3.9);
+      // otherwise its full balloon (`cap` defaults to openCap), which a firm
+      // contester then compresses via G27 (§3.9.1). Budgeted → its budget.
+      const budget = t.budget ?? cap;
       // §3.9.1 (G27): only an OPEN semi-tail's ballooned claim is compressible
       // (down to the floor) — a budgeted semi-tail's budget is a definite need
       // and is never compressed by a contester.
@@ -106,6 +136,20 @@ const CROWDED_CAP: Dur = 120;
 const isFirm = (t: UnstartedTask): boolean =>
   t.timing === "fixed" || t.timing === "budgeted" || t.timing === "semi-head";
 
+/** §3.9 forward-filler: an OPEN task that fills the free space FORWARD from its
+ * anchor/cursor — an unscheduled task, or a budget-less semi-head (start pinned,
+ * tail grows forward). These are the subjects the fair-share cap sizes. */
+const isForwardFiller = (t: UnstartedTask): boolean =>
+  t.timing === "unscheduled" || (t.timing === "semi-head" && isOpen(t));
+
+/** §3.9 open peer: any budget-less/indefinite claim — a forward-filler OR an
+ * open semi-tail (anchored end, floating start). Open peers SPLIT contested free
+ * space evenly; a semi-tail joins the split only as a peer BELOW a forward-filler
+ * (a lone open semi-tail contested by a firm task is G27 compression, not a
+ * fair-share yield — so a fair-share group always STARTS with a forward-filler). */
+const isOpenPeer = (t: UnstartedTask): boolean =>
+  isForwardFiller(t) || (t.timing === "semi-tail" && isOpen(t));
+
 export function settle({
   plan,
   cursor,
@@ -117,6 +161,17 @@ export function settle({
   const placements = new Map<string, Placement>();
   const squeezeTol = minFragment - 1;
 
+  // §7.1 circuit breaker: every structural-op loop iteration below charges one
+  // op against a generous ceiling. Legal input is bounded by O(plan²) (each item
+  // is placed in one monotone left-to-right pass over the walls), so this never
+  // trips in practice — it only fires if an invariant break makes a loop spin,
+  // in which case we THROW (batch discarded upstream) instead of hanging.
+  const opCeiling = 256 + 64 * (plan.length + 1) * (plan.length + 1);
+  let ops = 0;
+  const charge = (): void => {
+    if (++ops > opCeiling) throw new CircuitBreakerError(ops);
+  };
+
   // §2.7 (G24): a task named by some other task's `parentId` is a PARENT — a
   // derived bracket. It never occupies the spine: only its descendant leaves
   // are placed by the normal physics below; the parent's placement is computed
@@ -126,25 +181,29 @@ export function settle({
   for (const i of plan) if (isTask(i) && i.parentId) parentIds.add(i.parentId);
   const isParent = (id: string): boolean => parentIds.has(id);
 
-  // §3.9 fair-share sizing (2026-07-11): an open unscheduled task's reserved
-  // extent depends on what sits immediately BELOW it (next in time), NOT on
-  // priority. Nothing below → full `openExtentCap` (10h). A FIRM task below
-  // → yield to CROWDED_CAP (2h). A run of open peers → they SPLIT one cap
-  // evenly. Precomputed here over the rank-ordered task subsequence; walls
-  // still clamp the actual fill below.
+  // §3.9 fair-share sizing (2026-07-11; completed 2026-07-16): an OPEN task's
+  // reserved extent depends on what sits immediately BELOW it (next in time),
+  // NOT on priority. A fair-share GROUP is a maximal run of open peers that
+  // STARTS with a forward-filler (unscheduled / open semi-head) and extends over
+  // consecutive open peers, INCLUDING open semi-tails (an open semi-tail below a
+  // forward-filler is an equal peer, not a firm 2h wall — the completed case).
+  // Nothing below the group → the full `openExtentCap` (10h) split evenly; a firm
+  // task below → CROWDED_CAP (2h) split evenly. `capById` sizes every member:
+  // an unscheduled member's fill width, a semi-head member's forward extent, and
+  // an open semi-tail PEER's balloon span (so a forward-filler above it gets room
+  // instead of being crushed). A run that would START with a semi-tail is skipped
+  // — that tail keeps its full balloon + G27 compression (§3.9.1), unchanged.
   const taskSeq = plan.filter(isTask).filter((t) => !isParent(t.id));
-  const openCapById = new Map<string, Dur>();
+  const capById = new Map<string, Dur>();
   for (let i = 0; i < taskSeq.length; ) {
-    if (taskSeq[i]!.timing !== "unscheduled") { i++; continue; }
+    if (!isForwardFiller(taskSeq[i]!)) { i++; continue; }
     let j = i;
-    while (j < taskSeq.length && taskSeq[j]!.timing === "unscheduled") j++;
-    const run = j - i; // consecutive open peers share one cap
-    const after = taskSeq[j];
-    // Uncontested (nothing below) → 10h; contested by a firm OR another
-    // floater (semi-tail) below → the group's cap tightens, split evenly.
+    while (j < taskSeq.length && isOpenPeer(taskSeq[j]!)) j++;
+    const run = j - i; // open peers in the group share one cap evenly
+    const after = taskSeq[j]; // first non-open-peer below → a definite (firm) claim
     const groupCap = !after ? openExtentCap : CROWDED_CAP;
     const share = Math.max(minFragment, Math.floor(groupCap / run));
-    for (let k = i; k < j; k++) openCapById.set(taskSeq[k]!.id, share);
+    for (let k = i; k < j; k++) capById.set(taskSeq[k]!.id, share);
     i = j;
   }
 
@@ -155,7 +214,7 @@ export function settle({
   const rawWalls: Wall[] = [];
   for (const item of plan) {
     if (!isTask(item) || isParent(item.id)) continue; // parents are brackets, not walls
-    const w = wallOf(item, minFragment, openExtentCap, semiTailFloor);
+    const w = wallOf(item, minFragment, openExtentCap, semiTailFloor, capById.get(item.id) ?? openExtentCap);
     if (w) rawWalls.push(w);
   }
   rawWalls.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -235,6 +294,7 @@ export function settle({
   /** Advance ptr past any wall that has begun at/before ptr. */
   const skipWalls = (): void => {
     for (;;) {
+      charge();
       // find the next wall overlapping or before ptr
       while (wallIdx < walls.length && walls[wallIdx]!.end <= ptr) wallIdx++;
       const w = walls[wallIdx];
@@ -266,6 +326,7 @@ export function settle({
    * wall behind it. */
   const makeRoom = (needed: Dur): void => {
     for (;;) {
+      charge();
       // NOT skipWalls(): a ballooned semi-tail typically starts AT ptr, and
       // skipWalls would jump past it before it could be compressed. Advance
       // only over walls fully behind ptr; the first wall overlapping or ahead
@@ -308,11 +369,11 @@ export function settle({
 
     // Open (budget-less) UNSCHEDULED task: fills the current free slot up to
     // its fair-share cap (§3.9 — 10h uncontested / 2h yielding / split among
-    // open peers; precomputed in openCapById), clamped by the next wall.
+    // open peers; precomputed in capById), clamped by the next wall.
     // Lower-rank items land after it.
     if (isTask(item) && isOpen(item)) {
       skipWalls();
-      const cap = openCapById.get(item.id) ?? openExtentCap;
+      const cap = capById.get(item.id) ?? openExtentCap;
       const width = Math.min(cap, slotWidth());
       const parts: Part[] = width > 0 ? [{ start: ptr, end: ptr + width }] : [];
       ptr += width;
@@ -352,6 +413,7 @@ export function settle({
       // squeeze up to tolerance against the first obstacle, else split across slots.
       let firstSlot = true;
       while (deficit > 0) {
+        charge();
         makeRoom(deficit); // §3.9.1: compress/slide an open semi-tail ahead first
         skipWalls();
         const width = slotWidth();
@@ -388,6 +450,7 @@ export function settle({
     } else {
       // FROGLEAP (unbreakable): whole body into the first slot that fits.
       for (;;) {
+        charge();
         makeRoom(deficit); // §3.9.1: compress/slide an open semi-tail ahead first
         skipWalls();
         const width = slotWidth();

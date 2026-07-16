@@ -741,6 +741,29 @@ export function reduce(state: State, event: Event): State {
       return resettle({ ...state, plan, history: [...state.history, entry] });
     }
 
+    case "RERANK": {
+      // §3.11/§3.13: drag-to-reorder. Recompute the task's LexoRank so it lands
+      // immediately after `afterId` (null = front), then resettle — list
+      // position IS priority (E4), so the fill order and placements follow. A
+      // pure between-key insert (rank.ts); no other item's rank changes.
+      const target = state.plan.find((i) => i.id === event.taskId);
+      if (!target || event.afterId === event.taskId) return state;
+      const others = state.plan.filter((i) => i.id !== event.taskId).sort(byRank);
+      let newRank: string;
+      if (event.afterId == null) {
+        newRank = rankBetween(null, others[0]?.rank ?? null);
+      } else {
+        const idx = others.findIndex((i) => i.id === event.afterId);
+        if (idx === -1) return state; // unknown anchor — no-op
+        newRank = rankBetween(others[idx]!.rank, others[idx + 1]?.rank ?? null);
+      }
+      if (newRank === target.rank) return state;
+      const plan = state.plan
+        .map((i) => (i.id === event.taskId ? ({ ...i, rank: newRank } as PlanItem) : i))
+        .sort(byRank);
+      return resettle({ ...state, plan });
+    }
+
     case "SET_MIN_FRAGMENT": {
       // §3.7/7.1: the fragment floor is settable in Settings. Every stored
       // budget must respect the new floor (no budget below it, ever), so each

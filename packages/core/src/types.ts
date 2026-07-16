@@ -86,6 +86,14 @@ export interface UnstartedTask {
   spillPolicy?: "dismount" | "re-anchor";
   /** Rider lane; lane 2 exists but is hidden in MVP (§2.2). */
   lane?: number;
+  /** §2.9 wearable provision — schema only in MVP, no behavior. Where a Sleep/
+   * Nap task's timing came from: `manual` (typed) or `wearable` (a pluggable
+   * source). Detected sleep only ever PROPOSES; it never auto-commits. */
+  sleepSource?: "manual" | "wearable";
+  /** §3.7 per-task MIN_FRAGMENT override provision — schema only in MVP, no UI.
+   * When set, this task's own fragment floor (≥ the global MIN_FRAGMENT); absent
+   * = use the global floor. The global setting governs everything today. */
+  minFragment?: Dur;
 }
 
 /** A deliberate user buffer on the plan (inert; shrinks under pressure; vanishes at 0). */
@@ -350,6 +358,11 @@ export type Event =
   | { type: "POMODORO_RESUME" } // §5.2 break-end tap: Resume work
   | { type: "POMODORO_EXTEND"; minutes: Dur } // §5.2 keep working / extend break +N
   | { type: "CANCEL_TASK"; taskId: string }
+  // §3.11/§3.13 drag-to-reorder: recompute `taskId`'s LexoRank so it sits
+  // immediately AFTER the plan item `afterId` (null/omitted = move to the front,
+  // before the first item). The between-key is infinite-insertable (rank.ts);
+  // list position IS priority (E4), so a resettle re-lays-out by the new order.
+  | { type: "RERANK"; taskId: string; afterId?: string | null }
   | { type: "SET_MIN_FRAGMENT"; minutes: Dur } // §3.7/7.1 fragment floor (settable in Settings)
   | { type: "SET_OPEN_CAP"; minutes: Dur } // §3.9 open-task presumed-extent cap
   | { type: "SET_TAIL_FLOOR"; minutes: Dur } // §3.9.1 open semi-tail compression floor
