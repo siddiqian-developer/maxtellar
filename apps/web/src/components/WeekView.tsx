@@ -19,6 +19,7 @@ import type { DatedTask, Event, State, WeekTemplate } from "@maxtellar/core";
 import { canPlanWeek } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { WeekGridRBC } from "./WeekGridRBC";
+import { countStartWeekday } from "../workingDays";
 import { useSettings } from "../settings";
 import { fmtClock, toDate } from "../time";
 import { weekPreview, type WeekColumn } from "../weekPreview";
@@ -109,6 +110,18 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     commit(state.week.templates.filter((x) => x.id !== id));
     setEditing(null);
   };
+  /**
+   * §4.4/§4.4b: the **First Weekday** declared at `START_WEEK` is the DERIVED first
+   * working day — the first non-off day after the weekend run — never "the weekday
+   * the user pressed the button on". Weekly planning runs ON an OFF day by design
+   * (§4.4), so `todayWeekday` is systematically an OFF day; declaring that shifted
+   * the weekly-quota week window (`weekdayPos`, §5.1) by the weekend's length.
+   * Declaring the derivation keeps the one definition (§4.4b wins) in one place.
+   * `undefined` (every day off) leaves the previous value untouched in the reducer.
+   */
+  const firstWorkingDay = (offDays: number[]): number | undefined =>
+    countStartWeekday(weekendDays, offDays) ?? undefined;
+
   const toggleOffDay = (d: number): void => {
     if (weekendDays.includes(d)) return; // §4.4a: weekend days are locked ON
     const offDays = state.week.offDays.includes(d)
@@ -117,7 +130,10 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     // weekend ⊆ offDays, and ≥1 OFF day.
     const withWeekend = [...new Set([...offDays, ...weekendDays])].sort();
     if (withWeekend.length === 0) return;
-    dispatch({ type: "START_WEEK", offDays: withWeekend });
+    // The OFF set just changed, so the weekend RUN — and with it the first working
+    // day (§4.4b) — may have moved. Re-declare it, or `firstWeekday` goes stale.
+    const fw = firstWorkingDay(withWeekend);
+    dispatch({ type: "START_WEEK", offDays: withWeekend, ...(fw !== undefined ? { firstWeekday: fw } : {}) });
   };
 
   // ---- dated mutations (calendar mode) ----
@@ -180,8 +196,13 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
         <span style={{ flex: 1 }} />
         {mode !== "calendar" && (
           <button className="sod-btn ready" disabled={!budgetValidity.ok}
-            onClick={() => dispatch({ type: "START_WEEK", firstWeekday: todayWeekday })}
-            data-tip={budgetValidity.ok ? "Roll over to a new week — today becomes the First Weekday" : "Gated: every planned day must budget to exactly 24h (§11.2)"}>
+            onClick={() => {
+              const fw = firstWorkingDay(state.week.offDays);
+              dispatch({ type: "START_WEEK", ...(fw !== undefined ? { firstWeekday: fw } : {}) });
+            }}
+            data-tip={budgetValidity.ok
+              ? `Roll over to a new week — ${WD[firstWorkingDay(state.week.offDays) ?? todayWeekday]} is the first working day`
+              : "Gated: every planned day must budget to exactly 24h (§11.2)"}>
             {started ? "Start New Week" : "Start Week"}
           </button>
         )}

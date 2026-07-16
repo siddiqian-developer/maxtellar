@@ -16,13 +16,14 @@
   template validity, see §4.4); mid-week planning
   is locked (open on OFF days / pre-week / urgent); off-periods book to a new built-in Off-Periods
   head. See §4.4/§4.5.
-- **`firstWeekday` vs the derived 1st working day (raised 2026-07-16).** §4.4b's derivation (first
-  non-off day after the weekend run, labelled where the user *wakes*) is authoritative for the
-  calendar's working-day numbering and **wins** over the `firstWeekday` declared at `START_WEEK`.
-  But `week.firstWeekday` still drives weekly-quota week-position (`weekdayPos`, §11), so the two
-  can disagree — e.g. `WeekView` currently declares `firstWeekday: todayWeekday`, which may land on
-  an OFF day. Reconciling quota positioning to the §4.4b definition is deliberately **not** done
-  silently (it would change quota behavior); settle it explicitly.
+- ~~**`firstWeekday` vs the derived 1st working day (raised 2026-07-16).**~~ **RESOLVED
+  (2026-07-16).** It was worse than a mismatch: `WeekView` declared `firstWeekday: todayWeekday`,
+  and §4.4 has weekly planning run ON an OFF day — so the declared "First Weekday" was
+  systematically an OFF day, shifting the weekly-quota week window (`weekdayPos`, §5.1 — its only
+  consumer) by the weekend's length. Fixed by declaring the §4.4b **derivation** at `START_WEEK`
+  and on every OFF-day toggle: the web computes it (it owns `weekendDays`) and passes it in, so
+  core's value IS the first working day and no second definition exists. Guarded by
+  `firstWeekday.test.ts`.
 - ~~**BUG (found 2026-07-16 during R7, PRE-EXISTING — not caused by the RBC swap).** `weekPreview`
   blocks carried the **preview task id** in a field named `templateId`, so click→edit, §4.6
   "Edit template…" and "Skip this day" all silently failed.~~ **RESOLVED (2026-07-16).** Injection

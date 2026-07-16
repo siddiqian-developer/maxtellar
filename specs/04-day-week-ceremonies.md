@@ -102,6 +102,13 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
 - Runs on OFF day(s) (setting; default Sunday; ≥1 OFF day; seamlessly overrideable). If slept
   through, runs *inside* the first weekday (time → Self-Management).
 - Back-logs when the weekend started; declares the **First Weekday** of the week ahead.
+  - **The declared First Weekday is the DERIVED first working day (§4.4b), fixed 2026-07-16** —
+    the first non-off weekday after the weekend run — **not** the weekday the user planned on.
+    Planning runs ON an OFF day by design (above), so "today" is systematically an OFF day;
+    declaring it shifted the weekly-quota week window (`weekdayPos`, §5.1) by the weekend's
+    length. The web derives it (it owns `weekendDays`, §4.4a) and declares it on `START_WEEK`
+    **and on every OFF-day toggle** (which re-dispatches `START_WEEK`, so the run may have moved).
+    One definition of "first working day" (§4.4b), declared into core — never two.
 - **Mid-week structural re-planning is strictly forbidden** (the week is a commitment). Daily
   tactical reflow (§3.7) is automatic — a different altitude.
 - Week-view screen (Google-Calendar-week-inspired); recurrence per task: specific weekdays
@@ -210,11 +217,11 @@ column head: **"1st working day"**, "2nd working day", … (full label, not abbr
   skipped, **Fri = 2nd working day**. A non-weekend off may be a **recurrence** (every Thursday) or
   a **one-off** (this Thursday only) — the user gets both; numbering treats them identically.
 - **Weekend-run columns carry no number.**
-- **This definition WINS over the declared `firstWeekday` (ruling 2026-07-16).** §4.4's weekly
-  planning declares a First Weekday at `START_WEEK`; where that declaration and the derivation above
-  disagree, **the derivation above is authoritative** for what the 1st working day is. (`firstWeekday`
-  still feeds weekly-quota week-position (`weekdayPos`); reconciling that to this definition is an
-  open item, not a silent rewire — §10.)
+- **This definition WINS over the declared `firstWeekday` (ruling 2026-07-16) — and they no longer
+  disagree.** `START_WEEK` now **declares this derivation** (§4.4), so the value core holds in
+  `week.firstWeekday` — the one that drives weekly-quota week-position (`weekdayPos`, §5.1) — IS the
+  first working day defined here. There is one definition, computed in one place (`workingDays.ts`)
+  and declared into core; core needs no knowledge of `weekendDays` (a web setting, §4.4a).
 - **The numbering is plan-side and nominal.** Calendar columns are wall-clock dates, one cycle each;
   lived days drift (30–100h — no sleep, no new day, §4.1). Real cycles are counted in Analytics
   (§6), which uses sealed `DayRecord`s. The label is the intended cycle, not the lived one.
