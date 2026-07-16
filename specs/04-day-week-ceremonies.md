@@ -141,8 +141,27 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
     corrected by the user: "planning is for no more than 24 hours").** A plan never reaches past
     tomorrow's clock, so there is nothing beyond "next day" to offer, and **a planned task spans at
     most 24h**. Consequence: "next day" only resolves when the End sits at or before the Start (11pm
-    → 7am = 8h); a "next day" End *after* the Start would be a 24h+ span and is refused **at the
-    boundary** (the chip is disabled with the reason), never accepted-then-scolded.
+    → 7am = 8h).
+  - **The picked DAY wins; the TIME snaps to fit it (ruled 2026-07-17).** Choosing a day is the
+    user's intent and is never overridden. If the current End can't be valid on the chosen day, the
+    **End** snaps to the nearest value that is (§7.0.2 snap-at-entry, corrected at the boundary — an
+    earlier build had this backwards, snapping the *day* instead). The Start is the anchor the user
+    placed, so it never moves. Concretely: `Same Day` on an End at/before the Start → End snaps to
+    `Start + MIN_FRAGMENT`; `Next Day` on an End after the Start → End snaps to the Start (a full
+    24h span).
+  - **A 30m task picking "Next Day" BECOMES a 24h task — this is correct, not a bug (ruled
+    2026-07-17, explicitly confirmed).** 9:00–9:30 + `Next Day` → End snaps to 9:00 next day = a 24h
+    span. It looks surprising, and the tempting "fix" is to read `Next Day` as *keep the 30m span,
+    move it to tomorrow*. **That reading is WRONG and must not be implemented.** A template's Start
+    has **no day at all** — only the End carries one (§7.0.5: a template repeats, it has no date), so
+    "move the whole task to tomorrow" is not expressible and is not what a template means. Wanting a
+    task on one specific later day is what the §4.6 **dated** layer is for. Do not re-litigate this,
+    and do not "correct" the 24h outcome.
+  - **`budget` IS the span, always (ruled 2026-07-17).** Whenever both anchors are set,
+    `budget === endDayOffset*1440 + endTod − startTod`, by construction. The floor is never applied to
+    `budget` independently of the anchors — doing so produced `End 9:01 / budget 5m`, a field that
+    contradicted itself. A sub-floor span snaps the **End** (visible), never clamps the budget behind
+    the user's back. Only a task with no anchors floors its budget directly.
   - **Day-attribution: SPLIT across the two days (confirmed 2026-07-17).** An overnight task's
     minutes count against **each day they physically fall on** — an 11pm→7am sleep spends 1h of
     Monday's capacity and 7h of Tuesday's, not 8h of Monday's. Rationale: §11 budgets are per-day
