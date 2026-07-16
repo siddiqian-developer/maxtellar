@@ -78,6 +78,20 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
   It is an **internal ledger channel of the running task: R is NEVER split** (stays one
   continuous card) — the managed minutes are simply attributed to Self-Management in the 24h
   ledger, not counted as R's work. (Same mechanism as pomodoro break/modal time.)
+  - **BOOKING BUILT (Stage R8, 2026-07-16) — `useManagedTime`.** While a task is running, time
+    with an editing/planning surface open (the task drawer, the SOD ceremony) reattributes
+    `spent → managed` on close via `LOG_CHANNEL`. Measured on the APP clock (`state.now`), never
+    `Date.now()`, so the dev-sandbox clock stays authoritative; `LOG_CHANNEL` clamps to `spent`
+    (physics E3) so a long edit can never over-book. Effect: **editing no longer eats R's work
+    budget** — its countdown stops consuming while your hands are in the app.
+    With **nothing running there is no managed channel** (it is a channel OF the running task) —
+    that time is simply unaccounted and becomes Lost Hours at the next SOD. No Self-Management
+    occupancy is invented for it.
+  - **ROLL-UP NOT BUILT (gap, §10).** Both `achievedByHead` roll-ups (core §5.1, and Analytics')
+    attribute a task's WHOLE occupancy span to its own head, ignoring channels — so today neither
+    `managed` reaches **Self-Management** nor `wasted` reaches **Wasted Time** in the per-head
+    ledger, despite the two rules above. Making the roll-up channel-aware changes §5.1 quota math
+    (achieved drives redistribution), so it is a deliberate separate decision.
 - **Channel set LOCKED (post sheet-study, §9.2):** `wall = spent + wasted + managed + breaks`
   is the complete task-level partition. The sheet's other buckets (Exclusion, Rest, Sleepless-
   Bedtime, Meditation, …) are heads/activities — day-level, handled by the spine — not task

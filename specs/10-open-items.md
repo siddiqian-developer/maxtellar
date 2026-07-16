@@ -81,3 +81,13 @@ a value that looks right, is never checked, and fails without an error.
 
 Swept clean: minted-id-vs-source lookups (the `pv-` class) — the three week-grid sites were the
 only instances; other `.find(x => x.id === …)` sites resolve real ids in real collections.
+- **GAP (found 2026-07-16 building R8): the per-head ledger is not channel-aware.** §2.6 says
+  per-task **wasted** "rolls up into the Wasted Time head" and **managed** "is credited to the
+  Self-Management head". Neither happens: both roll-ups — core's `achievedByHead` (§5.1) and
+  `AnalyticsScreen`'s — add a task's ENTIRE occupancy span to its own `headId` and never read
+  `channels`. So managed/wasted minutes stay invisible under the task's head. (Analytics shows a
+  separate top-line Wasted figure from `channels.wasted`, but the per-head table does not credit
+  Wasted Time.) Fix direction: attribute `span − wasted − managed − breaks` to the task's head,
+  `wasted` → Wasted Time, `managed` → Self-Management. **Not done silently: core's `achievedByHead`
+  drives §5.1 quota redistribution**, so making it channel-aware moves quota math — and `breaks`
+  has no specced head, which needs a ruling too.

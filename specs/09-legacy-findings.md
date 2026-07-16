@@ -28,6 +28,12 @@ the proven ancestor. Findings, mapped:
   *now* without classifying (sheet: red / SOFT_TERMINATED), second confirms full completion
   (green). Maps to our states: red ≈ Skipped/Cancelled-pending-classification, green =
   Completed. **Adopt as UX**: one tap ends, classification can follow — never block the flow.
+  - **BUILT (Stage R8, 2026-07-16).** `SOFT_END_RUNNING` + the running card's **"End now"** tap:
+    ends the task immediately with the verdict WITHHELD (`outcome: "soft-ended"`, hue-less in
+    history per §6). **Not a pause** — nothing returns to the plan as a remainder; the task is
+    over, only its verdict is pending. Stage 2 (classification) needs no new UI: the History
+    editor's **Outcome** chips already retitle it Completed/Cancelled/Skipped whenever the user
+    gets round to it.
 - **Day-level accounting identity (from the weekly sheet), locking the analytics rows:**
   `24h = Sleeping + Waking`; `Waking = Work + OTW-Productive + Wasted + Lost`. The sheet's
   `Exclusion` row (awake time inside the sleep window) needs no special channel in the app —

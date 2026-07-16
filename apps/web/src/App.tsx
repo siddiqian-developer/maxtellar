@@ -20,6 +20,7 @@ import { SnapToast } from "./SnapToast";
 import { PomodoroModal } from "./components/PomodoroModal";
 import { AlarmCenter } from "./components/AlarmCenter";
 import { useAlarms } from "./useAlarms";
+import { useManagedTime } from "./useManagedTime";
 import { GapFillModal } from "./components/GapFillModal";
 import { LOST_HOURS, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
 import { fmtDur } from "./time";
@@ -119,6 +120,13 @@ export function App(): JSX.Element {
   // §5.3 alarms: best-effort watcher (sound + Notification + banners). Called
   // unconditionally (before the ready-guard) — it no-ops on a null state.
   const { active: alarms, dismiss: dismissAlarm } = useAlarms(state);
+  // §2.6: hands-in-the-app editing/planning time is Self-Management, not work on
+  // the running task. The two surfaces where the user is unambiguously editing or
+  // planning: the task drawer and the SOD ceremony. (Settings is configuring the
+  // app, not planning the day; the Week grid is its own screen, not an overlay on
+  // a running task — both deliberately left out for now.)
+  useManagedTime(drawerOpen, state?.now ?? 0, state?.running != null, (e) => void dispatch(e));
+  useManagedTime(sodOpen, state?.now ?? 0, state?.running != null, (e) => void dispatch(e));
 
   // §06 transactional Settings: changes reflect live but only commit on Done;
   // Esc/×/scrim revert to this snapshot. Held above the panel so it survives the

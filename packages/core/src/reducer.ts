@@ -17,6 +17,7 @@ import type {
   Dur,
   Event,
   HistoryEntry,
+  HistoryOutcome,
   Min,
   PlanItem,
   PomodoroPhase,
@@ -654,9 +655,17 @@ export function reduce(state: State, event: Event): State {
       return resettle(s);
     }
 
+    // §9.2 two-stage completion: SOFT_END_RUNNING is the FIRST tap — it ends the
+    // task *now* without classifying it ("never block the flow"); the verdict can
+    // follow later in the history editor (which already edits `outcome`).
+    // It is NOT a pause: pause returns the unspent budget to the plan as a
+    // remainder because the task continues; a soft-end ends it, exactly like
+    // COMPLETE_RUNNING but with the verdict withheld. Hence the shared path below.
+    case "SOFT_END_RUNNING":
     case "COMPLETE_RUNNING": {
       const r = state.running;
       if (!r) return state;
+      const outcome: HistoryOutcome = event.type === "SOFT_END_RUNNING" ? "soft-ended" : "completed";
       // Zero-wall complete (completed the same minute it started) occupied
       // nothing — omit the spurious [t,t] occupancy point (see PAUSE_RUNNING).
       const occupied = state.now > r.startedAt;
@@ -669,7 +678,7 @@ export function reduce(state: State, event: Event): State {
         kind: "occupancy",
         start: r.startedAt,
         end: state.now,
-        outcome: "completed",
+        outcome,
         channels: r.channels,
         ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
         ...parentLink(state.plan, r.parentId),

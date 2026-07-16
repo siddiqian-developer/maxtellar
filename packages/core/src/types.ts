@@ -380,6 +380,14 @@ export type Event =
   | { type: "SET_OPEN_CAP"; minutes: Dur } // §3.9 open-task presumed-extent cap
   | { type: "SET_TAIL_FLOOR"; minutes: Dur } // §3.9.1 open semi-tail compression floor
   | { type: "LOG_CHANNEL"; channel: keyof Channels; minutes: Dur } // reattribute on running
+  /**
+   * §9.2 two-stage completion, tap 1: end the running task NOW without classifying
+   * it. Same as COMPLETE_RUNNING (the task is over — no remainder returns to the
+   * plan, unlike PAUSE_RUNNING) except the history entry's outcome is "soft-ended",
+   * i.e. the verdict is withheld. Tap 2 = classify later, in the history editor.
+   * "One tap ends, classification can follow — never block the flow."
+   */
+  | { type: "SOFT_END_RUNNING" }
   // §2.7 (G24): decompose `parentId` into leaves in one atomic rebalance.
   // Children default to the parent's head; the parent budget becomes Σ(children)
   // and the parent turns into a derived bracket (leaves only occupy the spine).

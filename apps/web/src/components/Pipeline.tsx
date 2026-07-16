@@ -478,6 +478,16 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
               </span>
             )}
             <button onClick={() => dispatch({ type: "PAUSE_RUNNING" })}>Pause</button>
+            {/* §9.2 two-stage completion, tap 1: end it NOW without deciding what it
+                was — "never block the flow". The verdict follows whenever you want,
+                in the History editor's Outcome chips. Distinct from Pause: nothing
+                comes back to the plan; the task is over. */}
+            <button
+              onClick={() => dispatch({ type: "SOFT_END_RUNNING" })}
+              data-tip="End it now, classify later — the entry stays soft-ended until you say what it was (History → Outcome)"
+            >
+              End now
+            </button>
             <button className="primary" onClick={() => dispatch({ type: "COMPLETE_RUNNING" })}>
               Complete
             </button>
