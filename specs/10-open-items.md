@@ -23,17 +23,12 @@
   can disagree — e.g. `WeekView` currently declares `firstWeekday: todayWeekday`, which may land on
   an OFF day. Reconciling quota positioning to the §4.4b definition is deliberately **not** done
   silently (it would change quota behavior); settle it explicitly.
-- **BUG (found 2026-07-16 during R7, PRE-EXISTING — not caused by the RBC swap).** `weekPreview`
-  blocks carry the **preview task id** in a field named `templateId`: `injectTodayDetailed` mints
-  ids via `nextId()` (`pv-<date>-<n>`) in `templateToTask(spec, midnight, nextId(), rank)`, and
-  `weekPreview` then stores `templateId: t.id` — the generated id, never the source template's.
-  Everything that looks a template up by that id therefore silently fails:
-  1. **Week Plan: click a block → edit its template** — `week.templates.find(x => x.id === "pv-…")`
-     is always `undefined`; the editor never opens (verified in-browser).
-  2. **§4.6 Skip this day → SILENT NO-OP** (verified: block count unchanged after skipping).
-     `SET_DATED` stores the `pv-` id in `skips`; `collectDue` filters `!skips.has(t.id)` against
-     REAL template ids, so the skip never matches.
-  3. **§4.6 "Edit template…" (move)** — same failed lookup.
-  Fix direction: carry the **source** id through the preview (e.g. `injectTodayDetailed` returns a
-  taskId→sourceId map, or `WeekBlock` gains a `sourceId` distinct from the render id) and point the
-  three call sites at it. Needs a core change; deliberately NOT bundled into the R7 grid swap.
+- ~~**BUG (found 2026-07-16 during R7, PRE-EXISTING — not caused by the RBC swap).** `weekPreview`
+  blocks carried the **preview task id** in a field named `templateId`, so click→edit, §4.6
+  "Edit template…" and "Skip this day" all silently failed.~~ **RESOLVED (2026-07-16).** Injection
+  mints a fresh id per task (`nextId()`), which matches no template — the id was never recoverable
+  downstream. Fixed at the source: `InjectionResult` now carries **`sourceIds`** (injected task id →
+  the `WeekTemplate.id`/`DatedTask.id` it was instantiated from), and `weekPreview` maps each block's
+  `templateId` through it. All three behaviors verified working in-browser (skip removes the block
+  AND its cross-midnight tail; click→edit and Edit-template open the right template). Guarded by
+  `weekPreviewSource.test.ts`, which fails if a block ever carries a minted id again.

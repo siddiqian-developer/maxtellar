@@ -154,6 +154,10 @@ export function WeekGridRBC({
         components={{ header: Header as never, event: EventCell as never }}
         // Placement is core's; RBC must not offer to re-place anything.
         selectable={false}
+        // Week is the only view, so a header drill-down goes nowhere. Disabling it
+        // also stops RBC wrapping the column head in its own <button> — which our
+        // header's "+" button would then nest inside (invalid DOM).
+        getDrilldownView={() => null}
         onSelectEvent={(e) => onBlockClick((e as BlockEvent).date, (e as BlockEvent).block)}
         eventPropGetter={(e) => {
           const b = (e as BlockEvent).block;

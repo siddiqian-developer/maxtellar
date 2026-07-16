@@ -6,7 +6,7 @@
  * Core stays Date-free: the caller passes today's local-midnight + weekday.
  */
 
-import type { Dur, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
+import type { DatedTask, Dur, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
 import {
   budgetEntries,
   redistributeOvershoot,
@@ -166,6 +166,17 @@ export interface InjectionResult {
    * marks them retired (`validity.firedOn = midnight`) so they never fire again.
    * The web's placement PREVIEW ignores this (it never retires). */
   firedOnceIds: string[];
+  /**
+   * Injected task id → the id of the **source** it was instantiated from (a
+   * `WeekTemplate.id`, or a `DatedTask.id` for a §4.6 one-off add).
+   *
+   * Injection mints a FRESH id per task (`nextId()`), so an injected task's id is
+   * NOT its template's. Anything that needs to get back to the source — the week
+   * grid's click→edit, §4.6 skip/move — must map through here. Skipping this is
+   * what made those three silently no-op (they compared a minted id against
+   * `week.templates`, which never matches).
+   */
+  sourceIds: Record<string, string>;
   notes: string[];
 }
 
@@ -214,38 +225,42 @@ export function injectTodayDetailed(
   for (const l of shape.lines) if (headIdx.has(l.headId)) remaining.set(l.headId, l.minutes);
 
   const out: UnstartedTask[] = [];
+  const sourceIds: Record<string, string> = {};
   let prevRank: string | null = null;
-  const push = (spec: TaskSpec): void => {
+  /** `sourceId` = the WeekTemplate / DatedTask this task is instantiated FROM. */
+  const push = (spec: TaskSpec, sourceId: string): void => {
     const rank = rankBelow(prevRank);
     prevRank = rank;
-    out.push(templateToTask(spec, midnight, nextId(), rank));
+    const id = nextId();
+    sourceIds[id] = sourceId;
+    out.push(templateToTask(spec, midnight, id, rank));
   };
 
   for (const t of due) {
     const rem = remaining.get(t.headId);
     if (rem === undefined) {
-      push(t);
+      push(t, t.id);
       continue;
     }
     const cost = t.budget ?? (t.anchorStartTod !== undefined && t.anchorEndTod !== undefined ? t.anchorEndTod - t.anchorStartTod : 0);
     if (t.timing !== "budgeted" || cost <= rem) {
       remaining.set(t.headId, rem - cost);
-      push(t);
+      push(t, t.id);
       continue;
     }
     // Budgeted task over the head's remainder: trim to it, or spill whole.
     if (rem >= s.minFragment) {
       notes.push(`“${t.title}” trimmed to ${fmtM(rem)} — ${t.headId}'s day budget is drawn down in rank order.`);
       remaining.set(t.headId, 0);
-      push({ ...t, budget: rem });
+      push({ ...t, budget: rem }, t.id);
       if (t.budget !== undefined && t.budget - rem >= s.minFragment) spilled.push({ ...t, budget: t.budget - rem });
     } else {
       notes.push(`“${t.title}” spilled to the next day — ${t.headId}'s day budget is exhausted.`);
       spilled.push(t);
     }
   }
-  for (const d of raw.adds) push(d);
-  return { tasks: out, spilled, firedOnceIds, notes };
+  for (const d of raw.adds) push(d, d.id);
+  return { tasks: out, spilled, firedOnceIds, sourceIds, notes };
 }
 
 /** Back-compat wrapper (the web's placement preview reads tasks only). */
@@ -262,7 +277,7 @@ export function injectToday(
 /** The recurring templates due for the day at `midnight` (OFF-day/skip/override
  * applied, template-rank order) plus the date's one-off adds (their own rank
  * order — always injected AFTER the templates). */
-function collectDue(s: State, midnight: Min, weekday: number): { due: WeekTemplate[]; adds: TaskSpec[] } {
+function collectDue(s: State, midnight: Min, weekday: number): { due: WeekTemplate[]; adds: DatedTask[] } {
   // §4.6: the dated override layer for THIS date (keyed by local-midnight).
   const entry = s.dated.find((e) => e.date === midnight);
   const skips = new Set(entry?.skips ?? []);

@@ -25,6 +25,12 @@ export interface WeekColumn {
   weekday: number;
 }
 export interface WeekBlock {
+  /**
+   * The id of the SOURCE this block came from — a `WeekTemplate.id`, or a
+   * `DatedTask.id` when `dated` is true. This is what the UI looks the block back
+   * up by (click→edit, §4.6 skip/move), so it must NOT be the injected task's own
+   * id: injection mints a fresh one per task, which matches no template.
+   */
   templateId: string;
   title: string;
   timing: string;
@@ -130,7 +136,10 @@ export function weekPreview(
       const start = p.parts[0]!.start - col.date;
       const end = p.parts[p.parts.length - 1]!.end - col.date;
       const isDated = datedIds.has(t.id);
-      blocks.push({ templateId: t.id, title: t.title, timing: t.timing, headId: t.headId, dated: isDated, start, end, squeezed: p.squeezedDeficit });
+      // `t.id` is the injected task's MINTED id — map back to the template /
+      // dated-task it was instantiated from, or the UI can never find it again.
+      const sourceId = injected.sourceIds[t.id] ?? t.id;
+      blocks.push({ templateId: sourceId, title: t.title, timing: t.timing, headId: t.headId, dated: isDated, start, end, squeezed: p.squeezedDeficit });
       if (!full24) {
         winStart = Math.min(winStart, start);
         winEnd = Math.max(winEnd, end);
