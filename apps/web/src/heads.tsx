@@ -53,8 +53,19 @@ export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [SELF_MANAGEMENT_ID, 
 export const SYSTEM_BUILT_IN_HEADS: readonly string[] = [WASTED_TIME_ID, LOST_HOURS_ID, OFF_PERIOD_ID];
 /** All undeletable built-ins (plannable + system) — PATH ids. */
 export const BUILT_IN_HEADS: readonly string[] = [...PLANNABLE_BUILT_IN_HEADS, ...SYSTEM_BUILT_IN_HEADS];
-/** Built-in NAMES are reserved (§11.1): no user head may take one, anywhere. */
-const RESERVED_HEAD_NAMES: readonly string[] = [SELF_MANAGEMENT, RECHARGE, FOOD, WASTED_TIME, LOST_HOURS, OFF_PERIOD];
+/** A built-in's name is reserved only WITHIN its own category (user decision
+ * 2026-07-18) — e.g. no user head may be named "Recharge" under Recharging
+ * (that collides with the real built-in's path), but "Recharge" is free to
+ * use as a user head's name under a different category. Map: name -> its
+ * built-in's home category. */
+const RESERVED_IN_CATEGORY: Readonly<Record<string, string>> = {
+  [SELF_MANAGEMENT]: CORE_WORK,
+  [RECHARGE]: RECHARGING,
+  [FOOD]: MAINTENANCE,
+  [WASTED_TIME]: TIME_WASTED,
+  [LOST_HOURS]: TIME_WASTED,
+  [OFF_PERIOD]: MAINTENANCE,
+};
 
 /** One-line note shown in the config for the non-plannable system heads only
  * (plannable built-ins carry no note — §2.10). */
@@ -245,7 +256,7 @@ export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.
     }
     const name = sanitizeHeadName(head);
     if (!name) return;
-    if (RESERVED_HEAD_NAMES.includes(name)) return; // built-in names are reserved (§11.1)
+    if (RESERVED_IN_CATEGORY[name] === category) return; // collides with a built-in's own path (§11.1)
     const id = headPath(category, name);
     setRegistry((r) => (r[id] ? r : { ...r, [id]: [] }));
   };

@@ -435,20 +435,39 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
           </div>
         </section>
 
-        <section className="config-section">
-          <h3>Add a head</h3>
-          <p className="config-empty" style={{ marginBottom: 8 }}>
-            Only needed for a head with no sub-heads yet — adding a sub-head above creates
-            its head automatically (existing or newly typed).
-          </p>
-          <div className="config-form-row">
-            <input
-              value={newHead}
-              onChange={(e) => setNewHead(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submitHead(); }}
-              placeholder="e.g. Labor Work"
-            />
-            <button className="primary" onClick={submitHead}>Add head</button>
+        <section className="config-section config-two-col" style={{ maxWidth: 880 }}>
+          <div className="config-col">
+            <h3>Add a head</h3>
+            <p className="config-empty" style={{ marginBottom: 8 }}>
+              Only needed for a head with no sub-heads yet — adding a sub-head above creates
+              its head automatically (existing or newly typed).
+            </p>
+            <div className="config-form-row">
+              <input
+                value={newHead}
+                onChange={(e) => setNewHead(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitHead(); }}
+                placeholder="e.g. Labor Work"
+              />
+              <button className="primary" onClick={submitHead}>Add head</button>
+            </div>
+          </div>
+          <div className="config-col">
+            <h3>Add a category</h3>
+            <p className="config-empty" style={{ marginBottom: 8 }}>
+              Categories are add-only — the shipped ones can be reordered but not renamed or
+              removed. A new one starts empty; move heads into it from the Registry below.
+            </p>
+            <div className="config-form-row">
+              <input
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitCategory(); }}
+                placeholder="e.g. Personal Projects"
+                aria-label="New category name"
+              />
+              <button className="primary" onClick={submitCategory} disabled={!newCategory.trim()}>Add category</button>
+            </div>
           </div>
         </section>
 
@@ -490,19 +509,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
         )}
 
         <section className="config-section">
-          <div className="config-section-head-row">
-            <h3>Registry</h3>
-            <div className="config-form-row config-add-cat">
-              <input
-                value={newCategory}
-                onChange={(e) => setNewCategory(e.target.value)}
-                onKeyDown={(e) => { if (e.key === "Enter") submitCategory(); }}
-                placeholder="New category name"
-                aria-label="New category name"
-              />
-              <button className="primary" onClick={submitCategory} disabled={!newCategory.trim()}>+ Add category</button>
-            </div>
-          </div>
+          <h3>Registry</h3>
           <p className="config-empty" style={{ marginBottom: 8 }}>
             Drag a category by its grip (⋮⋮) to reorder. Drag a head onto another category, or use its
             ⇄ button, to move it — built-ins stay put.

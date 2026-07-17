@@ -1327,15 +1327,15 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .config-body > .config-section:not(:last-child) { max-width: 640px; }
 .config-section h3 { font-size: 14px; margin: 0 0 10px; color: var(--ink-soft); }
 .config-form-row { display: flex; gap: 8px; }
+
+/* Add a head / Add a category — two columns, split at the exact center. */
+.config-two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 0 32px; }
+.config-col { min-width: 0; }
 .config-form-row input, .config-form-row select { flex: 1; }
 .config-head-row { padding: 10px 0; border-bottom: 1px solid var(--hairline); }
 .config-head-name { font-weight: 600; }
 .config-activities { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .config-empty { font-size: 12px; color: var(--ink-faint); font-style: italic; }
-
-.config-section-head-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
-.config-section-head-row h3 { margin: 0; }
-.config-add-cat { max-width: 340px; }
 
 .config-cat-section {
   border: 1px solid var(--hairline);

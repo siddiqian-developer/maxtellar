@@ -43,8 +43,13 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
 - **Path identity is TASK-LEVEL (decided 2026-07-17):** a task's `headId` IS the path
   `(category, head)`, encoded as one string (`category ␟ name`, an untypeable separator), so two
   same-named heads under different Categories are genuinely distinct everywhere — reducer,
-  budgets, roll-ups, ML. Display always shows the bare name. **Built-in head NAMES are reserved**
-  (no user head may take one, in any category), so built-ins have stable canonical path ids.
+  budgets, roll-ups, ML. **Display is ALWAYS the bare name, with no category qualifier** (revised
+  2026-07-18 — an earlier "Name (Category)" disambiguator for duplicate names was removed; two
+  heads named "Social Media" in different Categories now render identically wherever picked or
+  listed — identity stays the path underneath, only the on-screen label dropped the tag).
+  **A built-in's name is reserved only WITHIN its own Category** (revised 2026-07-18 — not
+  globally): a user head may not be named e.g. "Recharge" under Recharging (collides with the
+  real built-in's path), but "Recharge" is free to use as a head name under any OTHER Category.
   Pre-path stored data is **wiped, not migrated** (user decision 2026-07-17): on first load under
   the new format the registry + ML stores clear and the app re-seeds from the shipped defaults
   above; settings/theme survive.
@@ -64,6 +69,9 @@ user-controlled category order:
   Built-in heads keep their default category (their category is fixed, not moved).
 - **Add a category.** An "Add category" affordance appends a new (empty) user category to the end of
   the order; heads can then be moved into it. Add-only — seeded categories aren't renamed/deleted.
+- **Layout (2026-07-18):** "Add a head" and "Add a category" sit as two equal-width columns, split
+  at the exact center, in the same row of the screen — each with its own heading, one-line
+  explanation, then its input + button. "Add a head" is left, "Add a category" is right.
 
 ## 11.2 The 24h zero-sum day-shape (per-day, hard-balanced)
 - Budgets are **per-day**, set on **HEADS** (§11.6 for sub-head depth), rolling up to Categories,
