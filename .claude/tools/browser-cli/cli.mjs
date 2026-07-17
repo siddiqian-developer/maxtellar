@@ -127,6 +127,28 @@ async function run(line) {
       say("ok mouseup");
       break;
     }
+    case "drag-path": {
+      // drag-path <css-selector> <dx1,dy1> <dx2,dy2> ...
+      // Press at the element centre, then move through each cumulative offset in turn
+      // (stepped), then release. For multi-segment gestures a single `drag` can't do —
+      // e.g. down THEN across, to test axis-order-independent handlers.
+      const [sel, ...legs] = arg.split(" ");
+      const box = await page.locator(sel).first().boundingBox();
+      if (!box) { say(`err drag-path: no box for ${sel}`); break; }
+      const cx = box.x + box.width / 2, cy = box.y + box.height / 2;
+      await page.mouse.move(cx, cy);
+      await page.mouse.down();
+      let px = cx, py = cy;
+      for (const leg of legs) {
+        const [dx, dy] = leg.split(",").map(Number);
+        const tx = cx + (dx || 0), ty = cy + (dy || 0);
+        for (let i = 1; i <= 8; i++) { await page.mouse.move(px + ((tx - px) * i) / 8, py + ((ty - py) * i) / 8); await page.waitForTimeout(18); }
+        px = tx; py = ty;
+      }
+      await page.mouse.up();
+      say(`ok drag-path ${sel} legs=${legs.join(" ")}`);
+      break;
+    }
     case "wait": {
       await page.waitForTimeout(Number(arg) || 1000);
       say(`ok wait ${arg}`);
