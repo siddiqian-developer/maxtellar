@@ -55,7 +55,7 @@ function usedActivitiesUnderHead(state: State, headId: string): string[] {
 type ReassignTarget = { headId: string; activityId: string } | { headId: string; activityId: null };
 
 export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Element {
-  const { registry, heads, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, setHeadCategory } = useHeads();
+  const { registry, heads, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, moveHead } = useHeads();
   const [newHead, setNewHead] = useState("");
   const [activityHead, setActivityHead] = useState("");
   const [newActivity, setNewActivity] = useState("");
@@ -303,7 +303,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
                   aria-label={`Category for ${h}`}
                   data-tip="Category (§11) — drives budgeting roll-ups and the netCore math"
                   value={categoryFor(h)}
-                  onChange={(e) => setHeadCategory(h, e.target.value)}
+                  onChange={(e) => moveHead(h, e.target.value)}
                 >
                   {CATEGORIES.map((c) => (
                     <option key={c} value={c}>{c}</option>
