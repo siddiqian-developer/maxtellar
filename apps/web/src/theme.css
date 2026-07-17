@@ -1786,6 +1786,8 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   line-height: 1.25;
   color: var(--ink);
 }
+/* Horizontal-extend preview: a lighter ghost of the block on each day being added. */
+.wk-sel-ext { background: color-mix(in srgb, var(--accent) 12%, var(--paper)); border-style: dashed; }
 .wk-sel-title { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wk-sel-time { display: block; color: var(--ink-soft); }
 /* ── Cursor affordance map (Week Plan authoring) ───────────────────────────
@@ -1801,6 +1803,20 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .wk-rbc.gestures .wk-ev { cursor: move; transition: filter 120ms ease; }
 .wk-rbc.gestures .wk-ev:hover { filter: brightness(1.06); }
 .wk-rbc.gestures .rbc-addons-dnd-resize-ns-anchor { cursor: ns-resize; }
+/* Horizontal edge-resize handles — only rendered on sides that can actually extend
+   the template onto the neighbouring weekday (see addableNeighbor). A thin grab zone
+   at the block's left/right edge; ew-resize signals "drag to add days". */
+.wk-ev-hgrab {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 7px;
+  cursor: ew-resize;
+  z-index: 2;
+}
+.wk-ev-hgrab.left { left: -1px; }
+.wk-ev-hgrab.right { right: -1px; }
+.wk-rbc.gestures .wk-ev-hgrab:hover { background: color-mix(in srgb, var(--accent) 35%, transparent); }
 .wk-rbc .rbc-time-view { border: none; background: transparent; }
 .wk-rbc .rbc-time-header.rbc-overflowing { border-right: none; }
 .wk-rbc .rbc-time-header-content, .wk-rbc .rbc-time-header-cell { border: none; }

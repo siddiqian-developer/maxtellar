@@ -98,6 +98,11 @@ interface Props {
   onSlotSelect?: (weekdays: number[], startTod: number, endTod: number, isClick: boolean) => void;
   onBlockResize?: (date: number, block: WeekBlock, endTod: number) => void;
   onBlockMove?: (date: number, block: WeekBlock, startTod: number, toWeekday: number) => void;
+  /** Horizontal edge-resize (§4.4): the block was dragged to cover `addDays` extra
+   * weekdays. A template block extends its `weekdays`; a DATED block is PROMOTED to a
+   * template on its own day + `addDays`. The caller notifies for OFF-day adds and gates
+   * on the lock (via Urgent). `fromWeekday` is the block's own day. */
+  onBlockExtendDays?: (block: WeekBlock, fromWeekday: number, addDays: number[]) => void;
   /** While the Add-template drawer is open on a fresh slot-select, the caller feeds the
    * drawer's LIVE values back here so the on-calendar selection mark tracks the edits
    * (weekdays, time, title). Null when no such drawer is open. */
@@ -106,12 +111,38 @@ interface Props {
 
 export function WeekGridRBC({
   preview, weekStart, weekendDays, offDays, hour12, today, mode, height, locked = false,
-  onBlockClick, onAddDated, onSlotSelect, onBlockResize, onBlockMove, selection,
+  onBlockClick, onAddDated, onSlotSelect, onBlockResize, onBlockMove, onBlockExtendDays, selection,
 }: Props): JSX.Element {
   const events = toEvents(preview);
   // §4.4a: the weekend RUN (weekendDays grown through adjacent OFF days) is what
   // "weekend" means everywhere below — tint included.
   const run = weekendRun(weekendDays, offDays);
+
+  // Which weekdays each template already fires on (derived from the preview: it places
+  // a block on every weekday the template recurs). Drives the horizontal edge-resize
+  // feasibility — a block may be extended onto an adjacent weekday only if that day is
+  // not already in the set and not an OFF day (a template never fires on OFF).
+  const templateWeekdays = new Map<string, Set<number>>();
+  for (const day of preview.days) {
+    for (const bl of day.blocks) {
+      if (bl.dated) continue;
+      (templateWeekdays.get(bl.templateId) ?? templateWeekdays.set(bl.templateId, new Set()).get(bl.templateId)!).add(day.weekday);
+    }
+  }
+  /** The neighbour weekday on `side` of `wd` this block can be extended onto, or null
+   * only when REALISTICALLY IMPOSSIBLE (§1.4 "input is sacred; never say no unless
+   * impossible"). The only impossibilities: the edge of the week, or the neighbour is
+   * already occupied by THIS template. An OFF-day neighbour is allowed (added + notify,
+   * stays dormant while OFF); a locked week is allowed (routes via Urgent) — neither
+   * hides the handle. For a DATED block, occupancy of its own template doesn't apply;
+   * only edge-of-week blocks it (extending promotes it to a template). */
+  const addableNeighbor = (block: WeekBlock, wd: number, side: "left" | "right"): number | null => {
+    if (mode !== "week") return null;
+    const next = side === "left" ? wd - 1 : wd + 1;
+    if (next < 0 || next > 6) return null; // edge of the week — genuinely impossible
+    if (!block.dated && templateWeekdays.get(block.templateId)?.has(next)) return null; // already there
+    return next;
+  };
   const dayMin = (d: Date): number => Math.floor(new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime() / 60000);
 
   // The vertical window (§4.6) — RBC reads only the TIME off these Dates.
@@ -156,6 +187,10 @@ export function WeekGridRBC({
   // The live drag-direction cursor (↔ / ↕ / ⤢ ⤡). Inline so it beats CSS hover rules.
   const [sweepCursor, setSweepCursor] = useState<string | null>(null);
   const sweepRef = useRef<{ x0: number; y0: number; anchorTod: number } | null>(null);
+  // Horizontal edge-resize in flight: the grabbed block + which side, and the live set
+  // of extra weekdays the pointer has crossed onto. Separate from the empty-slot sweep.
+  const hResizeRef = useRef<{ block: WeekBlock; fromWd: number; side: "left" | "right" } | null>(null);
+  const [hAddDays, setHAddDays] = useState<number[]>([]);
   // Once the drawer owns the mark (`selection` set), drop the transient drag `sweep`.
   useEffect(() => { if (selection) setSweep(null); }, [selection]);
 
@@ -190,10 +225,45 @@ export function WeekGridRBC({
     return preview.winStart + snap((frac * span) / 60) * 60;
   };
 
+  /** The weekday (column index) under `clientX`, or null if outside the grid columns. */
+  const columnAt = (clientX: number): number | null => {
+    const cols = [...(wrapRef.current?.querySelectorAll<HTMLElement>(".rbc-day-slot") ?? [])];
+    for (let i = 0; i < cols.length; i++) {
+      const r = cols[i]!.getBoundingClientRect();
+      if (clientX >= r.left && clientX < r.right) return i;
+    }
+    return null;
+  };
+
+  /** The block on `weekday` belonging to `templateId` (dated blocks store the DatedTask
+   * id in templateId, §weekPreview). Used to recover the grabbed block from the handle. */
+  const eventFor = (templateId: string, weekday: number): WeekBlock | null => {
+    for (const day of preview.days) {
+      if (day.weekday !== weekday) continue;
+      const hit = day.blocks.find((bl) => bl.templateId === templateId);
+      if (hit) return hit;
+    }
+    return null;
+  };
+
   // The overlay owns EVERY empty-slot gesture (RBC's own select is off). Press records
   // the anchor; move grows the mark; up hands it to the drawer.
   const onGridPointerDown = (e: React.PointerEvent<HTMLDivElement>): void => {
-    if (!gesturesOn || e.button !== 0) return;
+    if (e.button !== 0) return;
+    // Horizontal edge-resize grab — checked FIRST and NOT gated on `!locked` (a locked
+    // week is overridable, not impossible; the write routes through Urgent downstream).
+    const grab = (e.target as HTMLElement).closest<HTMLElement>(".wk-ev-hgrab");
+    if (grab && mode === "week") {
+      const found = eventFor(grab.dataset.tpl!, Number(grab.dataset.wd));
+      if (found) {
+        hResizeRef.current = { block: found, fromWd: Number(grab.dataset.wd), side: grab.dataset.side as "left" | "right" };
+        setHAddDays([]);
+        (e.target as HTMLElement).setPointerCapture(e.pointerId);
+        e.preventDefault();
+        return;
+      }
+    }
+    if (!gesturesOn) return;
     if ((e.target as HTMLElement).closest(".rbc-event")) return; // blocks are move/resize
     if (!(e.target as HTMLElement).closest(".rbc-day-slot")) return;
     sweepRef.current = { x0: e.clientX, y0: e.clientY, anchorTod: yToTod(e.clientY, "near") };
@@ -202,6 +272,18 @@ export function WeekGridRBC({
   const DRAG_INTENT = 4; // px in any direction before a press becomes a drag
 
   const onGridPointerMove = (e: React.PointerEvent<HTMLDivElement>): void => {
+    // Horizontal edge-resize in flight: the extra weekdays are every column strictly
+    // BETWEEN the block's own day and the pointer's column, on the grabbed side.
+    const h = hResizeRef.current;
+    if (h) {
+      const col = columnAt(e.clientX);
+      if (col === null) return;
+      const lo = Math.min(h.fromWd, col), hi = Math.max(h.fromWd, col);
+      const add: number[] = [];
+      for (let d = lo; d <= hi; d++) if (d !== h.fromWd) add.push(d);
+      setHAddDays(add);
+      return;
+    }
     const s = sweepRef.current;
     if (!s) return;
     if (!sweep && Math.abs(e.clientX - s.x0) < DRAG_INTENT && Math.abs(e.clientY - s.y0) < DRAG_INTENT) return;
@@ -229,6 +311,17 @@ export function WeekGridRBC({
   };
 
   const onGridPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
+    // Finish a horizontal edge-resize: hand the extra weekdays to the caller (which
+    // extends the template or promotes a dated one-off, notifies for OFF days, and gates
+    // the lock via Urgent). No columns crossed → a no-op.
+    const h = hResizeRef.current;
+    if (h) {
+      hResizeRef.current = null;
+      const add = hAddDays;
+      setHAddDays([]);
+      if (add.length) onBlockExtendDays?.(h.block, h.fromWd, add);
+      return;
+    }
     const s = sweepRef.current;
     sweepRef.current = null;
     setSweepCursor(null);
@@ -265,10 +358,19 @@ export function WeekGridRBC({
     const tip = `${b.dated ? "◆ " : ""}${b.title} · ${tod(b.start)}–${tod(b.end)}`
       + `${b.squeezed > 0 ? " · squeezed" : ""}`
       + `${mode === "calendar" && !b.dated ? " · click to skip/move" : ""}`;
+    // Horizontal edge-resize (Week Plan): a handle shows on a side whenever extending
+    // there is realistically possible — only edge-of-week or an already-occupied
+    // neighbour hides it (§1.4). A template block extends its weekdays; a DATED block
+    // promotes to a template. OFF-day and locked-week are allowed (handled on drop).
+    const wd = new Date(event.date * 60000).getDay();
+    const canLeft = addableNeighbor(b, wd, "left") !== null;
+    const canRight = addableNeighbor(b, wd, "right") !== null;
     return (
       <div className="wk-ev-in" data-tip={tip}>
         <span className="wk-block-title">{b.dated ? "◆ " : ""}{b.title}</span>
         <span className="wk-block-time num">{tod(b.start)}</span>
+        {canLeft && <span className="wk-ev-hgrab left" data-side="left" data-tpl={b.templateId} data-wd={wd} />}
+        {canRight && <span className="wk-ev-hgrab right" data-side="right" data-tpl={b.templateId} data-wd={wd} />}
       </div>
     );
   };
@@ -319,6 +421,24 @@ export function WeekGridRBC({
               <span className="wk-sel-time num">{tod(sel.startTod)}–{tod(sel.endTod)}</span>
             </div>
           )];
+        });
+      })()}
+      {/* Horizontal edge-resize preview: ghost blocks over the days being ADDED, at the
+          grabbed block's own time — so you see where the template will now also fire. */}
+      {hResizeRef.current && hAddDays.length > 0 && (() => {
+        const h = hResizeRef.current;
+        const wrap = wrapRef.current?.getBoundingClientRect();
+        const slots = [...(wrapRef.current?.querySelectorAll<HTMLElement>(".rbc-day-slot") ?? [])];
+        if (!wrap) return null;
+        const winSpan = preview.winEnd - preview.winStart;
+        return hAddDays.map((d) => {
+          const slot = slots[d]?.getBoundingClientRect();
+          if (!slot) return null;
+          const top = slot.top - wrap.top + ((h.block.start - preview.winStart) / winSpan) * slot.height;
+          const height = Math.max(((h.block.end - h.block.start) / winSpan) * slot.height, 6);
+          return <div key={d} className="wk-sel wk-sel-ext" style={{ left: slot.left - wrap.left, width: slot.width, top, height }}>
+            <span className="wk-sel-title">{h.block.title}</span>
+          </div>;
         });
       })()}
       <DnDCalendar

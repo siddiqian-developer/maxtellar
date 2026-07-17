@@ -123,6 +123,37 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     commit(state.week.templates.filter((x) => x.id !== id));
     setEditing(null);
   };
+  /** §4.4 horizontal edge-resize. A template block extends its weekday set by `addDays`;
+   * a DATED one-off is PROMOTED to a template on its own day + `addDays` (the dated task
+   * is removed). OFF-day adds are kept but flagged (a template stays dormant on OFF).
+   * Structural, so it rides `commit`'s Urgent gate like any other template write. */
+  const extendBlockDays = (block: { templateId: string; title: string; dated: boolean }, fromWd: number, addDays: number[]): void => {
+    const offAdded = addDays.filter((d) => state.week.offDays.includes(d));
+    const offNote = offAdded.length
+      ? ` ${offAdded.map((d) => WD[d]).join(", ")} ${offAdded.length > 1 ? "are OFF days" : "is an OFF day"} — won't run there until OFF is cleared.`
+      : "";
+    if (block.dated) {
+      // Promote: find the dated task on its date, rebuild as a template, drop the original.
+      const date = columns.find((c) => c.weekday === fromWd)?.date;
+      const src = date !== undefined ? entryFor(date).adds.find((a) => a.id === block.templateId) : undefined;
+      if (!src || date === undefined) return;
+      const { id: _id, rank: _rank, ...spec } = src;
+      const weekdays = [...new Set([fromWd, ...addDays])].sort((a, b) => a - b);
+      const tpl: WeekTemplate = { ...spec, id: `tpl-${Date.now().toString(36)}`, rank: "m", weekdays };
+      // Remove the dated one-off AND add the template in the SAME commit path is not
+      // possible (two dispatches); do the dated removal first, then the structural add.
+      const e = entryFor(date);
+      putDated(date, e.adds.filter((a) => a.id !== block.templateId) as never, e.skips, e.overrides);
+      commit([...state.week.templates, tpl]);
+      notify(`“${block.title}” is now a recurring template.${offNote}`);
+      return;
+    }
+    const tpl = state.week.templates.find((x) => x.id === block.templateId);
+    if (!tpl) return;
+    const weekdays = [...new Set([...tpl.weekdays, ...addDays])].sort((a, b) => a - b);
+    commit(state.week.templates.map((x) => (x.id === tpl.id ? { ...x, weekdays } : x)));
+    notify(`“${tpl.title}” now also repeats ${addDays.map((d) => WD[d]).join(", ")}.${offNote}`);
+  };
   /**
    * §4.4/§4.4b: the **First Weekday** declared at `START_WEEK` is the DERIVED first
    * working day — the first non-off day after the weekend run — never "the weekday
@@ -336,6 +367,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
                 onBlockClick={onBlockClick}
                 onAddDated={(date) => setDatedEdit({ date, task: null })}
                 onSlotSelect={onSlotSelect}
+                onBlockExtendDays={extendBlockDays}
                 selection={selection}
                 onBlockResize={(date, b, endTod) => console.log("[stage1] resize", { date, title: b.title, timing: b.timing, from: b.end, to: endTod })}
                 onBlockMove={(date, b, startTod, toWeekday) => console.log("[stage1] move", { date, title: b.title, timing: b.timing, fromStart: b.start, toStart: startTod, toWeekday })}
