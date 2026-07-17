@@ -256,7 +256,9 @@ const HeadsContext = createContext<HeadsApi | null>(null);
  * category order all survive). After that one merge the no-resurrection rule
  * applies as usual: deleting a seed head stays deleted across reloads. */
 const SEED_STAMP_KEY = "seedVersion";
-const SEED_STAMP = "2026-07-18";
+// ".2": the first "2026-07-18" build briefly shipped a bug that stamped
+// WITHOUT merging — bumping re-runs the top-up for stores stamped by it.
+const SEED_STAMP = "2026-07-18.2";
 
 /** One-time seed top-up: every DEFAULT_REGISTRY head exists (stored sub-head
  * lists win), ordered seed-first so the shipped display order holds; the
@@ -276,9 +278,10 @@ function topUpSeed(stored: HeadsRegistry): HeadsRegistry {
 // and re-seeds fully from DEFAULT_REGISTRY below.
 try {
   if (localStorage.getItem(SEED_STAMP_KEY) !== SEED_STAMP) {
-    localStorage.setItem(SEED_STAMP_KEY, SEED_STAMP);
     const raw = localStorage.getItem("headsRegistry");
     if (raw) localStorage.setItem("headsRegistry", JSON.stringify(topUpSeed(JSON.parse(raw) as HeadsRegistry)));
+    // Stamp LAST — a stamp must never exist without the merge having landed.
+    localStorage.setItem(SEED_STAMP_KEY, SEED_STAMP);
   }
 } catch {
   // no localStorage (non-browser import) or unreadable store — the provider's
