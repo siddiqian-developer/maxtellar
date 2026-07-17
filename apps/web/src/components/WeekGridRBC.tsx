@@ -153,6 +153,8 @@ export function WeekGridRBC({
    * transient drag-ghost (which can't persist past mouseup or reflect drawer edits).
    * `weekdays` are the columns; start/endTod the span. */
   const [sweep, setSweep] = useState<{ weekdays: number[]; startTod: number; endTod: number } | null>(null);
+  // The live drag-direction cursor (↔ / ↕ / ⤢ ⤡). Inline so it beats CSS hover rules.
+  const [sweepCursor, setSweepCursor] = useState<string | null>(null);
   const sweepRef = useRef<{ x0: number; y0: number; anchorTod: number } | null>(null);
   // Once the drawer owns the mark (`selection` set), drop the transient drag `sweep`.
   useEffect(() => { if (selection) setSweep(null); }, [selection]);
@@ -210,11 +212,21 @@ export function WeekGridRBC({
     const a = Math.min(s.anchorTod, yToTod(e.clientY, "near"));
     const b = Math.max(s.anchorTod + 60, yToTod(e.clientY, "far"));
     setSweep({ weekdays, startTod: a, endTod: b });
+    // Cursor follows the drag axis: horizontal-only ↔, vertical-only ↕, diagonal ⤢/⤡
+    // (nesw when the pointer heads up-right or down-left, nwse otherwise).
+    const dx = e.clientX - s.x0, dy = e.clientY - s.y0;
+    const across = Math.abs(dx) >= DRAG_INTENT, down = Math.abs(dy) >= DRAG_INTENT;
+    setSweepCursor(
+      across && down ? (Math.sign(dx) === Math.sign(dy) ? "nwse-resize" : "nesw-resize")
+      : across ? "ew-resize"
+      : "ns-resize",
+    );
   };
 
   const onGridPointerUp = (e: React.PointerEvent<HTMLDivElement>): void => {
     const s = sweepRef.current;
     sweepRef.current = null;
+    setSweepCursor(null);
     if (!s) return;
     // A drag (armed → `sweep` set) hands its swept weekdays+span to the drawer. A plain
     // click (never armed) opens the drawer on that one column with a default span, which
@@ -259,12 +271,12 @@ export function WeekGridRBC({
   return (
     <div
       ref={wrapRef}
-      className={`wk-rbc${mode === "week" && locked ? " locked" : ""}${sweep || selection ? " sweeping" : ""}`}
-      style={{ height }}
+      className={`wk-rbc${mode === "week" && locked ? " locked" : ""}${gesturesOn ? " gestures" : ""}${sweep ? " sweeping" : ""}`}
+      style={{ height, ...(sweepCursor ? { cursor: sweepCursor } : {}) }}
       onPointerDown={onGridPointerDown}
       onPointerMove={onGridPointerMove}
       onPointerUp={onGridPointerUp}
-      onPointerCancel={() => { sweepRef.current = null; setSweep(null); }}
+      onPointerCancel={() => { sweepRef.current = null; setSweep(null); setSweepCursor(null); }}
     >
       {/* The hand-rolled selection mark. Source is the live drag (`sweep`) OR, once the
           drawer is open, its LIVE values (`selection`) — so the mark tracks edits and

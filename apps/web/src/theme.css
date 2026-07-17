@@ -1788,7 +1788,19 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .wk-sel-title { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .wk-sel-time { display: block; color: var(--ink-soft); }
-.wk-rbc.sweeping { cursor: ew-resize; user-select: none; }
+/* ── Cursor affordance map (Week Plan authoring) ───────────────────────────
+   Empty slot: hand to invite a click/drag. While a sweep is live, JS sets the
+   cursor to the drag axis (h/v/diagonal) on `.wk-rbc` inline — see setSweepCursor.
+   Existing block: body = move (fleur); its vertical resize handles = ns-resize.
+   RBC time blocks span ONE day, so they have no horizontal/corner handles — those
+   affordances belong to the empty-slot sweep, not to an existing block. */
+.wk-rbc.gestures .rbc-day-slot,
+.wk-rbc.gestures .rbc-time-slot { cursor: pointer; }
+.wk-rbc.sweeping, .wk-rbc.sweeping * { user-select: none; }
+/* Existing blocks: hover lifts, body moves, ns-handles resize. */
+.wk-rbc.gestures .wk-ev { cursor: move; transition: filter 120ms ease; }
+.wk-rbc.gestures .wk-ev:hover { filter: brightness(1.06); }
+.wk-rbc.gestures .rbc-addons-dnd-resize-ns-anchor { cursor: ns-resize; }
 .wk-rbc .rbc-time-view { border: none; background: transparent; }
 .wk-rbc .rbc-time-header.rbc-overflowing { border-right: none; }
 .wk-rbc .rbc-time-header-content, .wk-rbc .rbc-time-header-cell { border: none; }
