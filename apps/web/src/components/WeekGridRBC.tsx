@@ -212,12 +212,17 @@ export function WeekGridRBC({
     const a = Math.min(s.anchorTod, yToTod(e.clientY, "near"));
     const b = Math.max(s.anchorTod + 60, yToTod(e.clientY, "far"));
     setSweep({ weekdays, startTod: a, endTod: b });
-    // Cursor follows the drag axis: horizontal-only ↔, vertical-only ↕, diagonal ⤢/⤡
-    // (nesw when the pointer heads up-right or down-left, nwse otherwise).
-    const dx = e.clientX - s.x0, dy = e.clientY - s.y0;
-    const across = Math.abs(dx) >= DRAG_INTENT, down = Math.abs(dy) >= DRAG_INTENT;
+    // Cursor reflects what the selection ACTUALLY spans, not raw pixel drift: across =
+    // more than one column swept; down = more than one slot of time. (Pixel deltas made
+    // a straight-down drag read "diagonal" on the tiniest x-jitter.) Only a genuine
+    // multi-column AND multi-slot selection is diagonal; the corner follows the sweep's
+    // real x-direction and whether time grows down or up from the anchor row.
+    const across = weekdays.length > 1;
+    const down = b - a > 60;
+    const rightward = e.clientX >= s.x0;
+    const growingDown = yToTod(e.clientY, "near") >= s.anchorTod;
     setSweepCursor(
-      across && down ? (Math.sign(dx) === Math.sign(dy) ? "nwse-resize" : "nesw-resize")
+      across && down ? (rightward === growingDown ? "nwse-resize" : "nesw-resize")
       : across ? "ew-resize"
       : "ns-resize",
     );
