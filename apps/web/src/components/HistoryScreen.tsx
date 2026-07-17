@@ -17,7 +17,7 @@
 import { useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Event, HistoryEntry, State } from "@maxtellar/core";
-import { formingDayStart } from "@maxtellar/core";
+import { formingDayStart, headName } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { dayStartMin } from "../casualTime";
 import { fmtClock, fmtDur, toDate } from "../time";
@@ -214,7 +214,7 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
                     </span>
                     <span className="hr-title">{it.r.h.title}</span>
                     <span className="badge head-badge">
-                      {it.r.h.headId}
+                      {headName(it.r.h.headId)}
                       {it.r.h.activityId && ` · ${it.r.h.activityId}`}
                     </span>
                     <span className="outcome-pill" data-outcome={it.r.h.outcome}>{OUTCOME_LABEL[it.r.h.outcome]}</span>

@@ -11,6 +11,8 @@
 import { useEffect, useMemo, useState } from "react";
 import type { Event, PomodoroConfig, SleepKind, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
+import { headName } from "@maxtellar/core";
+import { headLabels } from "../headDisplay";
 import { useSettings, type PresetId } from "../settings";
 import { presetById, matchPreset } from "../presets";
 import { parseCasualTime, parseCasualDuration } from "../casualTime";
@@ -803,7 +805,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
                         ? "Suggested head for this new sub-head"
                         : "The head this sub-head lives under"}
                     >
-                      {suggestedHead}
+                      {headName(suggestedHead)}
                     </strong>
                   )}
                 </span>
@@ -811,7 +813,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
             )}
             {derivedHead && (
               <div className="derived-head" data-tip="Derived from the sub-head — not editable here">
-                Head: <strong>{derivedHead}</strong>
+                Head: <strong>{headName(derivedHead)}</strong>
               </div>
             )}
             {isNewActivity && (
@@ -829,6 +831,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
                   value={newHeadChoice}
                   onChange={(v) => { setNewHeadChoice(v); setNewHeadTouched(true); }}
                   options={plannableHeads}
+                  labels={headLabels(plannableHeads)}
                   placeholder="Pick or create a head"
                   clearable
                   ariaLabel="New sub-head's head"

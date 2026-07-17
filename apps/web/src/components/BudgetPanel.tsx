@@ -20,11 +20,11 @@ import { useMemo, useRef, useState } from "react";
 import type { Event, HeadBudget, QuotaType, State } from "@maxtellar/core";
 import {
   budgetEntries,
-  CATEGORIES,
   CORE_WORK,
   MIN_PER_DAY,
-  SELF_MANAGEMENT,
+  SELF_MANAGEMENT_ID,
   SLEEP_HEAD,
+  headName,
   weekBudgetValidity,
   weekDayShape,
   weeklyShare,
@@ -55,7 +55,7 @@ interface Props {
 }
 
 export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onBack, escActive }: Props): JSX.Element {
-  const { plannableHeads, categoryFor } = useHeads();
+  const { plannableHeads, categories, categoryFor } = useHeads();
   const week = state.week;
   const plannedDays = useMemo(
     () => [0, 1, 2, 3, 4, 5, 6].filter((d) => !week.offDays.includes(d)),
@@ -168,17 +168,17 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
         if (val === 0) break;
       }
       const before = Math.max(0, Math.round(raw));
-      if (val !== before) notify(`Snapped ${headId} to ${fmtDurUnits(val)}/wk — a day must equal exactly 24h`, headId);
+      if (val !== before) notify(`Snapped ${headName(headId)} to ${fmtDurUnits(val)}/wk — a day must equal exactly 24h`, headId);
     } else {
       const a24 = overDayAllowance(withVal(val), headId);
       if (a24 !== null && a24 < val) {
         val = a24;
-        notify(`Snapped ${headId} to ${fmtDurUnits(val)} — day must equal exactly 24h`, headId);
+        notify(`Snapped ${headName(headId)} to ${fmtDurUnits(val)} — day must equal exactly 24h`, headId);
       }
       const cat = overCategoryAllowance(withVal(val), headId);
       if (cat && cat.allowed < val) {
         val = cat.allowed;
-        notify(`Snapped ${headId} to ${fmtDurUnits(val)} — ${cat.category} must total ${fmtDurUnits(cat.target)}`, headId);
+        notify(`Snapped ${headName(headId)} to ${fmtDurUnits(val)} — ${cat.category} must total ${fmtDurUnits(cat.target)}`, headId);
       }
     }
     commit(withVal(val));
@@ -199,7 +199,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
     }
     if (allowed !== null && allowed < val) {
       val = Math.round(allowed * 10) / 10;
-      notify(`Snapped ${headId} to ${val}% — core %s must exactly fill netCore`, headId);
+      notify(`Snapped ${headName(headId)} to ${val}% — core %s must exactly fill netCore`, headId);
     }
     commit(withVal(val));
   };
@@ -227,7 +227,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
     const a24 = overDayAllowance(apply(val), headId);
     if (a24 !== null && a24 < val) {
       val = a24;
-      notify(`Snapped ${headId} (${WD[selWd]}) to ${fmtDurUnits(val)} — day must equal exactly 24h`, headId);
+      notify(`Snapped ${headName(headId)} (${WD[selWd]}) to ${fmtDurUnits(val)} — day must equal exactly 24h`, headId);
     }
     commit(apply(val));
   };
@@ -313,8 +313,8 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
   const unbudgeted = plannableHeads.filter((h) => !week.budgets.some((b) => b.headId === h));
   const lineFor = (headId: string) => shape.lines.find((l) => l.headId === headId);
   const catShape = (categoryId: string) => shape.categories.find((c) => c.categoryId === categoryId);
-  const allCollapsed = collapsed.size >= CATEGORIES.length;
-  const toggleAll = (): void => setCollapsed(allCollapsed ? new Set() : new Set(CATEGORIES));
+  const allCollapsed = collapsed.size >= categories.length;
+  const toggleAll = (): void => setCollapsed(allCollapsed ? new Set() : new Set(categories));
   const toggleCat = (c: string): void =>
     setCollapsed((s) => {
       const n = new Set(s);
@@ -359,7 +359,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
             <DurInput ariaLabel="Sleep budget" value={week.sleepMinutes} onCommit={(m) => { if (m !== null) setSleep(m); }} />
           </div>
 
-          {CATEGORIES.map((cat) => {
+          {categories.map((cat) => {
             const heads = week.budgets.filter((b) => b.categoryId === cat);
             const cs = catShape(cat);
             const target = week.categoryTargets[cat];
@@ -380,7 +380,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
                 </div>
                 {!isCollapsed && heads.map((b) => {
                   const line = lineFor(b.headId);
-                  const pinned = b.headId === SELF_MANAGEMENT;
+                  const pinned = b.headId === SELF_MANAGEMENT_ID;
                   const onDay = b.weekdays.includes(selWd);
                   return (
                     <div key={b.headId} className={`bp-head${flashCls(b.headId)}`}>
@@ -394,27 +394,27 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
                           : <span className="bp-drag" data-tip="Drag to re-rank (fill order at SOD)">⋮⋮</span>}
                         {!pinned && (
                           <span className="bp-arrows">
-                            <button aria-label={`Move ${b.headId} up`} disabled={locked} onClick={() => move(b.headId, -1)}>▲</button>
-                            <button aria-label={`Move ${b.headId} down`} disabled={locked} onClick={() => move(b.headId, 1)}>▼</button>
+                            <button aria-label={`Move ${headName(b.headId)} up`} disabled={locked} onClick={() => move(b.headId, -1)}>▲</button>
+                            <button aria-label={`Move ${headName(b.headId)} down`} disabled={locked} onClick={() => move(b.headId, 1)}>▼</button>
                           </span>
                         )}
                         <button className="bp-name bp-head-name" onClick={() => setExpanded(expanded === b.headId ? null : b.headId)}>
-                          {b.headId}
+                          {headName(b.headId)}
                         </button>
                         {b.kind === "percent" && (
                           <>
-                            <PctInput ariaLabel={`${b.headId} percent`} value={b.pct ?? 0} disabled={locked} onCommit={(p) => setHeadPct(b.headId, p)} />
+                            <PctInput ariaLabel={`${headName(b.headId)} percent`} value={b.pct ?? 0} disabled={locked} onCommit={(p) => setHeadPct(b.headId, p)} />
                             <span className="bp-badge num" data-tip="Live-elastic: % of netCore, reflows as overhead changes">
                               → {fmtDurUnits(line?.minutes ?? 0)}
                             </span>
                           </>
                         )}
                         {b.kind === "absolute" && (
-                          <DurInput ariaLabel={`${b.headId} daily budget`} value={fixedShare(b, selWd) || (b.minutes ?? 0)} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
+                          <DurInput ariaLabel={`${headName(b.headId)} daily budget`} value={fixedShare(b, selWd) || (b.minutes ?? 0)} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
                         )}
                         {b.kind === "weekly" && (
                           <>
-                            <DurInput ariaLabel={`${b.headId} weekly quota`} value={b.quotaMinutes ?? 0} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
+                            <DurInput ariaLabel={`${headName(b.headId)} weekly quota`} value={b.quotaMinutes ?? 0} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
                             <span className="bp-badge num" data-tip={`Weekly quota (${QUOTA_LABEL[b.quotaType ?? "atLeast"]}) — ${WD[selWd]}'s share`}>
                               /wk · {fmtDurUnits(onDay ? weeklyShare(b, selWd) : 0)}
                             </span>
@@ -448,7 +448,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
                           )}
                           <div className="field">
                             <label>Planned on</label>
-                            <div className="type-chips" role="group" aria-label={`${b.headId} weekdays`}>
+                            <div className="type-chips" role="group" aria-label={`${headName(b.headId)} weekdays`}>
                               {WD.map((w, d) => (
                                 <button key={d} type="button" className={`type-chip${b.weekdays.includes(d) ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => toggleWeekday(b.headId, d)}>
                                   {w}
@@ -459,7 +459,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
                           {b.kind !== "percent" && onDay && (
                             <div className="field">
                               <label>{WD[selWd]} override <span className="field-desc">(this weekday only — blank = default)</span></label>
-                              <DurInput ariaLabel={`${b.headId} ${WD[selWd]} override`}
+                              <DurInput ariaLabel={`${headName(b.headId)} ${WD[selWd]} override`}
                                 value={b.kind === "weekly" ? b.shares?.[selWd] : b.perDay?.[selWd]}
                                 placeholder={fmtDurUnits(fixedShare(b, selWd))} allowEmpty disabled={locked}
                                 onCommit={(m) => setDayOverride(b.headId, m)} />
@@ -483,7 +483,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
               onChange={(e) => { if (e.target.value) addHead(e.target.value); }}>
               <option value="">+ Budget a head…</option>
               {unbudgeted.map((h) => (
-                <option key={h} value={h}>{h} ({categoryFor(h)})</option>
+                <option key={h} value={h}>{headName(h)} ({categoryFor(h)})</option>
               ))}
             </select>
           </div>
@@ -495,7 +495,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
             {shape.lines.filter((l) => l.minutes > 0).map((l) => (
               <div key={l.headId} className={`bp-seg${flashCls(l.headId)}`} data-cat={l.categoryId}
                 style={{ width: `${(Math.min(l.minutes, MIN_PER_DAY) / MIN_PER_DAY) * 100}%` }}
-                data-tip={`${l.headId} · ${fmtDurUnits(l.minutes)}${l.pct !== undefined ? ` (${l.pct}%)` : ""}`} />
+                data-tip={`${headName(l.headId)} · ${fmtDurUnits(l.minutes)}${l.pct !== undefined ? ` (${l.pct}%)` : ""}`} />
             ))}
           </div>
           <div className={`bp-delta num${shape.ok ? " ok" : ""}`}>

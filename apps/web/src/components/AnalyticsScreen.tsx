@@ -14,7 +14,7 @@
  */
 
 import type { Channels, Dur, Min, State } from "@maxtellar/core";
-import { LOST_HOURS, SELF_MANAGEMENT, SLEEP_HEAD, WASTED_TIME, budgetEntries, trimDeficit, weekDayShape } from "@maxtellar/core";
+import { LOST_HOURS_ID, SELF_MANAGEMENT_ID, SLEEP_HEAD, WASTED_TIME_ID, budgetEntries, headName, trimDeficit, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -86,12 +86,12 @@ function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, D
     const frac = span > 0 ? clipped / span : 0; // partially-visible → pro rata
     const wasted = Math.min(Math.round(ch.wasted * frac), clipped);
     const managed = Math.min(Math.round(ch.managed * frac), clipped - wasted);
-    add(WASTED_TIME, wasted);
-    add(SELF_MANAGEMENT, managed);
+    add(WASTED_TIME_ID, wasted);
+    add(SELF_MANAGEMENT_ID, managed);
     add(head, clipped - wasted - managed); // remainder → conserves exactly
   };
   for (const h of state.history) {
-    if (h.kind !== "occupancy" || h.headId === LOST_HOURS) continue;
+    if (h.kind !== "occupancy" || h.headId === LOST_HOURS_ID) continue;
     split(h.headId, h.start, h.end, h.channels);
   }
   if (state.running) {
@@ -154,7 +154,7 @@ function BudgetSection({ state, todayStart, todayEnd, todayByHead }: {
               const rem = l.minutes - ach;
               return (
                 <tr key={l.headId}>
-                  <td>{l.headId}{l.pct !== undefined ? ` (${l.pct}%)` : ""}</td>
+                  <td>{headName(l.headId)}{l.pct !== undefined ? ` (${l.pct}%)` : ""}</td>
                   <td className="num num-col">{fmtDur(l.minutes)}</td>
                   <td className="num num-col">{ach > 0 ? fmtDur(ach) : "—"}</td>
                   <td className={`num num-col${rem < 0 ? " is-danger" : ""}`}>{rem >= 0 ? fmtDur(rem) : `over ${fmtDur(-rem)}`}</td>
@@ -200,7 +200,7 @@ function BudgetSection({ state, todayStart, todayEnd, todayByHead }: {
                 return (
                   <tr key={b.headId}>
                     <td>
-                      {b.headId}
+                      {headName(b.headId)}
                       {moved > 0 && <span className="ledger-note" data-tip="Shares were redistributed at SOD (§5.1) — shortfall moved to later days">{" "}· redistributed</span>}
                       {trimmed > 0 && <span className="ledger-note is-danger" data-tip="Trimmed during Pruning (§5.1) — the cut never redistributes; it stays reported until week's end">{" "}· trimmed, {fmtDur(trimmed)} deficit</span>}
                     </td>

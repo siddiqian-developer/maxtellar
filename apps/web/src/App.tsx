@@ -22,7 +22,7 @@ import { AlarmCenter } from "./components/AlarmCenter";
 import { useAlarms } from "./useAlarms";
 import { useManagedTime } from "./useManagedTime";
 import { GapFillModal } from "./components/GapFillModal";
-import { LOST_HOURS, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
+import { LOST_HOURS_ID, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
 import type { PomodoroConfig } from "@maxtellar/core";
 import { fmtDur } from "./time";
 import { useSettings, type AiLevels, type AlarmBehavior, type GridGranularity, type PresetDefaults, type TimeFormat } from "./settings";
@@ -290,7 +290,7 @@ export function App(): JSX.Element {
   const clip = (s: number, e: number): number =>
     Math.max(0, Math.min(e, state.now) - Math.max(s, dayStart));
   const accounted = state.history
-    .filter((h) => h.kind === "occupancy" && h.headId !== LOST_HOURS)
+    .filter((h) => h.kind === "occupancy" && h.headId !== LOST_HOURS_ID)
     .reduce((acc, h) => acc + clip(h.start, h.end), 0)
     + (state.running ? clip(state.running.startedAt, state.now) : 0);
   const lost = Math.max(0, wall - accounted);

@@ -13,7 +13,7 @@
 
 import type { CSSProperties, ReactNode } from "react";
 import type { Dur, Event, Min, State, TimingType, UnstartedTask } from "@maxtellar/core";
-import { pomodoroView, runningView } from "@maxtellar/core";
+import { headName, pomodoroView, runningView } from "@maxtellar/core";
 import { DndContext, closestCenter, KeyboardSensor, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -308,7 +308,7 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
           </span>
           {!t.slideable && <LockIcon />}
           <span className="badge head-badge">
-            {t.activityId ? `${t.activityId} · ${t.headId}` : t.headId}
+            {t.activityId ? `${t.activityId} · ${headName(t.headId)}` : headName(t.headId)}
           </span>
           {t.ommf && <span className="badge">ommf</span>}
           <span className="badge" data-timing={t.timing}>{TIMING_LABEL[t.timing]}</span>
@@ -388,7 +388,7 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
       >
         <div className="row">
           <span className="title">{t.title}</span>
-          <span className="badge head-badge">{t.activityId ? `${t.activityId} · ${t.headId}` : t.headId}</span>
+          <span className="badge head-badge">{t.activityId ? `${t.activityId} · ${headName(t.headId)}` : headName(t.headId)}</span>
           <span className="badge composed-badge">Composed</span>
           <span className="badge" data-timing="budgeted">{kids.length} subtask{kids.length === 1 ? "" : "s"}</span>
           <Capsule label={composed.label} hue={composed.hue} />
@@ -425,7 +425,7 @@ export function Pipeline({ state, dispatch }: Props): JSX.Element {
               )}
             </span>
             <span className="badge head-badge">
-              {state.running.activityId ? `${state.running.activityId} · ${state.running.headId}` : state.running.headId}
+              {state.running.activityId ? `${state.running.activityId} · ${headName(state.running.headId)}` : headName(state.running.headId)}
             </span>
             {state.running.ommf && <span className="badge">ommf</span>}
             <span className="badge" data-timing={state.running.timing}>

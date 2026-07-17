@@ -12,6 +12,7 @@
  */
 import { useState } from "react";
 import type { Event, State, UnstartedTask } from "@maxtellar/core";
+import { headName } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { useSettings } from "../settings";
 import { parseCasualTime, parseTimeOfDay } from "../casualTime";
@@ -172,7 +173,7 @@ function OffDialog({
                   return (
                     <li key={t.id} className={`sod-leftover${gone ? " discarded" : ""}`}>
                       <span className="sl-title">{t.title}</span>
-                      <span className="badge head-badge">{t.headId}{t.activityId && ` · ${t.activityId}`}</span>
+                      <span className="badge head-badge">{headName(t.headId)}{t.activityId && ` · ${t.activityId}`}</span>
                       <button type="button"
                         className={`type-chip${gone ? " active" : ""}`}
                         data-status={gone ? "fixed" : "budgeted"}

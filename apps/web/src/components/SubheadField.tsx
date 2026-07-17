@@ -18,6 +18,8 @@
  */
 import { useEffect, useState } from "react";
 import { useHeads } from "../heads";
+import { headName } from "@maxtellar/core";
+import { headLabels } from "../headDisplay";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
 import { FuzzyDropdown } from "./FuzzyDropdown";
@@ -109,13 +111,13 @@ export function SubheadField({ activity, onActivity, onHead, title }: Props): JS
                 data-tip="Use this sub-head">{suggestedSubhead}</button>
               {suggestedHead && <span className="ml-choice-in">in</span>}
             </span>
-            {suggestedHead && <strong className="ml-choice-headpill">{suggestedHead}</strong>}
+            {suggestedHead && <strong className="ml-choice-headpill">{headName(suggestedHead)}</strong>}
           </span>
         </div>
       )}
       {derived && (
         <div className="derived-head" data-tip="Derived from the sub-head — not editable here">
-          Head: <strong>{derived}</strong>
+          Head: <strong>{headName(derived)}</strong>
         </div>
       )}
       {isNew && (
@@ -130,6 +132,7 @@ export function SubheadField({ activity, onActivity, onHead, title }: Props): JS
             value={newHead}
             onChange={(v) => { setNewHead(v); setNewHeadTouched(true); }}
             options={plannableHeads}
+            labels={headLabels(plannableHeads)}
             placeholder="Pick or create a head"
             clearable
             ariaLabel="New sub-head's head"

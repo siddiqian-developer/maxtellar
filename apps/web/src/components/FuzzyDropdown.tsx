@@ -25,6 +25,11 @@ interface Props {
   value: string;
   onChange: (v: string) => void;
   options: string[];
+  /** Optional display label per option (parallel array) — lets `value`/
+   * `onChange`/`options` stay on an underlying id (e.g. a head PATH id, §11.1)
+   * while the field shows/searches/types a friendlier string. Free text typed
+   * by the user still flows straight through `onChange` untranslated. */
+  labels?: string[];
   placeholder?: string;
   autoFocus?: boolean;
   clearable?: boolean;
@@ -40,19 +45,29 @@ function highlightMatches(text: string, positions: number[]): JSX.Element {
   );
 }
 
-export function FuzzyDropdown({ value, onChange, options, placeholder, autoFocus, clearable, ariaLabel }: Props): JSX.Element {
+export function FuzzyDropdown({ value, onChange, options, labels, placeholder, autoFocus, clearable, ariaLabel }: Props): JSX.Element {
+  // Display value: the label of the option matching `value` (an id), else
+  // `value` itself (free text, or no label map given — ids ARE the display).
+  const labelOf = (o: string): string => (labels ? labels[options.indexOf(o)] ?? o : o);
+  const idOf = (label: string): string => {
+    if (!labels) return label;
+    const i = labels.indexOf(label);
+    return i >= 0 ? options[i]! : label; // no match = user free text, pass through
+  };
+  const displayValue = labelOf(value);
+
   const matches = options
-    .map((o) => ({ o, pos: fuzzyMatch(value, o) }))
+    .map((o) => ({ o, pos: fuzzyMatch(displayValue, labelOf(o)) }))
     .filter((m): m is { o: string; pos: number[] } => m.pos !== null)
     .sort((a, b) => fuzzyScore(a.pos) - fuzzyScore(b.pos) || (a.pos[0] ?? 0) - (b.pos[0] ?? 0))
     .map((m) => m.o);
 
   const { isOpen, getInputProps, getMenuProps, getItemProps, highlightedIndex, openMenu } = useCombobox({
     items: matches,
-    inputValue: value,
+    inputValue: displayValue,
     defaultHighlightedIndex: 0, // Enter with no arrow-key press takes the top match
-    itemToString: (item) => item ?? "",
-    onInputValueChange: ({ inputValue }) => onChange(inputValue ?? ""),
+    itemToString: (item) => (item ? labelOf(item) : ""),
+    onInputValueChange: ({ inputValue }) => onChange(idOf(inputValue ?? "")),
     stateReducer: (state, { type, changes }) => {
       switch (type) {
         // §6: Escape closes only the open list. downshift's default ALSO clears the
@@ -107,7 +122,7 @@ export function FuzzyDropdown({ value, onChange, options, placeholder, autoFocus
               className={`fuzzy-option${i === highlightedIndex ? " active" : ""}`}
               {...getItemProps({ item: o, index: i })}
             >
-              {highlightMatches(o, fuzzyMatch(value, o) ?? [])}
+              {highlightMatches(labelOf(o), fuzzyMatch(displayValue, labelOf(o)) ?? [])}
             </li>
           ))}
       </ul>

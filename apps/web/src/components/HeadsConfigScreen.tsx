@@ -13,8 +13,9 @@
 
 import { useEffect, useState } from "react";
 import type { Event, State } from "@maxtellar/core";
-import { CATEGORIES } from "@maxtellar/core";
+import { headName } from "@maxtellar/core";
 import { useHeads, BUILT_IN_HEADS, BUILT_IN_HEAD_NOTES, isBuiltInActivity } from "../heads";
+import { headLabel, headLabels } from "../headDisplay";
 import { useEscClose } from "../useEscClose";
 import { rehomeActivity } from "../ml/vectorStore";
 import { FuzzyDropdown } from "./FuzzyDropdown";
@@ -55,7 +56,7 @@ function usedActivitiesUnderHead(state: State, headId: string): string[] {
 type ReassignTarget = { headId: string; activityId: string } | { headId: string; activityId: null };
 
 export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Element {
-  const { registry, heads, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, moveHead } = useHeads();
+  const { registry, heads, categories, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, moveHead } = useHeads();
   const [newHead, setNewHead] = useState("");
   const [activityHead, setActivityHead] = useState("");
   const [newActivity, setNewActivity] = useState("");
@@ -212,6 +213,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
                 value={activityHead}
                 onChange={(v) => { setActivityHead(v); setHeadTouched(true); }}
                 options={heads}
+                labels={headLabels(heads)}
                 placeholder="Pick or create a head"
                 clearable
                 ariaLabel="Head for new sub-head"
@@ -254,7 +256,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
             <p className="config-empty" style={{ marginBottom: 8 }}>
               {reassign.activityId !== null
                 ? `"${reassign.activityId}" is used by at least one task — pick a sub-head to move those tasks to (existing, or a new one).`
-                : `"${reassign.headId}" has tasks under it — pick a sub-head to move all of them to (existing, or a new one).`}
+                : `"${headName(reassign.headId)}" has tasks under it — pick a sub-head to move all of them to (existing, or a new one).`}
             </p>
             <div className="config-form-row">
               <FuzzyDropdown
@@ -270,6 +272,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
                   value={reassignNewHead}
                   onChange={setReassignNewHead}
                   options={heads}
+                  labels={headLabels(heads)}
                   placeholder="Head for the new sub-head"
                   ariaLabel="Head for new sub-head"
                 />
@@ -290,30 +293,33 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
           }).map((h) => (
             <div key={h} className="config-head-row">
               <div className="config-head-title">
-                <span className="config-head-name">{h}</span>
+                <span className="config-head-name">{headLabel(h, heads)}</span>
                 {BUILT_IN_HEADS.includes(h) && (
                   <span className="built-in-dot" aria-label="Built-in head" data-tip="Built-in — can't be deleted" />
                 )}
                 {BUILT_IN_HEAD_NOTES[h] && (
                   <span className="config-head-note">{BUILT_IN_HEAD_NOTES[h]}</span>
                 )}
-                {/* §11.1 Category tier — every head lives under one Category. */}
-                <select
-                  className="config-cat-select"
-                  aria-label={`Category for ${h}`}
-                  data-tip="Category (§11) — drives budgeting roll-ups and the netCore math"
-                  value={categoryFor(h)}
-                  onChange={(e) => moveHead(h, e.target.value)}
-                >
-                  {CATEGORIES.map((c) => (
-                    <option key={c} value={c}>{c}</option>
-                  ))}
-                </select>
+                {/* §11.1 Category tier — every head lives under one Category. Built-ins
+                    keep a fixed category (§11.1a) — no picker for them. */}
+                {!BUILT_IN_HEADS.includes(h) && (
+                  <select
+                    className="config-cat-select"
+                    aria-label={`Category for ${headName(h)}`}
+                    data-tip="Category (§11) — drives budgeting roll-ups and the netCore math"
+                    value={categoryFor(h)}
+                    onChange={(e) => moveHead(h, e.target.value)}
+                  >
+                    {categories.map((c) => (
+                      <option key={c} value={c}>{c}</option>
+                    ))}
+                  </select>
+                )}
                 {!BUILT_IN_HEADS.includes(h) && (
                   <button
                     type="button"
                     className="chip-delete"
-                    aria-label={`Delete head ${h}`}
+                    aria-label={`Delete head ${headName(h)}`}
                     data-tip={
                       headInUse(state, h)
                         ? "In use by a task — deleting will ask you to reassign first"

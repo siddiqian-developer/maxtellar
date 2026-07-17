@@ -21,6 +21,7 @@ import type { Event, State, UnstartedTask } from "@maxtellar/core";
 import {
   LOST_HOURS,
   budgetEntries,
+  headName,
   deadLeftovers,
   quotaAdjustmentsAtSod,
   sodPrecondition,
@@ -107,7 +108,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
     let v = Math.max(0, Math.round(m));
     if (v > eff) {
       v = eff;
-      notify(`Snapped ${headId} to ${fmtDurUnits(eff)} — a Pruning trim can only reduce today's share (§5.1)`);
+      notify(`Snapped ${headName(headId)} to ${fmtDurUnits(eff)} — a Pruning trim can only reduce today's share (§5.1)`);
     }
     setTrims((t) => {
       const next = { ...t };
@@ -159,7 +160,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
                     return (
                       <li key={t.id} className={`sod-leftover${discarded ? " discarded" : ""}`}>
                         <span className="sl-title">{t.title}</span>
-                        <span className="badge head-badge">{t.headId}{t.activityId && ` · ${t.activityId}`}</span>
+                        <span className="badge head-badge">{headName(t.headId)}{t.activityId && ` · ${t.activityId}`}</span>
                         {dead ? (
                           <span className="outcome-pill" data-outcome="skipped">expired — cleared</span>
                         ) : (
@@ -191,7 +192,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
                     const kept = trims[headId] ?? eff;
                     return (
                       <li key={headId} className="sod-leftover">
-                        <span className="badge head-badge">{headId}</span>
+                        <span className="badge head-badge">{headName(headId)}</span>
                         <span className="sl-title num">
                           {fmtDurUnits(eff)}
                           {eff > base && (
@@ -204,7 +205,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
                           key={`${headId}:${snapSeq}`}
                           value={kept}
                           onCommit={(m) => setTrim(headId, eff, m)}
-                          ariaLabel={`Keep today's ${headId} share`}
+                          ariaLabel={`Keep today's ${headName(headId)} share`}
                         />
                         {kept < eff && (
                           <span className="outcome-pill" data-outcome="skipped" data-tip="The trimmed share stays reported as deficit until week's end — nothing carries over (§5.1)">
@@ -256,7 +257,7 @@ export function SodCeremony({ state, dispatch, onClose, onAddTask }: Props): JSX
                   {leftovers.map((t) => (
                     <li key={t.id} className="sod-leftover">
                       <span className="sl-title">{t.title}</span>
-                      <span className="badge head-badge">{t.headId}{t.activityId && ` · ${t.activityId}`}</span>
+                      <span className="badge head-badge">{headName(t.headId)}{t.activityId && ` · ${t.activityId}`}</span>
                     </li>
                   ))}
                 </ul>

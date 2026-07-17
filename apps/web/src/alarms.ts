@@ -13,6 +13,7 @@
 import type { State } from "@maxtellar/core";
 import {
   budgetEntries,
+  headName,
   pomodoroView,
   runningView,
   sodPrecondition,
@@ -117,7 +118,7 @@ export function alarmSignals(state: State, opts: AlarmOptions = { approachingMin
         kind: "atMostQuota",
         key: `atmost:${b.headId}:${winStart}`,
         title: "At-most quota exceeded",
-        body: `“${b.headId}” is over its weekly ceiling by ${achieved - quota} min.`,
+        body: `“${headName(b.headId)}” is over its weekly ceiling by ${achieved - quota} min.`,
         urgent: true,
       });
     }
