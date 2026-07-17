@@ -879,24 +879,25 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .preset-arrow.down::after { border-top: 6px solid currentColor; }
 .preset-add-row { border-bottom: none; grid-template-columns: minmax(220px, 340px); }
 
-/* ⊕ add — bottom-left of the table (§11.1c): click = a pending row appears
-   with the head picker focused; leaving it unfilled discards with a toast. */
-.preset-add-circle {
-  width: 26px;
-  height: 26px;
+/* Circled + add button (AddCircleButton) — SVG plus inside a bordered circle. */
+.add-circle {
   border-radius: 50%;
   border: 1px solid var(--ink-soft);
   background: transparent;
   color: var(--ink-soft);
-  font-size: 16px;
-  line-height: 1;
+  padding: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
+}
+.add-circle:hover { color: var(--accent-strong); border-color: var(--accent-strong); }
+
+/* ⊕ add — bottom-left of the presets table (§11.1c): click = a pending row
+   appears with the head picker focused; unfilled discards with a toast. */
+.preset-add-circle {
   margin-top: 6px;
   align-self: flex-start; /* bottom-left, after the last row */
 }
-.preset-add-circle:hover { color: var(--accent-strong); border-color: var(--accent-strong); }
 
 /* Settings' compact summary list — name + one-line summary + reorder only. */
 .preset-summary-list { display: flex; flex-direction: column; margin-top: 6px; }

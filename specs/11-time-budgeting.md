@@ -111,6 +111,10 @@ registry head can be added as a preset, any preset can be removed, and the list 
     appends a pending row with the head picker focused; picking a valid head commits the
     preset at once; leaving the row without one DISCARDS it with a snap-toast notification —
     a half-filled preset never lands in the list.
+  - The ⊕ itself is the shared **`AddCircleButton`** component (an SVG plus stroked in
+    `currentColor` inside a bordered circle — never a font "+" glyph, which centers
+    unevenly; same rationale as the CSS-drawn ▴▾ arrows). Every future "add a row/item"
+    circle reuses this component (§7.0 composition law).
 - **Every OTHER surface keeps the pill row** (`PresetPills` in `TaskSpecFields.tsx`) — New Task
   drawer, the week-plan template editor, the dated-task editor, Gap-Fill's quick-fill row.
   Pickers stay pills; only CONFIGURATION uses the table.

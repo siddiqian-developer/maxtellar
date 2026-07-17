@@ -29,6 +29,7 @@ import { capitalCase } from "../text";
 import { DurInput } from "./BudgetPanel";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 import { SnapToast, useSnapToast } from "../SnapToast";
+import { AddCircleButton } from "./AddCircleButton";
 import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
 import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
@@ -231,15 +232,12 @@ export function PresetsScreen({ onBack }: { onBack: () => void }): JSX.Element {
                 />
               </div>
             ) : (
-              <button
-                type="button"
+              <AddCircleButton
                 className="preset-add-circle"
-                aria-label="Add a preset"
-                data-tip="Add a head as a new preset"
+                label="Add a preset"
+                tip="Add a head as a new preset"
                 onClick={() => setPendingHead("")}
-              >
-                +
-              </button>
+              />
             )}
           </div>
         </section>
