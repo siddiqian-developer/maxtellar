@@ -14,8 +14,13 @@ import {
   WASTED_TIME,
   LOST_HOURS,
   OFF_PERIOD,
+  CATEGORIES,
+  RECHARGING,
   CORE_WORK,
   MAINTENANCE,
+  REGENERATION,
+  UPGRADING,
+  NOT_WORK,
   TIME_WASTED,
 } from "@maxtellar/core";
 import { forgetActivity } from "./ml/vectorStore";

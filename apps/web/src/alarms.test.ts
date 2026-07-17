@@ -53,7 +53,7 @@ describe("alarmSignals (§5.3)", () => {
 
   it("an at-most weekly quota over its ceiling warns", () => {
     let s = initialState(T0);
-    const atMost: HeadBudget = { headId: "Scrolling", categoryId: "Time Wasted", kind: "weekly", quotaMinutes: 60, quotaType: "atMost", weekdays: [0, 1, 2, 3, 4, 5, 6] };
+    const atMost: HeadBudget = { headId: "Scrolling", categoryId: "Wasted Time", kind: "weekly", quotaMinutes: 60, quotaType: "atMost", weekdays: [0, 1, 2, 3, 4, 5, 6] };
     s = { ...s, week: { ...s.week, startedAt: 0, budgets: [atMost] },
       history: [{ id: "h", taskId: null, title: "Scroll", headId: "Scrolling", activityId: "", kind: "occupancy", start: T0 - 90, end: T0, outcome: "completed", channels: { spent: 90, wasted: 0, managed: 0, breaks: 0 } }] };
     const sig = alarmSignals(s).find((a) => a.kind === "atMostQuota");

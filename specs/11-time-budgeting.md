@@ -17,20 +17,53 @@ so the cost of overhead stays visible in the one number that matters. See [01-ph
 
 ## 11.1 The Category tier (3-level hierarchy)
 Introduce a level **above** heads: **Category → Head → Sub-head** (was Head → Sub-head).
-- Categories: **Core Work**, **Maintenance** (was "Supportive Work"), **Not Work**, **Time
-  Wasted** (names locked 2026-07-16).
+- Categories are an **ordered list** the app ships with, **and the user may ADD their own**
+  (add-only, 2026-07-17). The seeded categories are not renamed or deleted (that keeps the §11.3
+  budgeting roll-ups well-defined); a user-added category behaves like any seeded one. **Category
+  order is user-controllable** (§11.1a) and is the order everything category-grouped renders in
+  (registry screen, budgeting panels).
+- **Shipped default categories, in order** (the data the app ships with, 2026-07-17):
+  1. **Recharging** — Recharge* → Sleep, Nap
+  2. **Core Work** — Self-Management (Strategy and Planning, Research, Project Execution) · Job
+     (Sales, Fundraising, Job Search, Marketing) · Public Speaking · Investor Hunting · Networking ·
+     Other Work #1 · Other Work #2
+  3. **Maintenance** — Food* (Kitchen work) · Health · Cleaning · Plantcare · Clothes Work
+  4. **Regeneration** — Rest · Meditation · Break · Exercise · Socialization
+  5. **Upgrading** — Personal Philosophy · Learning (English Speaking Learning/Practice)
+  6. **Not Work** — Social Media · Sports · Socialization
+  7. **Wasted Time** — Social Media · Socialization
+
+  (* = built-in inevitable-necessity head, §2.10; Recharge & Food are undeletable.) Names locked
+  2026-07-16 for the original four; the set was expanded to the seven above 2026-07-17. "Time
+  Wasted" was renamed "Wasted Time" 2026-07-17.
 - **Identity is the PATH, not the name.** The same activity name may live under two Categories with
-  different meaning — e.g. *Socialization* under Maintenance (regenerative) vs under Time Wasted
+  different meaning — e.g. *Socialization* under Regeneration (regenerative) vs under Wasted Time
   (indulgent). A sub-head is `(category, head, sub-head)`, not a global string. This confirms the
-  tree is load-bearing, and the head registry (`heads.tsx`, §2.1) grows a Category parent.
-- Example tree the user gave (Category / Head / Sub-head), for fixtures:
-  - **Core Work** → Self-Management (Strategy & Planning, Personal Philosophy) · Health · Job (Core
-    Work, Fundraising, Job Search) · Self-Learning (English-Speaking Practice, Public Speaking,
-    Investor Hunting, Networking) · Other Work #1 · Other Work #2
-  - **Maintenance** → Food (Kitchen work) · Cleaning · Plantcare · Clothes Work · Regenerative
-    (Machine Maintenance, Nap, Rest, Meditation, Break, Exercise, Socialization)
-  - **Not Work** → Social Media · Sports
-  - **Time Wasted** → Social Media · Socialization
+  tree is load-bearing, and the head registry (`heads.tsx`, §2.1) carries a Category parent.
+- **Path identity is TASK-LEVEL (decided 2026-07-17):** a task's `headId` IS the path
+  `(category, head)`, encoded as one string (`category ␟ name`, an untypeable separator), so two
+  same-named heads under different Categories are genuinely distinct everywhere — reducer,
+  budgets, roll-ups, ML. Display always shows the bare name. **Built-in head NAMES are reserved**
+  (no user head may take one, in any category), so built-ins have stable canonical path ids.
+  Pre-path stored data is **wiped, not migrated** (user decision 2026-07-17): on first load under
+  the new format the registry + ML stores clear and the app re-seeds from the shipped defaults
+  above; settings/theme survive.
+
+## 11.1a Category & head management (the Heads & Sub-heads screen)
+The Heads & Sub-heads screen (§VI) takes the **whole screen** and is **grouped by Category**, in the
+user-controlled category order:
+- **Category ordering.** A reorder affordance sits at the category level (a grip on each category
+  header, on the right/left of the screen) — drag categories (dnd-kit) to reorder; the order persists
+  and drives every category-grouped view.
+- **Within a category, built-ins list first, then user-added heads** (built-ins keep their
+  undeletable dot; user heads keep the × delete).
+- **Move a head to another category — two ways:**
+  1. Next to a user head's delete (×), a **move** control opens a **dropdown of every category**;
+     picking one re-homes the head to that category.
+  2. **Drag-and-drop** a head onto another category (dnd-kit) does the same.
+  Built-in heads keep their default category (their category is fixed, not moved).
+- **Add a category.** An "Add category" affordance appends a new (empty) user category to the end of
+  the order; heads can then be moved into it. Add-only — seeded categories aren't renamed/deleted.
 
 ## 11.2 The 24h zero-sum day-shape (per-day, hard-balanced)
 - Budgets are **per-day**, set on **HEADS** (§11.6 for sub-head depth), rolling up to Categories,
@@ -164,7 +197,7 @@ The Analytics screen gains a **Budgets** section (only when head budgets exist):
 
 ## 11.10 Micro-items — RESOLVED (grilled 2026-07-16)
 1. **Category names**: *Supportive Work* → **Maintenance**; *Not Work* → **keeps its name**.
-   (Core Work, Time Wasted unchanged.)
+   (Core Work unchanged; *Time Wasted* → **Wasted Time** 2026-07-17.)
 2. **Sleep**: **one global value**, settable from both Weekly Planning and Settings, synced;
    no per-weekday variance (§11.4).
 3. **Multiple %-core heads**: percentages are **literally % of netCore**; the hard fit is

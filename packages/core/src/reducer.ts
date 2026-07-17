@@ -27,8 +27,9 @@ import type {
   WeekPlan,
   WeekTemplate,
 } from "./types.js";
-import { emptyChannels, LOST_HOURS, OFF_PERIOD, SELF_MANAGEMENT } from "./types.js";
-import { CORE_WORK, weekBudgetValidity } from "./budget.js";
+import { emptyChannels, SELF_MANAGEMENT } from "./types.js";
+import { headName } from "./headPath.js";
+import { CORE_WORK, LOST_HOURS_ID, OFF_PERIOD_ID, weekBudgetValidity } from "./budget.js";
 import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
 import { canPlanWeek, injectTodayDetailed, quotaAdjustmentsAtSod, quotaTrimsAtPruning } from "./week.js";
 import { settle } from "./settle.js";
@@ -1027,7 +1028,7 @@ export function reduce(state: State, event: Event): State {
         id: `lost-${id}-${k}`,
         taskId: null,
         title: "Lost Hours",
-        headId: LOST_HOURS,
+        headId: LOST_HOURS_ID,
         activityId: "",
         kind: "occupancy",
         start: g.start,
@@ -1274,7 +1275,7 @@ export function reduce(state: State, event: Event): State {
       const clampMin = (n: number): number => Math.max(0, Math.round(n));
       const budgets = event.budgets.map((b) => {
         const base = { ...b, weekdays: [...new Set(b.weekdays)].sort((x, y) => x - y) };
-        if (b.kind === "percent" && (b.categoryId !== CORE_WORK || b.headId === SELF_MANAGEMENT)) {
+        if (b.kind === "percent" && (b.categoryId !== CORE_WORK || headName(b.headId) === SELF_MANAGEMENT)) {
           const { pct: _pct, ...rest } = base;
           return { ...rest, kind: "absolute" as const, minutes: clampMin(base.minutes ?? 0) };
         }
@@ -1310,7 +1311,7 @@ export function reduce(state: State, event: Event): State {
       const running = {
         id,
         title,
-        headId: OFF_PERIOD,
+        headId: OFF_PERIOD_ID,
         activityId: title,
         rank: rankAfter(s.plan.length ? s.plan[s.plan.length - 1]!.rank : null),
         tier: "inviolable" as const,

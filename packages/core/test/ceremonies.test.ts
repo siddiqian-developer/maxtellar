@@ -13,7 +13,7 @@ import {
   sodPrecondition,
   formingDayStart,
   deadLeftovers,
-  LOST_HOURS,
+  LOST_HOURS_ID,
   RECHARGE,
   type Event,
   type HistoryEntry,
@@ -61,7 +61,7 @@ function activity(start: number, end: number, title = "Work"): Event {
 }
 
 const occ = (s: State): HistoryEntry[] => s.history.filter((h) => h.kind === "occupancy");
-const lostEntries = (s: State): HistoryEntry[] => occ(s).filter((h) => h.headId === LOST_HOURS);
+const lostEntries = (s: State): HistoryEntry[] => occ(s).filter((h) => h.headId === LOST_HOURS_ID);
 const noViolations = (s: State): void => expect(checkInvariants(s)).toEqual([]);
 
 describe("SOD precondition scoping", () => {

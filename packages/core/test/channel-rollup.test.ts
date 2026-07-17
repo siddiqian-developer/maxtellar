@@ -10,7 +10,8 @@
  */
 import { describe, it, expect } from "vitest";
 import { achievedByHead } from "../src/week.js";
-import { SELF_MANAGEMENT, WASTED_TIME, type Channels, type HistoryEntry } from "../src/types.js";
+import { type Channels, type HistoryEntry } from "../src/types.js";
+import { SELF_MANAGEMENT_ID, WASTED_TIME_ID } from "../src/budget.js";
 
 const ch = (o: Partial<Channels>): Channels => ({ spent: 0, wasted: 0, managed: 0, breaks: 0, ...o });
 
@@ -26,27 +27,27 @@ describe("§2.6 channel-aware roll-up", () => {
     // 60m wall: 50 work + 10 wasted.
     const r = achievedByHead([entry(0, 60, ch({ spent: 50, wasted: 10 }))], 0, 1000);
     expect(r["Work"]).toBe(50);
-    expect(r[WASTED_TIME]).toBe(10);
+    expect(r[WASTED_TIME_ID]).toBe(10);
   });
 
   it("managed is credited to Self-Management, not the task's head", () => {
     const r = achievedByHead([entry(0, 60, ch({ spent: 45, managed: 15 }))], 0, 1000);
     expect(r["Work"]).toBe(45);
-    expect(r[SELF_MANAGEMENT]).toBe(15);
+    expect(r[SELF_MANAGEMENT_ID]).toBe(15);
   });
 
   it("breaks STAY with the task's head (§5.2: 60m task = 60m to the head)", () => {
     const r = achievedByHead([entry(0, 60, ch({ spent: 50, breaks: 10 }))], 0, 1000);
     expect(r["Work"]).toBe(60);
-    expect(r[WASTED_TIME]).toBeUndefined();
+    expect(r[WASTED_TIME_ID]).toBeUndefined();
   });
 
   it("all four channels at once split correctly", () => {
     // 60m wall = 30 spent + 10 wasted + 15 managed + 5 breaks
     const r = achievedByHead([entry(0, 60, ch({ spent: 30, wasted: 10, managed: 15, breaks: 5 }))], 0, 1000);
     expect(r["Work"]).toBe(35); // spent + breaks
-    expect(r[WASTED_TIME]).toBe(10);
-    expect(r[SELF_MANAGEMENT]).toBe(15);
+    expect(r[WASTED_TIME_ID]).toBe(10);
+    expect(r[SELF_MANAGEMENT_ID]).toBe(15);
   });
 
   it("CONSERVES: the split always re-sums to the span", () => {
@@ -58,8 +59,8 @@ describe("§2.6 channel-aware roll-up", () => {
     // Half the 60m entry is inside the window → half of each channel.
     const r = achievedByHead([entry(0, 60, ch({ spent: 30, wasted: 10, managed: 20 }))], 30, 1000);
     expect(total(r)).toBe(30); // exactly the clipped span — nothing invented or lost
-    expect(r[WASTED_TIME]).toBe(5);
-    expect(r[SELF_MANAGEMENT]).toBe(10);
+    expect(r[WASTED_TIME_ID]).toBe(5);
+    expect(r[SELF_MANAGEMENT_ID]).toBe(10);
     expect(r["Work"]).toBe(15);
   });
 
@@ -72,7 +73,7 @@ describe("§2.6 channel-aware roll-up", () => {
   it("an all-wasted task gives its head nothing", () => {
     const r = achievedByHead([entry(0, 30, ch({ wasted: 30 }))], 0, 1000);
     expect(r["Work"]).toBeUndefined();
-    expect(r[WASTED_TIME]).toBe(30);
+    expect(r[WASTED_TIME_ID]).toBe(30);
   });
 
   it("a clean task is unaffected (the common case)", () => {

@@ -15,16 +15,51 @@
  *    (netCore − existing share), then original shape; the %-residual absorbs it.
  */
 
-import { SELF_MANAGEMENT, type Dur, type WeekPlan } from "./types.js";
+import {
+  SELF_MANAGEMENT,
+  RECHARGE,
+  FOOD,
+  WASTED_TIME,
+  LOST_HOURS,
+  OFF_PERIOD,
+  type Dur,
+  type WeekPlan,
+} from "./types.js";
+import { headPath, headName } from "./headPath.js";
 
 export const MIN_PER_DAY = 1440;
 
-/** §11.1 Category tier (names locked 2026-07-16). */
+/** §11.1 Category tier. Original four names locked 2026-07-16; expanded to the
+ * seven shipped defaults 2026-07-17 (users may ADD more, add-only). CATEGORIES
+ * is the SHIPPED DEFAULT ORDER — the user can reorder + append at runtime; that
+ * live order lives in the web layer (`heads.tsx`), not here. */
+export const RECHARGING = "Recharging";
 export const CORE_WORK = "Core Work";
 export const MAINTENANCE = "Maintenance";
+export const REGENERATION = "Regeneration";
+export const UPGRADING = "Upgrading";
 export const NOT_WORK = "Not Work";
-export const TIME_WASTED = "Time Wasted";
-export const CATEGORIES = [CORE_WORK, MAINTENANCE, NOT_WORK, TIME_WASTED] as const;
+export const TIME_WASTED = "Wasted Time";
+export const CATEGORIES = [
+  RECHARGING,
+  CORE_WORK,
+  MAINTENANCE,
+  REGENERATION,
+  UPGRADING,
+  NOT_WORK,
+  TIME_WASTED,
+] as const;
+
+/** §11.1 canonical PATH ids of the built-in heads (identity = path, encoded as
+ * one string — headPath.ts). Built-ins keep their default category (§11.1a),
+ * so these ids are stable; core books/compares by them, never bare names.
+ * Built-in NAMES are reserved: no user head may take one, in any category. */
+export const SELF_MANAGEMENT_ID = headPath(CORE_WORK, SELF_MANAGEMENT);
+export const RECHARGE_ID = headPath(RECHARGING, RECHARGE);
+export const FOOD_ID = headPath(MAINTENANCE, FOOD);
+export const WASTED_TIME_ID = headPath(TIME_WASTED, WASTED_TIME);
+export const LOST_HOURS_ID = headPath(TIME_WASTED, LOST_HOURS);
+export const OFF_PERIOD_ID = headPath(MAINTENANCE, OFF_PERIOD);
 
 /** §11.4 Sleep — the head of the day. A first-class budget line (stored as
  * `week.sleepMinutes`, synced with Settings) rendered under its own pseudo-
@@ -114,7 +149,8 @@ export function fixedShare(b: HeadBudget, weekday: number): Dur {
 /* ------------------------- subtraction chain (§11.3) ------------------------ */
 
 const isCore = (b: HeadBudget): boolean => b.categoryId === CORE_WORK;
-const isSelfMgmt = (b: HeadBudget): boolean => b.headId === SELF_MANAGEMENT;
+// Name-compare (path-aware): built-in names are reserved, so this is exact.
+const isSelfMgmt = (b: HeadBudget): boolean => headName(b.headId) === SELF_MANAGEMENT;
 
 /** netCore = 1440 − Σ(non-core fixed shares, Sleep included as an ordinary
  * absolute line) − Self-Management. Clamped ≥ 0 (an over-committed overhead

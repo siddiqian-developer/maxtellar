@@ -9,3 +9,4 @@ export * from "./week.js";
 export * from "./invariants.js";
 export * from "./fork.js";
 export * from "./budget.js";
+export * from "./headPath.js";

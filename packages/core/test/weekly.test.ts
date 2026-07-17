@@ -12,7 +12,7 @@ import {
   injectToday,
   canPlanWeek,
   rankAfter,
-  OFF_PERIOD,
+  OFF_PERIOD_ID,
   type Event,
   type State,
   type WeekTemplate,
@@ -155,7 +155,7 @@ describe("off-periods (§4.5)", () => {
     s = reduce(s, { type: "START_OFF_PERIOD", title: "Sick", knownEnd: DAY0 + 12 * H });
     expect(s.running?.isOff).toBe(true);
     expect(s.running?.tier).toBe("inviolable");
-    expect(s.running?.headId).toBe(OFF_PERIOD);
+    expect(s.running?.headId).toBe(OFF_PERIOD_ID);
     expect(s.running?.budget).toBe(4 * H);
     expect(s.plan.some((i) => i.id === "keep")).toBe(true); // pushed, not perished
     // plan task is pushed to at/after the block's projected end
@@ -186,7 +186,7 @@ describe("off-periods (§4.5)", () => {
     s = reduce(s, { type: "TICK", to: DAY0 + 10 * H }); // 2h off
     s = reduce(s, { type: "END_OFF_PERIOD" });
     expect(s.running).toBeNull();
-    const off = s.history.find((h) => h.headId === OFF_PERIOD);
+    const off = s.history.find((h) => h.headId === OFF_PERIOD_ID);
     expect(off).toBeDefined();
     expect(off!.end - off!.start).toBe(2 * H);
     noViolations(s);

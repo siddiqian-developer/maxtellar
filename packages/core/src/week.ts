@@ -7,8 +7,9 @@
  */
 
 import type { DatedTask, Dur, EndDayOffset, HistoryEntry, Min, State, TaskSpec, TemplateOverride, UnstartedTask, WeekPlan, WeekTemplate } from "./types.js";
-import { SELF_MANAGEMENT, WASTED_TIME } from "./types.js";
 import {
+  SELF_MANAGEMENT_ID,
+  WASTED_TIME_ID,
   budgetEntries,
   redistributeOvershoot,
   redistributeShortfall,
@@ -81,8 +82,8 @@ export function achievedByHead(history: HistoryEntry[], start: Min, end: Min): R
     const frac = span > 0 ? clipped / span : 0;
     const wasted = Math.min(Math.round(h.channels.wasted * frac), clipped);
     const managed = Math.min(Math.round(h.channels.managed * frac), clipped - wasted);
-    add(WASTED_TIME, wasted);
-    add(SELF_MANAGEMENT, managed);
+    add(WASTED_TIME_ID, wasted);
+    add(SELF_MANAGEMENT_ID, managed);
     add(h.headId, clipped - wasted - managed); // the remainder — conserves exactly
   }
   return out;
