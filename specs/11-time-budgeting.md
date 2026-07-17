@@ -49,7 +49,13 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
   original four; expanded to seven 2026-07-17, to eight (Lost Time added, Lost Hours moved into
   it from Wasted Time) 2026-07-18. "Time Wasted" was renamed "Wasted Time" 2026-07-17. The full
   seed tree (all built-ins + this list) OVERRIDES any prior seed — re-seeded from scratch
-  2026-07-18, not merged with earlier example heads.
+  2026-07-18, not merged with earlier example heads. **Existing stores get a one-time seed
+  TOP-UP, not a wipe** (fixed 2026-07-18 — before this, only fresh stores saw the full seed): a
+  `seedVersion` stamp, separate from the path-format stamp, triggers a single merge that adds
+  every missing seed head to the stored registry (seed display order first, the user's own heads
+  after; user heads, sub-heads, ML training, settings and category order all survive). After
+  that merge the §2.1 no-resurrection rule holds — a deleted seed head stays deleted across
+  reloads until the stamp is next bumped.
 - **Identity is the PATH, not the name.** The same head name may live under two Categories with
   different meaning — e.g. *Socialization* under Regeneration (regenerative, built-in) vs under
   Wasted Time (indulgent, ordinary). A head is `(category, head)`, not a global string. This

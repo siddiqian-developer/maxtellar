@@ -249,6 +249,42 @@ interface HeadsApi {
 
 const HeadsContext = createContext<HeadsApi | null>(null);
 
+/** Stamp for the shipped seed's CONTENTS (distinct from main.tsx's path-FORMAT
+ * stamp). When the shipped seed gains heads, bump this: on the first load under
+ * a new stamp the missing seed heads are merged INTO the stored registry once
+ * (a top-up, not a wipe — user heads, sub-heads, ML training, settings and
+ * category order all survive). After that one merge the no-resurrection rule
+ * applies as usual: deleting a seed head stays deleted across reloads. */
+const SEED_STAMP_KEY = "seedVersion";
+const SEED_STAMP = "2026-07-18";
+
+/** One-time seed top-up: every DEFAULT_REGISTRY head exists (stored sub-head
+ * lists win), ordered seed-first so the shipped display order holds; the
+ * user's own heads follow. */
+function topUpSeed(stored: HeadsRegistry): HeadsRegistry {
+  const merged: HeadsRegistry = {};
+  for (const k of Object.keys(DEFAULT_REGISTRY)) merged[k] = stored[k] ?? [];
+  for (const k of Object.keys(stored)) merged[k] = stored[k] ?? [];
+  return merged;
+}
+
+// Runs ONCE per page load, at module scope — deliberately outside the React
+// tree (a useState initializer is re-invoked by StrictMode, so a stamp check
+// there sees its own first run's stamp and skips the merge). Note this
+// executes on import, i.e. BEFORE main.tsx's path-format wipe — harmless: a
+// pre-path store gets its registry key removed by that wipe right after,
+// and re-seeds fully from DEFAULT_REGISTRY below.
+try {
+  if (localStorage.getItem(SEED_STAMP_KEY) !== SEED_STAMP) {
+    localStorage.setItem(SEED_STAMP_KEY, SEED_STAMP);
+    const raw = localStorage.getItem("headsRegistry");
+    if (raw) localStorage.setItem("headsRegistry", JSON.stringify(topUpSeed(JSON.parse(raw) as HeadsRegistry)));
+  }
+} catch {
+  // no localStorage (non-browser import) or unreadable store — the provider's
+  // defaults path covers it
+}
+
 export function HeadsProvider({ children }: { children: React.ReactNode }): JSX.Element {
   const [registry, setRegistry] = useState<HeadsRegistry>(() => {
     try {
