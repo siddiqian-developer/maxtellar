@@ -81,6 +81,8 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
   const [selWd, setSelWd] = useState<number>(plannedDays.includes(todayWeekday) ? todayWeekday : (plannedDays[0] ?? 1));
   const [expanded, setExpanded] = useState<string | null>(null);
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Sleep's pinned trio starts collapsed (the practical default is rarely edited).
+  const [sleepOpen, setSleepOpen] = useState(false);
   const { toast, notify: showToast } = useSnapToast();
   const [flash, setFlash] = useState<{ headId: string; seq: number } | null>(null);
   const dragId = useRef<string | null>(null);
@@ -429,11 +431,46 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
            * real WeekTemplate now, so the trio — not just a budget — lives
            * here. Settings-grade: editable even under the mid-week lock, same
            * as before. */}
-          <div className={`bp-row bp-pinned bp-pinned-trio${flashCls(SLEEP_ID)}`}>
-            <span className="bp-pin" data-tip="Pinned — Sleep is the head of the day (synced with Settings and the Calendar)">◆</span>
-            <span className="bp-name">Sleep</span>
+          <div
+            className={`bp-row bp-pinned bp-pinned-trio bp-pinned-trio-toggle${sleepOpen ? " bp-pinned-trio-open" : " bp-pinned-trio-collapsed"}${flashCls(SLEEP_ID)}`}
+            role="button"
+            tabIndex={0}
+            aria-expanded={sleepOpen}
+            aria-label={sleepOpen ? "Collapse Sleep" : "Expand Sleep"}
+            onClick={(e: React.MouseEvent) => {
+              // The WHOLE row toggles — but a click that lands ON an actual
+              // control (input / chip / button / stepper) is an EDIT, not a
+              // collapse: let it through. Empty space (incl. field labels and
+              // the caret/header) collapses. When collapsed there are no
+              // controls, so any click expands.
+              // NB: scope the control search to controls INSIDE the row — the
+              // row itself is role="button", so an unscoped .closest([role=button])
+              // would match the row and wrongly block every collapse.
+              const hit = (e.target as HTMLElement).closest("input, button, [role=button], .type-chip, .time-stepper");
+              if (sleepOpen && hit && hit !== e.currentTarget) return;
+              setSleepOpen(!sleepOpen);
+            }}
+            onKeyDown={(e: React.KeyboardEvent) => {
+              // Only the row itself (not a focused inner control) answers Enter/Space.
+              if (e.target !== e.currentTarget) return;
+              if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setSleepOpen(!sleepOpen); }
+            }}
+          >
+            {/* The WHOLE row is the collapse/expand toggle in BOTH states.
+             * Clicks that hit a real control are treated as edits (guarded in
+             * onClick above), so the fields stay usable while empty-space
+             * clicks — including the field labels — collapse the row. */}
+            <span className="bp-trio-header">
+              <span className="bp-caret" aria-hidden>{sleepOpen ? "▾" : "▸"}</span>
+              <span className="bp-pin" data-tip="Pinned — Sleep is the head of the day (synced with Settings and the Calendar)">◆</span>
+              <span className="bp-name">Sleep</span>
+            </span>
             <SleepTrioFields
               hour12={hour12}
+              minFragment={state.minFragment}
+              collapsible
+              open={sleepOpen}
+              onOpenChange={setSleepOpen}
               value={{
                 timing: sleepTpl?.timing ?? "budgeted",
                 budget: sleepTpl?.budget,
@@ -480,7 +517,7 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
                       const onDay = b.weekdays.includes(selWd);
                       return (
                         <div key={b.headId} className={`bp-head${flashCls(b.headId)}`}>
-                          <div className={`bp-row bp-head-row${onDay ? "" : " bp-offday"}`}
+                          <div className={`bp-row bp-head-row hir-line${onDay ? "" : " bp-offday"}`}
                             draggable={!locked && !pinned}
                             onDragStart={() => { dragId.current = b.headId; }}
                             onDragOver={(e) => e.preventDefault()}

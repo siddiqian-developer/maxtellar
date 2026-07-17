@@ -248,6 +248,7 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
             </label>
             <SleepTrioFields
               hour12={hour12}
+              minFragment={minFragment}
               value={{
                 timing: sleepTemplate?.timing ?? "budgeted",
                 budget: sleepTemplate?.budget ?? sleepMinutes,

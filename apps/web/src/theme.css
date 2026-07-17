@@ -2072,11 +2072,37 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
  * (timing chips + start/end/budget), far too large for `.bp-row`'s single-
  * line flex assumption — align-items/height reset so it can stack; the
  * trio itself owns its internal layout via `.sleep-trio` below. */
-.bp-pinned-trio { align-items: flex-start; min-height: 0; padding: 10px 10px 6px; }
-.bp-pinned-trio .bp-pin { margin-top: 4px; }
+.bp-pinned-trio { min-height: 0; padding: 6px 10px 6px; }
+/* The WHOLE row is one clickable toggle in BOTH states — hand cursor, quiet
+ * hover wash, focus ring apply to the row itself, collapsed OR open. The
+ * editable fields stop propagation (SleepTrioFields), so clicking them never
+ * collapses the row, but the row's hover affordance stays whole-row. */
+.bp-pinned-trio-toggle { cursor: pointer; }
+.bp-pinned-trio-toggle:hover { background: var(--hover-wash, rgba(127, 127, 127, .1)); }
+.bp-pinned-trio-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+.bp-pinned-trio-collapsed { align-items: center; }
+.bp-pinned-trio-open { align-items: flex-start; }
+/* Header: fixed geometry — its position must NOT change between collapsed and
+ * open, and it carries no hover/highlight of its own. */
+.bp-trio-header { display: inline-flex; align-items: center; gap: 0; }
 .sleep-trio { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .sleep-trio .field { display: flex; flex-direction: column; margin: 0; gap: 3px; }
+/* Field labels (incl. "Timing types") are empty space, not controls — clicking
+ * one collapses the row, so they wear the same hand pointer as the row. The
+ * actual controls below keep their own cursors. */
+.bp-pinned-trio-toggle .sleep-trio label { cursor: pointer; }
 .sleep-trio-approx { margin: 0; font-style: italic; }
+/* Collapsed: ONE horizontal row — caret, labelled Budget, then the type-aware
+ * clock snapshot. The whole row toggles (role="button"), so it wears the hand
+ * cursor and a quiet hover wash. */
+.sleep-trio-collapsed { flex-direction: row; align-items: center; gap: 8px; }
+.sleep-trio-toggle { cursor: pointer; border-radius: 6px; margin: -2px -4px; padding: 2px 4px; }
+.sleep-trio-toggle:hover { background: var(--hover-wash, rgba(127, 127, 127, .1)); }
+.sleep-trio-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 1px; }
+.sleep-trio-summary { display: flex; align-items: baseline; gap: 12px; min-width: 0; flex: 1; }
+.sleep-trio-budget { display: inline-flex; align-items: baseline; gap: 6px; }
+.sleep-trio-lbl { font-size: 11px; font-weight: 600; color: var(--ink-soft); }
+.sleep-trio-clock { color: var(--ink-soft); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp-pin { color: var(--ink-soft); font-size: 10px; width: 26px; text-align: center; }
 .bp-name { font-weight: 600; font-size: 13px; color: var(--ink); }
 .bp-head-name { background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 13px; color: var(--ink); text-align: left; }
@@ -2139,13 +2165,19 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
  * revealed button itself — the zone's own background stays click-through, so
  * it never eats clicks on the row's real controls (inputs, ▲▼, etc.) sitting
  * underneath it at any other point in that half. */
+/* Zones span each half of the ROW LINE only (--hir-row-h, measured from the
+ * first `.hir-line` child in HoverInsertRows.tsx) — NOT the whole rendered
+ * block, which may carry sub-heads / an expanded editor below the line. So
+ * the bottom + lands on the row line's own bottom edge, right above that
+ * detail, not below it. Fallback to 50% before the measurement lands. */
 .hir-zone {
-  position: absolute; left: 0; right: 0; height: 50%; z-index: 2;
+  position: absolute; left: 0; right: 0;
+  height: calc(var(--hir-row-h, 100%) / 2); z-index: 2;
   display: flex; justify-content: center;
   pointer-events: none;
 }
 .hir-zone-top { top: 0; align-items: flex-start; }
-.hir-zone-bottom { bottom: 0; align-items: flex-end; }
+.hir-zone-bottom { top: calc(var(--hir-row-h, 100%) / 2); align-items: flex-end; }
 .hir-edge-add { visibility: hidden; background: var(--paper); border-radius: 50%; pointer-events: none; }
 /* Seam insert (§11.8a1, named 2026-07-20): the button's OWN CENTER sits
  * exactly on the seam between two rows — half its height oversteps the

@@ -19,7 +19,7 @@
  * reports WHERE (`onInsert(atIndex)`); the caller owns what "insert" means
  * (open a drawer, splice an array, whatever).
  */
-import { useState, type ReactNode } from "react";
+import { useState, useRef, useLayoutEffect, type ReactNode } from "react";
 import { AddCircleButton } from "./AddCircleButton";
 
 export function HoverInsertRows<T>({
@@ -67,10 +67,17 @@ export function HoverInsertRows<T>({
   );
 }
 
-/** One row + its two hover-split insert zones. Cursor Y within the row
- * (not the zone — the zone is pointer-events:none until revealed, so it
- * can't :hover on its own) decides which half is "hot"; CSS keys off the
- * `data-hover` attribute this sets. */
+/** One row + its two hover-split insert zones. The two `+`s belong to the
+ * ROW ITSELF — its own top edge and its own bottom edge — not to any detail
+ * (sub-heads, expanded editor) the row renders BELOW it. So the seam geometry
+ * is measured from the first element child (the actual row line, e.g.
+ * `.bp-head-row`) via `--hir-row-h`, and both the zones and the cursor split
+ * are clamped to that height rather than the whole rendered block. The
+ * button's center then lands exactly on the row's upper / lower edge.
+ *
+ * Cursor Y within the row (not the zone — the zone is pointer-events:none
+ * until revealed, so it can't :hover on its own) decides which half is "hot";
+ * CSS keys off the `data-hover` attribute this sets. */
 function HoverInsertRow({ children, disabled, onInsertAbove, onInsertBelow, addLabel }: {
   children: ReactNode;
   disabled: boolean | undefined;
@@ -79,13 +86,36 @@ function HoverInsertRow({ children, disabled, onInsertAbove, onInsertBelow, addL
   addLabel: string;
 }): JSX.Element {
   const [hover, setHover] = useState<"top" | "bottom" | null>(null);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  const [rowH, setRowH] = useState(0);
+  useLayoutEffect(() => {
+    const wrap = wrapRef.current;
+    const row = wrap?.querySelector<HTMLElement>(".hir-line");
+    if (!row) return;
+    const measure = (): void => setRowH(row.offsetHeight);
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(row);
+    return () => ro.disconnect();
+  }, [children]);
   const onMove = (e: React.MouseEvent<HTMLDivElement>): void => {
     if (disabled) return;
     const r = e.currentTarget.getBoundingClientRect();
-    setHover(e.clientY - r.top < r.height / 2 ? "top" : "bottom");
+    const y = e.clientY - r.top;
+    // Only the row line itself is a seam target — ignore hover over the
+    // detail below it (sub-heads / editor).
+    if (rowH > 0 && y > rowH) { setHover(null); return; }
+    setHover(y < rowH / 2 ? "top" : "bottom");
   };
   return (
-    <div className="hir-row" data-hover={hover ?? undefined} onMouseMove={onMove} onMouseLeave={() => setHover(null)}>
+    <div
+      ref={wrapRef}
+      className="hir-row"
+      data-hover={hover ?? undefined}
+      style={rowH ? ({ "--hir-row-h": `${rowH}px` } as React.CSSProperties) : undefined}
+      onMouseMove={onMove}
+      onMouseLeave={() => setHover(null)}
+    >
       {!disabled && (
         <>
           <div className="hir-zone hir-zone-top">

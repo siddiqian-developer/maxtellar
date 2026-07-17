@@ -21,7 +21,7 @@ import { fmtDayTime, fmtDurUnits } from "../time";
 import { DatePicker } from "./DatePicker";
 import { DurInput } from "./BudgetPanel";
 import { StepperField } from "./StepperField";
-import { TaskOptionsSection, RoleField } from "./TaskSpecFields";
+import { TaskOptionsSection, RoleField, deriveTiming } from "./TaskSpecFields";
 import { useEscClose } from "../useEscClose";
 import { useSubheadSuggestion } from "../ml/useSubheadSuggestion";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
@@ -58,16 +58,6 @@ interface FieldSnapshot {
 
 const DEFAULT_BUDGET = 30;
 const MIN_PER_DAY = 1440;
-
-/** The creation table (§3.6), derived live from the day-aware epoch trio. */
-function deriveTiming(start?: number, end?: number, budget?: number): TimingType {
-  if (start !== undefined && (end !== undefined || budget !== undefined)) return "fixed";
-  if (end !== undefined && budget !== undefined) return "fixed";
-  if (start !== undefined) return "semi-head";
-  if (end !== undefined) return "semi-tail";
-  if (budget !== undefined) return "budgeted";
-  return "unscheduled";
-}
 
 interface Adjustment {
   field: string;

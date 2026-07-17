@@ -432,6 +432,53 @@ export function deriveAnchorTrio(
 }
 
 /**
+ * §3.6 the creation table, as a timing TYPE — which type a filled/blank trio
+ * implies. The ONE definition (§7.0.6: one rule, one implementation): the New
+ * Task drawer, the template editor and the Sleep trio all read the SAME table,
+ * so "fill the fields and the type derives itself" behaves identically on every
+ * surface. Coordinate-agnostic — start/end/budget are just "present or not",
+ * whether epoch minutes (drawer) or minutes-into-day (templates/Sleep).
+ */
+export function deriveTiming(start?: number, end?: number, budget?: number): TimingType {
+  if (start !== undefined && (end !== undefined || budget !== undefined)) return "fixed";
+  if (end !== undefined && budget !== undefined) return "fixed";
+  if (start !== undefined) return "semi-head";
+  if (end !== undefined) return "semi-tail";
+  if (budget !== undefined) return "budgeted";
+  return "unscheduled";
+}
+
+/**
+ * §3.6 the 3→1 law with the §7.0.2 snap-at-entry discipline folded in — the
+ * ONE reconcile step every trio surface shares (New Task's `useTaskSpec`, the
+ * template editor, and the Sleep trio, §7.0.5/§7.0.6 symmetry). `deriveAnchorTrio`
+ * fills the third field; this then enforces the sub-floor snap (a too-short span
+ * snaps the END, never floors budget silently) and the budget-IS-the-span
+ * invariant when both anchors are present. Pure — the same edit reconciles the
+ * same way on every surface, so the auto-fill can't drift.
+ */
+export function reconcileTrio(
+  changed: "start" | "end" | "budget",
+  v: { startTod?: number | undefined; endTod?: number | undefined; endDayOffset: EndDayOffset; budget?: number | undefined },
+  minFragment: number = DEFAULT_MIN_FRAGMENT,
+): { startTod: number | undefined; endTod: number | undefined; endDayOffset: EndDayOffset; budget: number | undefined } {
+  let { startTod: s, endTod: e, endDayOffset: off, budget: b } = deriveAnchorTrio(changed, v);
+  if (s !== undefined && e !== undefined) {
+    // §7.0.2: a sub-floor span isn't a real task — snap the END (the start is the
+    // placed anchor), so the fix is visible in the field, not papered over.
+    if ((spanOfAnchors(s, e, off) ?? 0) < minFragment) {
+      const d = splitDay(s + minFragment);
+      e = d.tod; off = d.dayOffset;
+    }
+    // THE invariant: with both anchors set, budget IS the span.
+    b = spanOfAnchors(s, e, off);
+  } else if (b !== undefined) {
+    b = Math.max(minFragment, b);
+  }
+  return { startTod: s, endTod: e, endDayOffset: off, budget: b };
+}
+
+/**
  * §7.0.2 snap-at-entry for picking a DAY: the chosen day is the user's intent
  * and always wins — the TIME snaps to the nearest one that makes it valid there,
  * instead of the day being overridden.
@@ -691,34 +738,22 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
     startTod?: number | undefined; endTod?: number | undefined;
     endDayOffset?: EndDayOffset; budget?: number | undefined;
   }): void => {
-    let { startTod: s, endTod: e, endDayOffset: off, budget: b } = deriveAnchorTrio(changed, {
+    const { startTod: s, endTod: e, endDayOffset: off, budget: b } = reconcileTrio(changed, {
       startTod: "startTod" in patch ? patch.startTod : startTod,
       endTod: "endTod" in patch ? patch.endTod : endTod,
       endDayOffset: patch.endDayOffset ?? endDayOffset,
       budget: "budget" in patch ? patch.budget : budget,
-    });
-
-    if (s !== undefined && e !== undefined) {
-      // §7.0.2 snap-at-entry: a sub-floor span is not a real task. Snap the END
-      // (the start is the anchor the user placed), so the fix is visible in the
-      // field rather than papered over by clamping budget behind their back.
-      if ((spanOfAnchors(s, e, off) ?? 0) < minFragment) {
-        const d = splitDay(s + minFragment);
-        e = d.tod;
-        off = d.dayOffset;
-      }
-      // THE invariant: with both anchors set, budget IS the span. Never floored
-      // independently — that's exactly how "end 9:01, budget 5m" happened.
-      b = spanOfAnchors(s, e, off);
-    } else if (b !== undefined) {
-      // No anchors to reconcile against — the floor applies to the budget itself.
-      b = Math.max(minFragment, b);
-    }
+    }, minFragment);
 
     setStartTod(s);
     setEndTod(e);
     setEndDayOffsetRaw(off);
     setBudget(b);
+    // §6/§3.6: the type is DERIVED live from field presence — the drawer's rule
+    // (it computes `timing` from the trio, never stores it). Editing the fields
+    // must re-derive here too, or the chips lie about what was entered. This is
+    // exactly the bug the template editor had: fields changed, type didn't.
+    setTiming(deriveTiming(s, e, b));
   };
   const changeStart = (tod: number | undefined): void => applyTrio("start", { startTod: tod });
   // §7.0.2: the chosen DAY always wins; the TIME snaps to the nearest value

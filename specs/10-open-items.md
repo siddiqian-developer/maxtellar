@@ -131,8 +131,9 @@ only instances; other `.find(x => x.id === …)` sites resolve real ids in real 
   lost to output filtering. Next occurrence will be capturable: record the printed seed +
   shrunk counterexample verbatim, pin it as a regression test, then fix.
 - **DEFERRED (2026-07-21): the Core Work / Upgrading two-way elastic-pool percentage redesign —
-  spec first, implement next, NOT yet built.** User-specified math (verbatim, for the eventual
-  spec pass): `net = 24 − Σ(all categories EXCEPT Core Work and Upgrading) − Self-Management`;
+  SPEC'D 2026-07-21 (the §11.3 revision + §11.9 deltas are written), awaiting user review of the
+  written rule, then implementation.** User-specified math (verbatim, as spec'd):
+  `net = 24 − Σ(all categories EXCEPT Core Work and Upgrading) − Self-Management`;
   this `net` splits BETWEEN "net Core Work" (`= Core Work − Self-Management`) and Upgrading by a
   user-set percentage pair that must sum to 100 (setting one auto-derives the other); percentage
   TARGETS are additionally allowed for individual heads AND sub-heads within those two

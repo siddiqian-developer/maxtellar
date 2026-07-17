@@ -200,31 +200,56 @@ user-controlled category order:
   (`needs 24h − Σ = X more`). **No buffer, no slack** (user ruling: block until exactly 24h).
 - This is the planning-time analogue of the runtime zero-sum wall (accounted + lost = wall, §2.6).
 
-## 11.3 Subtraction chain & the Core Work %-residual
-Only **Core Work heads** may be entered as a **percentage**; every other head is absolute-hours.
+## 11.3 Subtraction chain & the two elastic pools (REVISED 2026-07-21 — supersedes the
+2026-07-16 one-pool law; grilled with the user, worked example theirs)
+
+**Two categories are elastic — Core Work AND Upgrading.** Every other category is pure
+overhead. Percentages exist at THREE tiers — category pair, head, sub-head — all governed by
+ONE conservation law (below).
+
 ```
-R0        = 24h − Sleep
-R1        = R0 − Σ(all ABSOLUTE non-core head budgets)     // obligations, upkeep, etc.
-netCore   = R1 − Self-Management                            // Self-Management is absolute, no %
-percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Core Work head h
+net             = 24h − Sleep − Σ(all head budgets of every category EXCEPT
+                                  Core Work and Upgrading)  − Self-Management
+netCoreWork     = Core Work's share of net   // "Core Work minus Self-Management"
+upgradingShare  = Upgrading's share of net
+netCoreWork + upgradingShare === net         // conservation, tier 1
 ```
-- **% is literally "% of netCore"** (locked 2026-07-16). Absolute Core Work heads are **not**
-  subtracted before the split; they claim hours from the same netCore envelope. The **hard-fit
-  constraint** is:
-  `Σ(absolute Core head hours) + Σ(pct)/100 × netCore === netCore` — exactly, snap-enforced
-  (same discipline as the 24h wall: the last-edited entry snaps back to the value that restores
-  the fit, notify + highlight). In the pure-% case this degenerates to **Σpct === 100**.
-  With the constraint held, the day balances **by construction** as overhead changes.
-  - Example (netCore = 10h, absolute core Job = 2h): the % heads may only sum to 80% —
-    Deep Work 50% → 5h, Learning 30% → 3h; core total = 2+5+3 = 10h ✓.
-- The **%-value is live-elastic**: hours reflow automatically as overhead (sleep, obligations,
-  Self-Management) changes; **the % text always stays shown** (never replaced/hidden by the hours).
-- A Core Work head *may* still be absolute; % is simply the option only Core Work gets.
-- **A weekly-quota head's daily share behaves as an ABSOLUTE entry in this chain** — non-core
-  shares subtract into R1; a Core Work weekly share claims from netCore like an absolute core
-  head. Redistribution (§5.1) changes a future day's share → netCore reflows → % heads absorb it,
-  so the day re-balances by construction.
-- Self-Management is **never** a percentage (it is overhead, subtracted before the residual).
+
+- **Self-Management is subtracted INTO the overhead** (as before): it is absolute, never a
+  percentage, and **exempt from Core Work's category target** — a 60% Core Work target is 60%
+  *of net*, which already excludes SM; SM's own hours ride on top inside Core Work's roll-up.
+- **Tier 1 — the category pair (optional).** The user may set a **% target on Core Work or
+  Upgrading**; the other **auto-derives** (the pair always sums to 100 — editing one snaps the
+  other, never an error state). With the pair set, each category's envelope is FIXED:
+  `netCoreWork = pctCW/100 × net`, `upgradingShare = (100 − pctCW)/100 × net`. **Worked example
+  (user's own):** 24h − other categories = 11h; SM = 1h ⇒ net = 10h; Core Work target 60% ⇒
+  Upgrading auto-derives 40%; netCoreWork = 60% × 10h = **6h**, Upgrading = **4h**.
+  **With NO pair set**, the two categories jointly fill `net` with no split between them —
+  the constraint is the combined fit (tier-2 rule applied over both categories at once). This
+  degenerates EXACTLY to the old one-pool law when Upgrading has no entries, so existing
+  plans keep meaning.
+- **Tier 2 — heads.** Within Core Work and Upgrading (only), a head may be **percent** —
+  `% of its parent envelope` (the category's fixed envelope when the pair is set; `net`
+  jointly when not). Absolute and weekly-share heads in these two categories claim hours
+  **from the same envelope** (not subtracted before the split). Hard fit per envelope:
+  `Σ(absolute + weekly shares) + Σ(pct)/100 × envelope === envelope` — the old §11.3
+  constraint, now applied per pool.
+- **Tier 3 — sub-heads (NEW).** Under a budgeted head in these two categories, sub-heads may
+  carry **% shares of the head's resolved budget** (absolute minutes also allowed). At SOD,
+  injection draws a task down against **its sub-head's resolved share when one exists**, else
+  against the head's undivided remainder as today.
+- **THE conservation law (all tiers, one sentence):** *the sum of the children must equal the
+  budget of the parent.* A parent **with an explicit target restricts its children** to summing
+  exactly to it (same OVER→snap-the-edited-entry / UNDER→live-indicator discipline as the 24h
+  wall, §11.2); removing the parent's target releases the children (roll-up only). Editing a
+  child so the fit breaks snaps the CHILD back; the alternative — silently growing the parent —
+  is never done (the parent's number is the user's stated intent).
+- **Live-elastic everywhere:** every %-derived hour reflows as overhead changes (Sleep, other
+  categories, SM); **the % text always stays shown** next to its derived hours.
+- **Weekly-quota shares** keep behaving as absolute entries at whatever tier they sit
+  (unchanged from the 2026-07-16 law); §5.1 redistribution reflows the envelopes and the %
+  entries absorb it, so days re-balance by construction.
+- Self-Management is **never** a percentage, at any tier.
 
 ## 11.4 Sleep — the head of the day (revised 2026-07-21: the trio + real injection)
 - Sleep is a first-class head with an **absolute** budget, part of the 24h sum ("sleep is the head
@@ -258,6 +283,26 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   satisfy or interfere with the sweep; only a REAL logged span counts). Switching the trio to
   `fixed` (both anchors set) is supported for the rarer case of an actually-scheduled sleep window,
   and places a real block on the Calendar grid like any other fixed template.
+- **The trio derives exactly like the New Task drawer (§3.6/§6), one shared implementation** (fixed
+  2026-07-21): (1) **any two of start/end/budget auto-derive the third** — entering a 10pm start and
+  a 6am *next-day* end fills the budget to 8h — via the shared `reconcileTrio` helper (the drawer's
+  own 3→1 law + the §7.0.2 sub-floor snap, factored out of `useTaskSpec` so the trio reuses it
+  rather than re-deriving); and (2) **the timing TYPE is derived live from which fields are filled**
+  (`deriveTiming`, the drawer's rule) — typing a start onto a budgeted Sleep promotes it to
+  fixed/semi-head with no chip tap, and the fields are **always enterable** (a "not used" role only
+  dims them, never blocks typing — because typing is how the type is promoted). Both helpers are the
+  SAME functions the drawer and template editor use (§7.0.6: one rule, one implementation); the
+  template editor's own type-derivation was latently broken the same way and is fixed by the same
+  central change. This is what made a fixed **overnight Sleep render on the Calendar** at all — the
+  split-block pipeline (`weekPreview` → RBC) was always correct; the trio just couldn't produce a
+  valid fixed overnight window before.
+- **Collapsible pinned Sleep row (BudgetPanel)**: Sleep opens **collapsed** (rarely re-edited) to one
+  row — a labelled **Budget** value plus a type-aware clock snapshot (fixed → the `start → end`
+  window; semi-head → `from …`; semi-tail → `by …`; budgeted/unscheduled → nothing, the `~` on the
+  budget already says "no fixed clock time"). The **whole row toggles** open/closed (hand cursor,
+  hover wash); expanded, only the header (◆ Sleep + caret) collapses, so the fields stay freely
+  editable. Row content is vertically centered. Settings keeps its own inline caret (the trio owns
+  its collapse there); BudgetPanel drives it as a controlled `open`/`onOpenChange` pair.
 - **Approximate display (`~`) when unanchored**: when the trio's timing isn't `fixed`, BudgetPanel
   and Settings show `~<budget> — no fixed clock time` instead of blank/dashed start-end fields —
   the same "~" convention Timeline.tsx already uses for a floating (non-anchored) edge, applied to
@@ -295,7 +340,9 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   heads must sum **exactly** to that target (same snap discipline as the 24h wall, scoped to the
   Category). Absent an explicit target, no per-Category constraint — **only the grand 24h total is a
   hard gate.**
-- Budgets at HEAD level only for now; sub-head depth is §11.10.
+- ~~Budgets at HEAD level only for now; sub-head depth is §11.10.~~ **Superseded 2026-07-21:**
+  sub-head %-shares exist within Core Work and Upgrading heads (§11.3 tier 3, the conservation
+  law); all other categories remain head-level only.
 
 ## 11.7 Weekly template → daily SOD → overflow spill
 - The weekly plan is a **reusable template**. Each **SOD spins up an independent day** from the
@@ -456,6 +503,14 @@ it's saved, with no extra wiring.
   to Settings.
 - A weekly-plan validity selector: `Σ === 24h` (gate), per-Category explicit-target fits, live
   netCore + %→hours projection. All pure/event-sourced; the 24h + % math belongs in `packages/core`.
+- **Two-pool deltas (spec'd 2026-07-21, §11.3 revision — not yet built):** `WeekPlan` gains
+  `poolSplit?: { coreWorkPct: number }` (Upgrading derives as the complement; absent = joint
+  pool). `HeadBudget.kind: "percent"` becomes legal for **Upgrading** heads too (still never
+  Self-Management). `HeadBudget` gains `subShares?: { activityId: string; pct?: number;
+  minutes?: Dur }[]` (Core Work / Upgrading heads only) — the tier-3 sub-head shares; injection
+  draws a task against its sub-head's resolved share when one exists. `netCore()` /
+  `resolveDay()` / `CoreFit` generalize to per-pool envelopes; the snap helpers
+  (`snapTo24h`/`snapPctToCoreFit`) gain pool- and sub-head-aware variants.
 
 ## 11.9a Analytics (built 2026-07-16)
 The Analytics screen gains a **Budgets** section (only when head budgets exist):
