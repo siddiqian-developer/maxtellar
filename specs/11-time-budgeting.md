@@ -30,8 +30,7 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
   2. **Core Work** — Self-Management* · Strategy and Planning · Research · Project Execution · Job ·
      Sales · Fundraising · Job Search · Marketing · Public Speaking · Investor Hunting · Networking ·
      Other Work #1 · Other Work #2
-  3. **Maintenance** — Food* (→ Kitchen work, §2.9 sub-head exception) · Kitchen work · Cleaning ·
-     Plantcare · Clothes Work · Health
+  3. **Maintenance** — Food* · Kitchen work · Cleaning · Plantcare · Clothes Work · Health
   4. **Regeneration** — Rest · Meditation* · Break · Exercise* · Socialization* · Entertainment
   5. **Upgrading** — Personal Philosophy · Learning* · English Speaking Learning/Practice
   6. **Not Work** — Social Media · Sports · Socialization
@@ -41,10 +40,12 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
   (* = built-in head, §2.10 — undeletable, fixed category, "Food-pattern" plannable: Recharge/
   Self-Management/Food were already built-in; **Meditation, Exercise, Socialization [the
   Regeneration one — Not Work's Socialization is an ordinary, separate head], and Learning joined
-  2026-07-18** with the same Food-pattern treatment, §2.10a.) "Kitchen work" is listed twice above
-  deliberately: it is Food's ONE pre-existing sub-head (§2.9), the single exception to the
-  otherwise-flat Category→Head tree — kept as-is, not flattened, since Food already had it before
-  this re-seed and demoting it would be an unasked change. Names locked 2026-07-16 for the
+  2026-07-18** with the same Food-pattern treatment, §2.10a. **Nap carries NO `*`** — confirmed
+  2026-07-18: Nap is an ORDINARY seeded head, deletable like Rest or Break, demoted from its
+  brief built-in status when Recharge was split.) The tree is **fully flat** — the earlier
+  Kitchen-work-under-Food §2.9 sub-head exception was dropped 2026-07-18 (user: "there are no
+  subheads"); Kitchen work is ONLY a Maintenance head, and NO sub-heads ship in the seed,
+  period. Names locked 2026-07-16 for the
   original four; expanded to seven 2026-07-17, to eight (Lost Time added, Lost Hours moved into
   it from Wasted Time) 2026-07-18. "Time Wasted" was renamed "Wasted Time" 2026-07-17. The full
   seed tree (all built-ins + this list) OVERRIDES any prior seed — re-seeded from scratch
@@ -56,14 +57,17 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
   parent.
 
 ### 11.1b Food-pattern built-in HEADS (§2.10a, added 2026-07-18)
-Sleep/Nap/Self-Management/Food/Meditation/Exercise/Socialization[Regeneration]/Learning share one
+Sleep/Self-Management/Food/Meditation/Exercise/Socialization[Regeneration]/Learning share one
 treatment, distinct from the system built-ins (Wasted Time/Lost Hours/Off-Periods):
 - **Undeletable, fixed category** — same as every built-in.
 - **Plannable** — schedulable like any ordinary head (no config note), unlike the system built-ins.
 - **Each is its OWN head**, not a sub-head of a parent. **"Recharge" no longer exists** (revised
-  2026-07-18): **Sleep** and **Nap** are two distinct built-in heads directly under Recharging —
+  2026-07-18): **Sleep** and **Nap** are two distinct heads directly under Recharging —
   replacing the earlier model where both were sub-heads of one "Recharge" head distinguished by a
-  `sleepKind` field. `sleepKind` is REMOVED from every task/history type; the head id itself now
+  `sleepKind` field. **Nap is NOT in this built-in set** (demoted 2026-07-18, matching the user's
+  `*`-marks): it seeds under Recharging but is ordinary/deletable; it stays a shipped preset, and
+  the History editor's Sleep/Nap kind quick-tag offers "Nap" only while the head exists in the
+  registry. `sleepKind` is REMOVED from every task/history type; the head id itself now
   carries what it used to (`headId === SLEEP_ID` is what the §4.2 SOD precondition counts). No
   built-in ships with a seeded sub-head (2026-07-18) — sub-heads exist in the schema but are
   added later, by the user, never in the shipped seed (this includes Food, which no longer ships
@@ -77,6 +81,9 @@ registry head can be added as a preset, any preset can be removed, and the list 
 - **Shipped presets, in this order:** Exercise, Food, Learning, Nap, Meditation, Sleep.
   **Socialization is explicitly NOT a preset** (removed 2026-07-18) — it stays a plain built-in
   head, just with no preset/quick-add treatment.
+- **Deleting a head prunes its presets** (2026-07-18): removing a head from the registry also
+  removes every preset pointing at it — a preset never dangles on a nonexistent head. (This is
+  how the shipped Nap preset dies if the user deletes the now-ordinary Nap head.)
 - **Each preset row:** `{ headId, label, titleLocked, timing, budgetFlat, budgetSource,
   startFlat, endFlat, anchorSource }`. `timing` is the preset's own TimingType — tapping the pill
   sets the drawer/editor to that timing AND fills whichever field(s) §2.5's FIELD_ROLES matrix

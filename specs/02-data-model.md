@@ -189,10 +189,13 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
   6-hour Nap are both legal.
 - Wearable provision: sleep/wake from a pluggable source (`manual` | `wearable`); detected
   sleep only ever *proposes* (never auto-commits).
-- **Sleep and Nap are their own built-in HEADS** (revised 2026-07-18) — not sub-heads of a
-  shared "Recharge" head. "Recharge" no longer exists; there is no `sleepKind` field anywhere in
+- **Sleep and Nap are their own HEADS** (revised 2026-07-18) — not sub-heads of a shared
+  "Recharge" head. "Recharge" no longer exists; there is no `sleepKind` field anywhere in
   the task/history types. `headId === SLEEP_ID` is what the §4.2 SOD precondition (and every
-  other "was this Sleep?" check) tests — the head IS the explicit type.
+  other "was this Sleep?" check) tests — the head IS the explicit type. **Sleep is built-in;
+  Nap is an ORDINARY deletable seeded head** (demoted 2026-07-18, per the user's `*`-marks —
+  §11.1): Nap surfaces (its preset, the History editor's Nap quick-tag) exist only while the
+  head exists in the registry.
 - **Preset pills (task drawer, §2.10b).** Sleep, Nap, Food, and any other preset are entered from
   a **preset pill row** directly under the timing-type chips — not a free-form flag. A pill
   pre-fills a bundle of fields per the preset's own config (`settings.presetsConfig`, §11.1c):
@@ -216,8 +219,9 @@ into two kinds by whether the user may *plan* a task under them:
 
 **Plannable built-ins** (schedulable like any head; **no** "system" note in the config):
 - **Self-Management** — ceremonies, planning, in-app edit time.
-- **Sleep**, **Nap** — sleep and rest, each its own head (§2.9; revised 2026-07-18 — no longer
-  sub-heads of a shared "Recharge" head).
+- **Sleep** — main, day-defining sleep, its own head (§2.9; revised 2026-07-18 — no longer a
+  sub-head of a shared "Recharge" head. **Nap is NOT built-in**: it seeds under Recharging as
+  an ordinary deletable head, demoted 2026-07-18).
 - **Food** — eating.
 - **Meditation**, **Exercise**, **Socialization** [the Regeneration one — Not Work's
   Socialization is a separate, ordinary head], **Learning** — joined the built-in set 2026-07-18
@@ -243,7 +247,7 @@ into two kinds by whether the user may *plan* a task under them:
 
 (**Lost ≠ Wasted:** Lost = unlogged gutter; Wasted = user-declared waste.)
 
-**Pattern — inevitable-necessity heads (binding for the future).** Sleep, Nap, Food and their
+**Pattern — inevitable-necessity heads (binding for the future).** Sleep, Food and their
 kin are **built-in, undeletable, AND plannable** — not optional, not left to user discretion,
 because no productive routine exists without them. When a future category is a biological/
 structural inevitability of a day (not a preference), it joins this class rather than being a

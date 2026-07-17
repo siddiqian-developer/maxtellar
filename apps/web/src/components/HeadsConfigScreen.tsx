@@ -15,6 +15,7 @@ import { useEffect, useState } from "react";
 import type { Event, State } from "@maxtellar/core";
 import { headName } from "@maxtellar/core";
 import { useHeads, BUILT_IN_HEADS, BUILT_IN_HEAD_NOTES, isBuiltInActivity } from "../heads";
+import { useSettings } from "../settings";
 import { headLabel, headLabels } from "../headDisplay";
 import { useEscClose } from "../useEscClose";
 import { rehomeActivity } from "../ml/vectorStore";
@@ -226,6 +227,14 @@ function CategorySection({
 
 export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Element {
   const { registry, heads, categories, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, moveHead, addCategory, reorderCategories } = useHeads();
+  const { presetsConfig, setPresetsConfig } = useSettings();
+
+  // Deleting a head also removes any presets pointing at it (§11.1c) — a
+  // preset must never dangle on a head that no longer exists in the registry.
+  const removeHead = (headId: string): void => {
+    deleteHead(headId);
+    setPresetsConfig(presetsConfig.filter((p) => p.headId !== headId));
+  };
   const [newHead, setNewHead] = useState("");
   const [activityHead, setActivityHead] = useState("");
   const [newActivity, setNewActivity] = useState("");
@@ -328,7 +337,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
       setReassign({ headId, activityId: null });
       setReassignValue("");
     } else {
-      deleteHead(headId);
+      removeHead(headId);
     }
   };
 
@@ -373,7 +382,7 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
         });
         rehomeActivity(fromActivityId, targetActivity); // move the training too
       }
-      deleteHead(reassign.headId);
+      removeHead(reassign.headId);
     }
     setReassign(null);
   };

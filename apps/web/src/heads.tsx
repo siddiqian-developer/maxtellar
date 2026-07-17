@@ -15,7 +15,6 @@ import { createContext, useContext, useEffect, useState } from "react";
 import {
   SELF_MANAGEMENT,
   SLEEP,
-  NAP,
   FOOD,
   WASTED_TIME,
   LOST_HOURS,
@@ -56,16 +55,17 @@ import { forgetActivity } from "./ml/vectorStore";
 export type HeadsRegistry = Record<string, string[]>;
 
 /** §2.10 plannable built-ins — schedulable like any head, no config note.
- * Sleep/Nap/Food are "inevitable-necessity" heads: undeletable AND plannable
- * (Sleep/Nap became distinct built-in HEADS 2026-07-18, replacing the earlier
- * "Recharge" head + sleepKind sub-distinction — see core `types.ts`).
+ * Sleep/Food are "inevitable-necessity" heads: undeletable AND plannable
+ * (Sleep/Nap became distinct HEADS 2026-07-18, replacing the earlier
+ * "Recharge" head + sleepKind sub-distinction — see core `types.ts`;
+ * Nap itself was then demoted to an ORDINARY deletable seeded head,
+ * user decision 2026-07-18 — only Sleep carries the built-in mark).
  * Meditation/Exercise/Socialization/Learning joined 2026-07-18 with the same
  * treatment (Food-pattern parity — see §11.1b for the preset+quick-add layer
- * specific to these plus Sleep/Nap/Food). */
+ * specific to these plus Sleep/Food). */
 export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [
   SELF_MANAGEMENT_ID,
   SLEEP_ID,
-  NAP_ID,
   FOOD_ID,
   MEDITATION_ID,
   EXERCISE_ID,
@@ -91,7 +91,6 @@ export const BUILT_IN_CATEGORIES: readonly string[] = CATEGORIES;
 const RESERVED_IN_CATEGORY: Readonly<Record<string, string>> = {
   [SELF_MANAGEMENT]: CORE_WORK,
   [SLEEP]: RECHARGING,
-  [NAP]: RECHARGING,
   [FOOD]: MAINTENANCE,
   [WASTED_TIME]: TIME_WASTED,
   [LOST_HOURS]: LOST_TIME,
@@ -123,8 +122,8 @@ export function isBuiltInActivity(_headId: string, _activity: string): boolean {
  * at all (confirmed by the user: every line under a category is a head, full
  * stop; sub-heads exist in the schema but are added later, by the user, never
  * seeded). Built-ins marked `*` in the source list are the PATH constants
- * (Sleep, Nap, Self-Management, Food, Meditation, Exercise, Socialization
- * [Regeneration], Learning). Off-Periods/Wasted Time/Lost Hours are system
+ * (Sleep, Self-Management, Food, Meditation, Exercise, Socialization
+ * [Regeneration], Learning — Nap seeds but is ordinary/deletable). Off-Periods/Wasted Time/Lost Hours are system
  * built-ins with no `*` in the user's list (pre-existing, §4.5/§2.6
  * accounting heads). Registry object key order IS the display order within
  * a category. */

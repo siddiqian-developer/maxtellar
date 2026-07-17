@@ -49,7 +49,7 @@ const OUTCOME_LABEL: Record<HistoryOutcome, string> = {
 export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClose }: Props): JSX.Element {
   const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
-  const { addActivity } = useHeads();
+  const { addActivity, heads } = useHeads();
 
   const isNew = entry === null;
   // A fresh draft spans the last half hour up to now (both legal past).
@@ -141,8 +141,8 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
   };
 
   // A Sleep/Nap quick-tag sets the head+activity directly (§2.9/§11.1b —
-  // Sleep/Nap are their own built-in heads, not a separate tag since
-  // 2026-07-18).
+  // Sleep/Nap are their own heads, not a separate tag since 2026-07-18;
+  // Sleep is built-in, Nap ordinary/deletable).
   const kindOfHead = (h: string | undefined): "none" | "sleep" | "nap" =>
     h === SLEEP_ID ? "sleep" : h === NAP_ID ? "nap" : "none";
   const chooseKind = (k: "none" | "sleep" | "nap"): void => {
@@ -282,7 +282,9 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
           <div className="field">
             <label>Kind</label>
             <div className="type-chips" role="radiogroup" aria-label="Sleep kind">
-              {(["none", "sleep", "nap"] as const).map((k) => (
+              {/* Nap is an ordinary deletable head (2026-07-18) — its quick-tag
+                  only renders while the head actually exists in the registry. */}
+              {(["none", "sleep", ...(heads.includes(NAP_ID) ? (["nap"] as const) : [])] as const).map((k) => (
                 <button
                   key={k}
                   type="button"
