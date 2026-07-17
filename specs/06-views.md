@@ -507,4 +507,10 @@ auto-commits the highlighted option over it. Implementation: `fuzzy.ts`
 machine and ARIA, in `components/FuzzyDropdown.tsx`. The last two behaviors above are
 downshift defaults *inverted* in its `stateReducer` — the law wins over the library (§7.0.4).
 
+**Dropdown option labels — Capital Case, everywhere (2026-07-18).** Every `<option>` in every
+dropdown (native `<select>` or otherwise) renders its label in **Capital Case** ("Budgeted",
+"Semi-Head", "Week Plan") — never the raw lowercase id. The underlying VALUE stays untouched
+(ids keep round-tripping); only the display label passes through `capitalCase` (`text.ts`).
+This is a global UI law for all current and future dropdowns.
+
 ---

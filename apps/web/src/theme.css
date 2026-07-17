@@ -834,31 +834,82 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .card .badge[data-timing="semi-head"], .card .badge[data-timing="semi-tail"] { background: var(--st-semi); border-color: var(--st-semi); }
 .type-chip.active[data-status="fixed"], .card .badge[data-timing="fixed"] { background: var(--st-fixed); border-color: var(--st-fixed); }
 
-/* §2.10b Settings → Presets — a compact table (2026-07-18), replacing the
-   old per-preset pill rows. One dense row per preset: head name, timing
-   select, the value(s) that timing needs (budget, or start/end), a source
-   select, reorder arrows, remove. */
+/* §2.10b / §11.1c Presets — the full-screen config table (PresetsScreen) and
+   the compact reorderable summary list in Settings. Everything LEFT-aligned:
+   headings, cells, and select text alike. Dropdown options render Capital
+   Case (§6 law, `capitalCase`). */
 .preset-table { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
 .preset-table-head, .preset-table-row {
   display: grid;
-  grid-template-columns: 1fr 90px 90px 90px auto;
-  gap: 6px;
+  grid-template-columns: minmax(120px, 1fr) 130px minmax(250px, 1.4fr) 120px auto;
+  gap: 10px;
   align-items: center;
+  justify-items: start; /* every column left-aligned */
 }
+/* The Value cell may hold TWO smart time fields (a fixed preset's start–end):
+   cap each so the pair stays inside its own column. */
+.preset-row-value .time-stepper { width: 118px; }
+.preset-row-value .time-stepper input { width: 100%; min-width: 0; }
 .preset-table-head {
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 0.06em;
   color: var(--ink-faint);
   padding: 0 2px 2px;
+  text-align: left;
 }
-.preset-table-row { padding: 3px 0; border-bottom: 1px solid var(--hairline); }
-.preset-table-row select { font-size: 12px; padding: 2px 4px; }
-.preset-row-name { font-size: 12px; font-weight: 600; }
-.preset-row-anchor { font-size: 12px; }
-.preset-row-actions { display: flex; gap: 2px; align-items: center; justify-content: flex-end; }
-.preset-row-actions button { font-size: 11px; padding: 1px 4px; }
-.preset-add-row { border-bottom: none; grid-template-columns: 1fr auto; }
+.preset-table-row { padding: 4px 0; border-bottom: 1px solid var(--hairline); background: var(--paper); }
+.preset-table-row select {
+  font-size: 12px;
+  padding: 2px 4px;
+  width: 100%;
+  text-align: left;
+  text-align-last: left; /* the select's CLOSED face too, not just the list */
+}
+.preset-row-name { font-size: 12px; font-weight: 600; display: inline-flex; align-items: center; gap: 6px; }
+.preset-row-value { display: inline-flex; gap: 6px; align-items: center; }
+.preset-row-empty { color: var(--ink-faint); }
+.preset-row-actions { display: flex; gap: 2px; align-items: center; justify-self: end; }
+.preset-row-actions button { font-size: 12px; padding: 1px 4px; }
+/* Reorder arrows: pure CSS border-triangles — pixel-identical mirrored pair,
+   immune to font/emoji glyph asymmetry (the user's ▲/▼ complaint). */
+.preset-arrow { width: 18px; height: 16px; display: inline-flex; align-items: center; justify-content: center; padding: 0; }
+.preset-arrow::after { content: ""; display: block; width: 0; height: 0; border-left: 4px solid transparent; border-right: 4px solid transparent; }
+.preset-arrow.up::after { border-bottom: 6px solid currentColor; }
+.preset-arrow.down::after { border-top: 6px solid currentColor; }
+.preset-add-row { border-bottom: none; grid-template-columns: minmax(220px, 340px); }
+
+/* ⊕ add — bottom-left of the table (§11.1c): click = a pending row appears
+   with the head picker focused; leaving it unfilled discards with a toast. */
+.preset-add-circle {
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  border: 1px solid var(--ink-soft);
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  margin-top: 6px;
+  align-self: flex-start; /* bottom-left, after the last row */
+}
+.preset-add-circle:hover { color: var(--accent-strong); border-color: var(--accent-strong); }
+
+/* Settings' compact summary list — name + one-line summary + reorder only. */
+.preset-summary-list { display: flex; flex-direction: column; margin-top: 6px; }
+.preset-summary-row {
+  display: grid;
+  grid-template-columns: auto minmax(90px, auto) 1fr auto;
+  gap: 8px;
+  align-items: center;
+  padding: 3px 0;
+  border-bottom: 1px solid var(--hairline);
+  background: var(--paper);
+}
+.preset-summary { font-size: 11px; color: var(--ink-soft); text-align: left; }
 
 /* §7.0.5/§7.0.6 — the stepper IS the input field, not a field plus loose
  * chevrons beside it (ruled 2026-07-17). The SHELL carries the field's border,

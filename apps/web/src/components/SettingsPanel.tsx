@@ -5,19 +5,20 @@
  * as more settings are added rather than scattering per-component toggles.
  */
 
-import { useState } from "react";
-import type { Event, TimingType } from "@maxtellar/core";
+import type { Event } from "@maxtellar/core";
 import { headName } from "@maxtellar/core";
 import { useSettings } from "../settings";
-import { useHeads } from "../heads";
-import { headLabels } from "../headDisplay";
-import { blankPresetFor, type PresetConfig, type BudgetSource, type AnchorSource } from "../presets";
+import { type PresetConfig } from "../presets";
 import { FIELD_ROLES } from "./TaskSpecFields";
 import { useEscClose } from "../useEscClose";
 import { countStartWeekday } from "../workingDays";
+import { capitalCase } from "../text";
+import { fmtTod, fmtDurUnits } from "../time";
 import { DurInput } from "./BudgetPanel";
-import { FuzzyDropdown } from "./FuzzyDropdown";
 import { BUILTIN_SOUNDS, playAlarm } from "../sound";
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface Props {
   minFragment: number;
@@ -34,37 +35,71 @@ interface Props {
   onDone: () => void;
   onOpenHeadsConfig: () => void;
   onOpenAiStudio: () => void;
+  /** §11.1c: opens the full Presets configuration screen. */
+  onOpenPresets: () => void;
 }
 
-const PRESET_TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
-const BUDGET_SOURCES: BudgetSource[] = ["flat", "weekPlan", "settings"];
-const ANCHOR_SOURCES: AnchorSource[] = ["flat", "weekPlan"];
-const SOURCE_LABEL: Record<string, string> = { flat: "fixed", weekPlan: "week plan", settings: "settings" };
+/** One-line summary of a preset's value for the Settings compact list (§11.1c
+ * — full editing lives on the Presets SCREEN; here: summary + reorder only). */
+function presetSummary(p: PresetConfig, hour12: boolean): string {
+  const roles = FIELD_ROLES[p.timing];
+  const src = capitalCase(p.timing === "budgeted" ? p.budgetSource : p.anchorSource);
+  const tod = (m: number): string => fmtTod(m, hour12);
+  if (roles.start !== "not used" || roles.end !== "not used") {
+    const times = [
+      roles.start !== "not used" ? tod(p.startFlat) : null,
+      roles.end !== "not used" ? tod(p.endFlat) : null,
+    ].filter(Boolean).join("–");
+    return `${capitalCase(p.timing)} · ${times} · ${src}`;
+  }
+  if (roles.budget !== "not used") return `${capitalCase(p.timing)} · ${fmtDurUnits(p.budgetFlat)} · ${src}`;
+  return capitalCase(p.timing);
+}
 
-export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, offDays, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio }: Props): JSX.Element {
+/** Compact reorderable summary row (drag ⋮⋮ + ▴/▾) — ordering is fully
+ * available right in Settings; everything ELSE about a preset is edited on
+ * the Presets screen. */
+function SortableSummaryRow({ p, index, count, hour12, onMove }: {
+  p: PresetConfig;
+  index: number;
+  count: number;
+  hour12: boolean;
+  onMove: (id: string, dir: -1 | 1) => void;
+}): JSX.Element {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: p.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, ...(isDragging ? { zIndex: 5, opacity: 0.7 } : {}) };
+  return (
+    <div ref={setNodeRef} style={style} className="preset-summary-row">
+      <span className="bp-drag" data-tip="Drag to reorder" {...listeners} {...attributes}>⋮⋮</span>
+      <span className="preset-row-name">{headName(p.headId)}</span>
+      <span className="preset-summary">{presetSummary(p, hour12)}</span>
+      <span className="preset-row-actions">
+        <button type="button" className="link-btn preset-arrow up" disabled={index === 0} aria-label={`Move ${p.label} up`} onClick={() => onMove(p.id, -1)} />
+        <button type="button" className="link-btn preset-arrow down" disabled={index === count - 1} aria-label={`Move ${p.label} down`} onClick={() => onMove(p.id, 1)} />
+      </span>
+    </div>
+  );
+}
+
+export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, offDays, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio, onOpenPresets }: Props): JSX.Element {
   const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetsConfig, setPresetsConfig, mlMode, setMlMode, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound } = useSettings();
-  const { heads } = useHeads();
-  const [newPresetHead, setNewPresetHead] = useState("");
 
-  const updatePreset = (id: string, patch: Partial<PresetConfig>): void =>
-    setPresetsConfig(presetsConfig.map((p) => (p.id === id ? { ...p, ...patch } : p)));
-  const removePreset = (id: string): void =>
-    setPresetsConfig(presetsConfig.filter((p) => p.id !== id));
+  // §11.1c: ordering is fully available HERE (drag + ▴▾); all other preset
+  // editing lives on the Presets screen (onOpenPresets).
   const movePreset = (id: string, dir: -1 | 1): void => {
     const i = presetsConfig.findIndex((p) => p.id === id);
     const j = i + dir;
     if (i < 0 || j < 0 || j >= presetsConfig.length) return;
-    const list = [...presetsConfig];
-    const [it] = list.splice(i, 1);
-    list.splice(j, 0, it!);
-    setPresetsConfig(list);
+    setPresetsConfig(arrayMove(presetsConfig, i, j));
   };
-  const addPreset = (): void => {
-    if (!newPresetHead || presetsConfig.some((p) => p.headId === newPresetHead)) return;
-    setPresetsConfig([...presetsConfig, blankPresetFor(newPresetHead)]);
-    setNewPresetHead("");
+  const presetDndSensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 4 } }));
+  const onPresetDndEnd = (e: DragEndEvent): void => {
+    const { active, over } = e;
+    if (!over || active.id === over.id) return;
+    const from = presetsConfig.findIndex((p) => p.id === String(active.id));
+    const to = presetsConfig.findIndex((p) => p.id === String(over.id));
+    if (from >= 0 && to >= 0) setPresetsConfig(arrayMove(presetsConfig, from, to));
   };
-  const availableHeads = heads.filter((h) => !presetsConfig.some((p) => p.headId === h));
 
   const enableAlarms = (on: boolean): void => {
     setAlarmsEnabled(on);
@@ -262,91 +297,19 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
             />
           </div>
           <div className="field">
-            <label data-tip="Each preset pre-fills a locked bundle in the task drawer — timing type, and the value(s) that timing needs, from a fixed number, today's week-plan line, or (Sleep) Settings' sleep budget. Always overridable per task (§2.9/§2.10b).">
+            <label data-tip="Each preset pre-fills a locked bundle in the task drawer — timing type, and the value that timing needs, from a fixed number, today's week-plan line, or (Sleep) Settings' sleep budget. Reorder here (drag or ▴▾); everything else is edited on the Presets screen.">
               Presets
             </label>
-            <div className="preset-table">
-              <div className="preset-table-head">
-                <span>Head</span>
-                <span>Timing</span>
-                <span>Value</span>
-                <span>Source</span>
-                <span />
-              </div>
-              {presetsConfig.map((p, i) => {
-                const roles = FIELD_ROLES[p.timing];
-                return (
-                  <div className="preset-table-row" key={p.id}>
-                    <span className="preset-row-name">{headName(p.headId)}</span>
-                    <select
-                      aria-label={`${p.label} timing`}
-                      value={p.timing}
-                      onChange={(e) => updatePreset(p.id, { timing: e.target.value as TimingType })}
-                    >
-                      {PRESET_TIMINGS.map((t) => <option key={t} value={t}>{t}</option>)}
-                    </select>
-                    {roles.budget !== "not used" && (
-                      <>
-                        <DurInput
-                          ariaLabel={`${p.label} budget`}
-                          value={p.budgetFlat}
-                          disabled={p.budgetSource !== "flat"}
-                          onCommit={(m) => { if (m !== null) updatePreset(p.id, { budgetFlat: m }); }}
-                        />
-                        <select
-                          aria-label={`${p.label} budget source`}
-                          value={p.budgetSource}
-                          onChange={(e) => updatePreset(p.id, { budgetSource: e.target.value as BudgetSource })}
-                        >
-                          {BUDGET_SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
-                        </select>
-                      </>
-                    )}
-                    {roles.budget === "not used" && (roles.start !== "not used" || roles.end !== "not used") && (
-                      <>
-                        <span className="preset-row-anchor num">
-                          {roles.start !== "not used" && Math.floor(p.startFlat / 60).toString().padStart(2, "0") + ":" + (p.startFlat % 60).toString().padStart(2, "0")}
-                          {roles.start !== "not used" && roles.end !== "not used" && " – "}
-                          {roles.end !== "not used" && Math.floor(p.endFlat / 60).toString().padStart(2, "0") + ":" + (p.endFlat % 60).toString().padStart(2, "0")}
-                        </span>
-                        <select
-                          aria-label={`${p.label} time source`}
-                          value={p.anchorSource}
-                          onChange={(e) => updatePreset(p.id, { anchorSource: e.target.value as AnchorSource })}
-                        >
-                          {ANCHOR_SOURCES.map((s) => <option key={s} value={s}>{SOURCE_LABEL[s]}</option>)}
-                        </select>
-                      </>
-                    )}
-                    {roles.budget === "not used" && roles.start === "not used" && roles.end === "not used" && (
-                      <>
-                        <span />
-                        <span />
-                      </>
-                    )}
-                    <span className="preset-row-actions">
-                      <button type="button" className="link-btn" disabled={i === 0} aria-label={`Move ${p.label} up`} onClick={() => movePreset(p.id, -1)}>▲</button>
-                      <button type="button" className="link-btn" disabled={i === presetsConfig.length - 1} aria-label={`Move ${p.label} down`} onClick={() => movePreset(p.id, 1)}>▼</button>
-                      <button type="button" className="chip-delete" aria-label={`Remove ${p.label} preset`} onClick={() => removePreset(p.id)}>&times;</button>
-                    </span>
-                  </div>
-                );
-              })}
-              <div className="preset-table-row preset-add-row">
-                <FuzzyDropdown
-                  value={newPresetHead}
-                  onChange={setNewPresetHead}
-                  options={availableHeads}
-                  labels={headLabels(availableHeads)}
-                  placeholder="Pick a head to add as a preset"
-                  clearable
-                  ariaLabel="New preset head"
-                />
-                <button type="button" className="primary" disabled={!newPresetHead} onClick={addPreset} style={{ gridColumn: "span 4" }}>
-                  + Add preset
-                </button>
-              </div>
-            </div>
+            <DndContext sensors={presetDndSensors} collisionDetection={closestCenter} onDragEnd={onPresetDndEnd}>
+              <SortableContext items={presetsConfig.map((p) => p.id)} strategy={verticalListSortingStrategy}>
+                <div className="preset-summary-list">
+                  {presetsConfig.map((p, i) => (
+                    <SortableSummaryRow key={p.id} p={p} index={i} count={presetsConfig.length} hour12={timeFormat === "12h"} onMove={movePreset} />
+                  ))}
+                </div>
+              </SortableContext>
+            </DndContext>
+            <button onClick={onOpenPresets} style={{ marginTop: 8 }}>Manage presets →</button>
           </div>
           <div className="field">
             <label data-tip="§5.2 default pomodoro preset — the intervals a task starts with when you check 'Start as pomodoro'. Work/break are overridable per task at Start.">

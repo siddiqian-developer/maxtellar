@@ -9,6 +9,7 @@ import { DevClock } from "./components/DevClock";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { countStartWeekday } from "./workingDays";
 import { HeadsConfigScreen } from "./components/HeadsConfigScreen";
+import { PresetsScreen } from "./components/PresetsScreen";
 import { AiStudioScreen } from "./components/AiStudioScreen";
 import { HistoryScreen } from "./components/HistoryScreen";
 import { AnalyticsScreen } from "./components/AnalyticsScreen";
@@ -30,7 +31,7 @@ import type { PresetConfig } from "./presets";
 import type { CustomSound, SoundChoice } from "./sound";
 
 type Theme = "light" | "dark" | "system";
-type View = "main" | "headsConfig" | "history" | "analytics" | "aiStudio" | "week" | "calendar";
+type View = "main" | "headsConfig" | "history" | "analytics" | "aiStudio" | "week" | "calendar" | "presetsConfig";
 
 /** Splash screen (SPEC VI): serif wordmark + the now-seam motif (hairline with
  * a sweeping accent dot) + tagline. Held for a minimum of 3s from first paint
@@ -447,6 +448,8 @@ export function App(): JSX.Element {
         <AiStudioScreen onBack={() => { setView("main"); setSettingsOpen(true); }} />
       ) : view === "headsConfig" ? (
         <HeadsConfigScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => { setView("main"); setSettingsOpen(true); }} />
+      ) : view === "presetsConfig" ? (
+        <PresetsScreen onBack={() => { setView("main"); setSettingsOpen(true); }} />
       ) : view === "history" ? (
         <HistoryScreen state={state} dispatch={(e) => void dispatch(e)} onBack={() => setView("main")} />
       ) : view === "analytics" ? (
@@ -530,6 +533,7 @@ export function App(): JSX.Element {
           onDone={commitSettings}
           onOpenHeadsConfig={() => { setSettingsOpen(false); setView("headsConfig"); }}
           onOpenAiStudio={() => { setSettingsOpen(false); setView("aiStudio"); }}
+          onOpenPresets={() => { setSettingsOpen(false); setView("presetsConfig"); }}
         />
       )}
       {pomoDue && pomoDismissedAt !== state.running!.pomodoro!.phaseStartedAt && (

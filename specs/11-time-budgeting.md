@@ -94,13 +94,26 @@ registry head can be added as a preset, any preset can be removed, and the list 
 - **Shipped defaults:** Exercise = budgeted, budget from week-plan. Food = unscheduled. Learning =
   fixed, start/end from week-plan (a matching template's anchors). Nap = unscheduled. Meditation =
   unscheduled. Sleep = budgeted, budget from Settings' `sleepMinutes`.
-- **Settings UI:** a compact TABLE (2026-07-18, replaces the old per-preset pill-button rows) —
-  one row per preset: head name, a timing `<select>`, the value control(s) that timing's
-  FIELD_ROLES require (a duration/time input + a source `<select>`), reorder ▲▼, and a ×. A
-  trailing row picks any not-yet-preset head and appends it ("+ Add preset").
+- **Config UI is split in two (revised 2026-07-18 — the drawer is too narrow for a table):**
+  1. **Settings window** shows a COMPACT read-only summary list — one line per preset (head
+     name + "Timing · value · source" summary) — **with reordering fully available right
+     there** (drag ⋮⋮ AND ▴/▾ — the arrows use symmetrical glyphs, never one emoji-rendered),
+     plus a "Manage presets →" button.
+  2. A dedicated full-width **Presets SCREEN** (same chrome as Heads & Sub-heads; Esc = back to
+     Settings, §back-navigation) holds the full editable TABLE — one row per preset: head (with
+     drag grip), a **"Timing Type"** `<select>`, the **Value** cell that timing's §2.5
+     FIELD_ROLES require (budgeted → a budget duration; fixed → start–end smart TodFields;
+     semi-head/semi-tail → the one anchor; unscheduled → "—"), a **Source** `<select>`
+     (Flat / Week Plan / Settings), reorder (drag + ▴▾), and ×. **All columns and headings are
+     LEFT-aligned** (including the select's closed face). Flat-source anchor times are editable
+     smart time inputs (§7.0.2 parity); sourced ones render disabled.
+  - **Add = the ⊕ circle at the bottom-left** of the table (after the last row): clicking it
+    appends a pending row with the head picker focused; picking a valid head commits the
+    preset at once; leaving the row without one DISCARDS it with a snap-toast notification —
+    a half-filled preset never lands in the list.
 - **Every OTHER surface keeps the pill row** (`PresetPills` in `TaskSpecFields.tsx`) — New Task
-  drawer, the week-plan template editor, the dated-task editor, Gap-Fill's quick-fill row. Only
-  the Settings CONFIGURATION screen uses the table; pickers stay pills.
+  drawer, the week-plan template editor, the dated-task editor, Gap-Fill's quick-fill row.
+  Pickers stay pills; only CONFIGURATION uses the table.
 - **Path identity is TASK-LEVEL (decided 2026-07-17):** a task's `headId` IS the path
   `(category, head)`, encoded as one string (`category ␟ name`, an untypeable separator), so two
   same-named heads under different Categories are genuinely distinct everywhere — reducer,
