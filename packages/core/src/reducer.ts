@@ -27,9 +27,9 @@ import type {
   WeekPlan,
   WeekTemplate,
 } from "./types.js";
-import { emptyChannels, SELF_MANAGEMENT } from "./types.js";
+import { emptyChannels, SELF_MANAGEMENT, SLEEP } from "./types.js";
 import { headName } from "./headPath.js";
-import { CORE_WORK, LOST_HOURS_ID, OFF_PERIOD_ID, weekBudgetValidity } from "./budget.js";
+import { CORE_WORK, LOST_HOURS_ID, OFF_PERIOD_ID, RECHARGING, SLEEP_ID, SLEEP_TEMPLATE_ID, sleepTemplate, sleepBudgetEntry, weekBudgetValidity } from "./budget.js";
 import { deadLeftovers, sodPrecondition, unaccountedGaps } from "./ceremony.js";
 import { canPlanWeek, injectTodayDetailed, quotaAdjustmentsAtSod, quotaTrimsAtPruning } from "./week.js";
 import { settle } from "./settle.js";
@@ -63,9 +63,13 @@ export function initialState(now: Min, minFragment: Dur = DEFAULT_MIN_FRAGMENT):
       startedAt: null,
       firstWeekday: null,
       offDays: [0],
-      templates: [],
+      // §11.4 (revised 2026-07-21): Sleep is always present as a real,
+      // undeletable template + budget entry — see `sleepTemplate`/
+      // `sleepBudgetEntry` in budget.ts for why (real injection capacity,
+      // not a synthetic accounting-only line).
+      templates: [sleepTemplate({ budget: DEFAULT_SLEEP_MINUTES })],
       sleepMinutes: DEFAULT_SLEEP_MINUTES,
-      budgets: [],
+      budgets: [sleepBudgetEntry(DEFAULT_SLEEP_MINUTES)],
       categoryTargets: {},
       quotaAdjust: [],
     },
@@ -1172,7 +1176,16 @@ export function reduce(state: State, event: Event): State {
           ...(t.anchorEndTod !== undefined ? { anchorEndTod: t.anchorEndTod } : {}),
         };
       });
-      return { ...s, week: { ...s.week, templates } };
+      // §11.4 (revised 2026-07-21): the Sleep template is undeletable — SET_WEEK_PLAN
+      // replaces the WHOLE array, so a caller that simply forgot to carry it
+      // forward (or a delete UI that never should've let it through) would
+      // otherwise silently drop it. Re-inject the STATE's own copy (never
+      // reconstructed from scratch — an edit to its anchors/timing/budget
+      // survives) if it's missing from the incoming set.
+      const hasSleep = templates.some((t) => t.id === SLEEP_TEMPLATE_ID);
+      const prevSleep = s.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID);
+      const withSleep = hasSleep || !prevSleep ? templates : [...templates, prevSleep];
+      return { ...s, week: { ...s.week, templates: withSleep } };
     }
 
     case "SET_DATED": {
@@ -1279,14 +1292,47 @@ export function reduce(state: State, event: Event): State {
       const categoryTargets = Object.fromEntries(
         Object.entries(event.categoryTargets ?? state.week.categoryTargets).map(([k, v]) => [k, clampMin(v)]),
       );
-      return { ...state, week: { ...state.week, budgets, categoryTargets } };
+      // §11.4 (revised 2026-07-21): same "always present" guard as
+      // SET_WEEK_PLAN's Sleep template — SET_BUDGETS also replaces the WHOLE
+      // array, so a caller building its own list from scratch (never a real
+      // risk from BudgetPanel, which always starts from `week.budgets` and so
+      // already carries Sleep's entry forward, but a defensive guard costs
+      // nothing) could otherwise silently drop Sleep's real budget entry.
+      const prevSleepBudget = state.week.budgets.find((b) => b.headId === SLEEP_ID);
+      const withSleep = budgets.some((b) => b.headId === SLEEP_ID) || !prevSleepBudget
+        ? budgets
+        : [prevSleepBudget, ...budgets];
+      return { ...state, week: { ...state.week, budgets: withSleep, categoryTargets } };
     }
 
     case "SET_SLEEP_BUDGET": {
-      // §11.4: one global Sleep value, Settings-grade (always allowed — edits
-      // from Weekly Planning and Settings both land here; synced by construction).
+      // §11.4 (revised 2026-07-21): the ONE dispatch behind Sleep's synced
+      // trio (Settings, BudgetPanel's pinned row, the Calendar block's own
+      // editor) — updates the real template's timing/anchors/budget, the
+      // real week.budgets entry (both injection capacity AND the 24h math
+      // read this), and the `sleepMinutes` mirror (kept for existing
+      // consumers — presets.ts's "settings" budget source, App.tsx's
+      // transactional Settings draft — all still read the one number).
       const minutes = Math.max(0, Math.min(1440, Math.round(event.minutes)));
-      return { ...state, week: { ...state.week, sleepMinutes: minutes } };
+      const prevTpl = state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID);
+      const timing = event.timing ?? prevTpl?.timing;
+      const anchorStartTod = event.anchorStartTod ?? prevTpl?.anchorStartTod;
+      const anchorEndTod = event.anchorEndTod ?? prevTpl?.anchorEndTod;
+      const anchorEndDayOffset = event.anchorEndDayOffset ?? prevTpl?.anchorEndDayOffset;
+      const tpl = sleepTemplate({
+        budget: minutes,
+        ...(timing !== undefined ? { timing } : {}),
+        ...(anchorStartTod !== undefined ? { anchorStartTod } : {}),
+        ...(anchorEndTod !== undefined ? { anchorEndTod } : {}),
+        ...(anchorEndDayOffset !== undefined ? { anchorEndDayOffset } : {}),
+      });
+      const templates = state.week.templates.some((t) => t.id === SLEEP_TEMPLATE_ID)
+        ? state.week.templates.map((t) => (t.id === SLEEP_TEMPLATE_ID ? tpl : t))
+        : [...state.week.templates, tpl];
+      const budgets = state.week.budgets.some((b) => b.headId === SLEEP_ID)
+        ? state.week.budgets.map((b) => (b.headId === SLEEP_ID ? sleepBudgetEntry(minutes) : b))
+        : [sleepBudgetEntry(minutes), ...state.week.budgets];
+      return { ...state, week: { ...state.week, sleepMinutes: minutes, templates, budgets } };
     }
 
     case "START_OFF_PERIOD": {

@@ -34,7 +34,7 @@ import {
   LOST_TIME,
   SELF_MANAGEMENT_ID,
   SLEEP_ID,
-  NAP_ID,
+  NAP,
   FOOD_ID,
   WASTED_TIME_ID,
   LOST_HOURS_ID,
@@ -55,14 +55,17 @@ import { forgetActivity } from "./ml/vectorStore";
 export type HeadsRegistry = Record<string, string[]>;
 
 /** §2.10 plannable built-ins — schedulable like any head, no config note.
- * Sleep/Food are "inevitable-necessity" heads: undeletable AND plannable
- * (Sleep/Nap became distinct HEADS 2026-07-18, replacing the earlier
- * "Recharge" head + sleepKind sub-distinction — see core `types.ts`;
- * Nap itself was then demoted to an ORDINARY deletable seeded head,
- * user decision 2026-07-18 — only Sleep carries the built-in mark).
+ * Sleep/Food are "inevitable-necessity" heads: undeletable AND plannable.
  * Meditation/Exercise/Socialization/Learning joined 2026-07-18 with the same
  * treatment (Food-pattern parity — see §11.1b for the preset+quick-add layer
- * specific to these plus Sleep/Food). */
+ * specific to these plus Sleep/Food).
+ *
+ * Sleep/Nap (revised 2026-07-19, reverting 2026-07-18's split): Nap is NOT a
+ * head — it went through a "distinct HEAD" phase (2026-07-18) and back. ONE
+ * head, `SLEEP_ID`, the head of the day; under it, TWO sub-heads: `SLEEP`
+ * (also built-in/undeletable — see `isBuiltInActivity`) and `NAP` (ordinary,
+ * deletable, seeded). See `types.ts`'s SLEEP/NAP block comment for the full
+ * history and how the day-defining check now reads (headId AND activityId). */
 export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [
   SELF_MANAGEMENT_ID,
   SLEEP_ID,
@@ -109,28 +112,31 @@ export const BUILT_IN_HEAD_NOTES: Record<string, string> = {
   [OFF_PERIOD_ID]: "system head — booked by off-periods, never planned",
 };
 
-/** Is (headId, activity) a built-in preset sub-head? None shipped in the seed
- * (2026-07-18: the seed carries zero sub-heads — users add their own later).
- * Kept as a function (not a flat constant) so a future built-in preset
- * sub-head has one place to register. */
-export function isBuiltInActivity(_headId: string, _activity: string): boolean {
-  return false;
+/** Is (headId, activity) a built-in, undeletable sub-head? Only ONE exists
+ * (revised 2026-07-19): `(SLEEP_ID, "Sleep")` — the plain-sleep default under
+ * the Sleep head. `Nap`, its sibling sub-head, is ordinary/deletable, same
+ * treatment as every other seeded-but-plain sub-head. Kept as a function (not
+ * a flat constant) so a future built-in sub-head has one place to register. */
+export function isBuiltInActivity(headId: string, activity: string): boolean {
+  return headId === SLEEP_ID && activity === SLEEP;
 }
 
 /** §11.1 shipped seed — the user's authoritative list (2026-07-18, overrides
  * the prior seed entirely). The list is Category -> Head, FLAT — NO sub-heads
  * at all (confirmed by the user: every line under a category is a head, full
  * stop; sub-heads exist in the schema but are added later, by the user, never
- * seeded). Built-ins marked `*` in the source list are the PATH constants
- * (Sleep, Self-Management, Food, Meditation, Exercise, Socialization
- * [Regeneration], Learning — Nap seeds but is ordinary/deletable). Off-Periods/Wasted Time/Lost Hours are system
- * built-ins with no `*` in the user's list (pre-existing, §4.5/§2.6
- * accounting heads). Registry object key order IS the display order within
- * a category. */
+ * seeded) — EXCEPT Sleep (revised 2026-07-19): it seeds two sub-heads, `Sleep`
+ * (built-in/undeletable, `isBuiltInActivity`) and `Nap` (ordinary/deletable) —
+ * the one deliberate exception to "no built-in ships with seeded sub-heads",
+ * since Nap needs a home now that it isn't its own head. Built-ins marked `*`
+ * in the source list are the PATH constants (Sleep, Self-Management, Food,
+ * Meditation, Exercise, Socialization [Regeneration], Learning). Off-Periods/
+ * Wasted Time/Lost Hours are system built-ins with no `*` in the user's list
+ * (pre-existing, §4.5/§2.6 accounting heads). Registry object key order IS
+ * the display order within a category. */
 const DEFAULT_REGISTRY: HeadsRegistry = {
   // Recharging
-  [SLEEP_ID]: [],
-  [NAP_ID]: [],
+  [SLEEP_ID]: [SLEEP, NAP],
   // Core Work
   [SELF_MANAGEMENT_ID]: [],
   [headPath(CORE_WORK, "Strategy and Planning")]: [],
@@ -184,12 +190,17 @@ const DEFAULT_REGISTRY: HeadsRegistry = {
  * so once a stored registry exists they must not silently resurrect on
  * reload (bug class fixed 2026-07-16). First run (nothing stored) still gets
  * the full DEFAULT_REGISTRY via the caller. No built-in ships with seeded
- * sub-heads (2026-07-18) — this is a pure "key exists" guarantee now. */
+ * sub-heads EXCEPT Sleep's own `Sleep` sub-head (revised 2026-07-19) — that
+ * one gets the same "always present" guarantee as a built-in head's key,
+ * since deleting it would silently break the day-of-head check. `Nap`
+ * (Sleep's other sub-head) is ordinary/deletable — no resurrection. */
 function mergeRegistry(stored: HeadsRegistry): HeadsRegistry {
   const merged: HeadsRegistry = { ...stored };
   for (const head of BUILT_IN_HEADS) {
     merged[head] = stored[head] ?? [];
   }
+  const sleepSubs = merged[SLEEP_ID] ?? [];
+  if (!sleepSubs.includes(SLEEP)) merged[SLEEP_ID] = [SLEEP, ...sleepSubs];
   return merged;
 }
 
@@ -256,17 +267,28 @@ const HeadsContext = createContext<HeadsApi | null>(null);
  * category order all survive). After that one merge the no-resurrection rule
  * applies as usual: deleting a seed head stays deleted across reloads. */
 const SEED_STAMP_KEY = "seedVersion";
-// ".2": the first "2026-07-18" build briefly shipped a bug that stamped
-// WITHOUT merging — bumping re-runs the top-up for stores stamped by it.
-const SEED_STAMP = "2026-07-18.2";
+// ".3": 2026-07-19 reverted Nap from its own head back to a Sleep sub-head —
+// bumping re-runs the top-up so an existing store's stray `NAP_ID` head key
+// is dropped and Sleep's two built-in sub-heads (Sleep, Nap) get seeded in.
+const SEED_STAMP = "2026-07-19.3";
 
 /** One-time seed top-up: every DEFAULT_REGISTRY head exists (stored sub-head
  * lists win), ordered seed-first so the shipped display order holds; the
- * user's own heads follow. */
+ * user's own heads follow. A stray `NAP_ID` from before the 2026-07-19
+ * revert is dropped (Nap lives as a Sleep sub-head now, not its own head);
+ * Sleep's DEFAULT_REGISTRY sub-heads (Sleep, Nap) are merged into whatever
+ * the store already has under `SLEEP_ID`, never overwriting a stored list. */
 function topUpSeed(stored: HeadsRegistry): HeadsRegistry {
+  const OLD_NAP_ID = headPath(RECHARGING, "Nap");
   const merged: HeadsRegistry = {};
   for (const k of Object.keys(DEFAULT_REGISTRY)) merged[k] = stored[k] ?? [];
-  for (const k of Object.keys(stored)) merged[k] = stored[k] ?? [];
+  for (const k of Object.keys(stored)) {
+    if (k === OLD_NAP_ID) continue;
+    merged[k] = stored[k] ?? [];
+  }
+  const sleepSeed = DEFAULT_REGISTRY[SLEEP_ID] ?? [];
+  const sleepStored = merged[SLEEP_ID] ?? [];
+  merged[SLEEP_ID] = [...sleepSeed, ...sleepStored.filter((a) => !sleepSeed.includes(a))];
   return merged;
 }
 

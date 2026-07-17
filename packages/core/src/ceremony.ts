@@ -6,7 +6,16 @@
  */
 
 import type { HistoryEntry, Min, State, UnstartedTask } from "./types.js";
+import { SLEEP } from "./types.js";
 import { SLEEP_ID } from "./budget.js";
+
+/** The head-of-the-day check (revised 2026-07-19): Sleep and Nap now share one
+ * head (`SLEEP_ID`), distinguished by sub-head — so `headId===SLEEP_ID` alone
+ * would wrongly count a Nap as day-defining. Requires the plain-sleep
+ * sub-head too. */
+function isHeadOfDay(h: { headId: string; activityId: string }): boolean {
+  return h.headId === SLEEP_ID && h.activityId === SLEEP;
+}
 
 /** [start,end) intersection width, clamped ≥ 0. */
 export function clip(start: Min, end: Min, winStart: Min, winEnd: Min): Min {
@@ -25,7 +34,7 @@ export function formingDayStart(s: State): Min {
   const occ = s.history
     .filter((h) => h.kind === "occupancy" && h.end > h.start)
     .sort((a, b) => a.start - b.start);
-  const firstSleep = occ.find((h) => h.headId === SLEEP_ID);
+  const firstSleep = occ.find(isHeadOfDay);
   if (firstSleep) return firstSleep.start;
   if (occ.length) return occ[0]!.start;
   return s.now;
@@ -45,13 +54,14 @@ export interface SodPrecondition {
 }
 
 /**
- * §4.2 precondition. Counts Finished Sleep occupancy (headId===SLEEP_ID) in
- * the forming day (history with `start ≥ formingDayStart`). Scoping ruling
- * (grilled 2026-07-15): 0 or 1 → not ok (UI opens the missing-data GapFillModal
- * to log the missing sleep); exactly 2 → sweep [A,B); **3+ → sweep the first two**
- * (a missed prior SOD), leftover sleeps stay in the new forming day so each SOD
- * advances one boundary iteratively. So `ok` ⇔ ≥2 sleeps, and A/B are the first
- * two.
+ * §4.2 precondition. Counts Finished Sleep occupancy (headId===SLEEP_ID AND
+ * activityId===SLEEP — a Nap under the same head does NOT count, §revised
+ * 2026-07-19) in the forming day (history with `start ≥ formingDayStart`).
+ * Scoping ruling (grilled 2026-07-15): 0 or 1 → not ok (UI opens the
+ * missing-data GapFillModal to log the missing sleep); exactly 2 → sweep
+ * [A,B); **3+ → sweep the first two** (a missed prior SOD), leftover sleeps
+ * stay in the new forming day so each SOD advances one boundary iteratively.
+ * So `ok` ⇔ ≥2 sleeps, and A/B are the first two.
  */
 export function sodPrecondition(s: State): SodPrecondition {
   const formingStart = formingDayStart(s);
@@ -60,7 +70,7 @@ export function sodPrecondition(s: State): SodPrecondition {
       (h) =>
         h.kind === "occupancy" &&
         h.end > h.start &&
-        h.headId === SLEEP_ID &&
+        isHeadOfDay(h) &&
         h.start >= formingStart,
     )
     .sort((a, b) => a.start - b.start || a.end - b.end);

@@ -348,9 +348,10 @@ Drawer behavior (see also `docs/drawer-reference.md`):
   on hover/focus) whose tooltip holds the guidance.
 - **Tooltips are custom and subtle** (never native `title`): trigger carries `data-tip`;
   a quiet paper-raised card with hairline border and ink-soft 11px text fades in above the
-  element after a ~0.5s dwell. Used for the section glyphs and the remaining terse labels
-  (field roles, Head, individual flags). No inline parenthetical hints or instructional
-  label suffixes anywhere in the drawer.
+  element after a ~0.5s dwell (edge-aware placement, `docs/design-tokens.md` §Tooltips —
+  `TooltipHost.tsx`/floating-ui picks whichever side actually fits, never clips). Used for the
+  section glyphs and the remaining terse labels (field roles, Head, individual flags). No
+  inline parenthetical hints or instructional label suffixes anywhere in the drawer.
 
 **Splash screen (2026-07-11):** shown on every app open, held a **minimum of 3 seconds**
 from first paint even if the store loads sooner, then fades out over 450ms. Composition,
@@ -393,19 +394,23 @@ soft-committed** — neither a formal Done nor a revert fires. One lossy edge: r
 MIN_FRAGMENT re-snaps sub-floor budgets up; a later revert restores the *setting* but not
 budgets that were never legal to store (they were snapped, not remembered).
 
-Holds the **Minimum fragment (minutes)** setting (§3.7): the MIN_FRAGMENT floor, default 5,
-min 1; dispatches `SET_MIN_FRAGMENT`. Raising it re-snaps every stored budget up to the new
-floor and lifts the dependent floors (open cap, semi-tail floor) if it overtakes them.
+Holds the **Minimum fragment** setting (§3.7): the MIN_FRAGMENT floor, default 5, min 1;
+dispatches `SET_MIN_FRAGMENT`. Raising it re-snaps every stored budget up to the new floor and
+lifts the dependent floors (open cap, semi-tail floor) if it overtakes them.
 Holds a **Presets** group: the **default timing type** for each of Sleep / Nap / Food (§2.9),
 persisted (localStorage, not event-sourced — a UI preference); defaults Sleep=budgeted,
 Nap=unscheduled, Food=budgeted.
-Holds the **Open-task cap (hours)** setting (2026-07-11): the `openExtentCap` from §3.9 —
-how far an open/budget-less task fills the day before lower-rank tasks land after it. Number
-field in hours (default 10); dispatches `SET_OPEN_CAP` (minutes) into the event-sourced state.
-Holds the **Semi-tail floor (hours)** setting (2026-07-12): the `semiTailFloor` from §3.9.1 —
-the minimum span an open semi-tail's claim can be compressed to before it slides (slideable) or
-pins as an obstacle. Number field in hours (default 1); dispatches `SET_TAIL_FLOOR` (minutes),
-same chrome and validation as the Open-task cap field.
+Holds the **Open-task cap** setting (2026-07-11): the `openExtentCap` from §3.9 — how far an
+open/budget-less task fills the day before lower-rank tasks land after it (default 10h);
+dispatches `SET_OPEN_CAP` (minutes) into the event-sourced state.
+Holds the **Semi-tail floor** setting (2026-07-12): the `semiTailFloor` from §3.9.1 — the
+minimum span an open semi-tail's claim can be compressed to before it slides (slideable) or
+pins as an obstacle (default 1h); dispatches `SET_TAIL_FLOOR` (minutes).
+**All four of the above (Minimum fragment, Sleep — §11.4's trio, Open-task cap, Semi-tail
+floor) are smart-input `DurInput` fields (fixed 2026-07-21 — they were plain
+`&lt;input type="number"&gt;` spinners with no casual parsing/stepper, a smart-input-parity gap):
+casual duration text ("1h 30m"), ▴▾ stepper chevrons, floor/ceiling snap — the same shell every
+other duration field in the app uses, not a bespoke number widget.**
 Holds the **Timeline grid** setting (2026-07-12, persisted `gridGranularity`): the sub-hour ruler
 graduation granularity — chips **Off / 5 / 10 / 15 / 30 min**, **default Off** — a display-only
 preference (localStorage, not event-sourced, like Clock format).
@@ -457,8 +462,10 @@ not the main path). Plus a listing of the registry grouped by head. Each sub-hea
 carries a quiet **× delete**
 (ink-faint, turns danger on hover). **Heads carry the same quiet × delete, except the
 built-ins.** The §2.10/§2.10a built-ins appear here and are undeletable: the **plannable**
-ones (`Self-Management`, `Sleep`, `Nap`, `Food`, `Meditation`, `Exercise`, `Socialization`,
-`Learning` — each its own head, §2.9/§11.1b) show **no note**; the **system** ones
+ones (`Self-Management`, `Sleep`, `Food`, `Meditation`, `Exercise`, `Socialization`,
+`Learning` — each its own head, §2.9/§11.1b) show **no note**. Under `Sleep`, its `Sleep`
+sub-head chip is ALSO undeletable (§2.9's exception); its `Nap` sub-head chip carries the
+ordinary quiet × delete like any other sub-head. The **system** ones
 (`Wasted Time`, `Lost Hours`, `Off-Periods`) show a quiet one-line note in front —
 "system head — logged, never planned" / "system head — auto-booked at day close" — since
 their non-plannability is the thing worth surfacing. (`Main Work` is a convenience default

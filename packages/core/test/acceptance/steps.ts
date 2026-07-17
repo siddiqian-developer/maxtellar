@@ -25,6 +25,7 @@ import {
   quotaAdjustmentsAtSod,
   CORE_WORK,
   SLEEP_ID,
+  LOST_HOURS_ID,
   type State,
   type Event,
 } from "../../src/index.js";
@@ -202,7 +203,7 @@ Then("the day record spans {int} hours", (w, hours: number) => {
 });
 
 Then("the unaccounted time booked as Lost Hours totals {int} hours", (w, hours: number) => {
-  const lost = ctx(w).s.history.filter((h) => h.kind === "occupancy" && h.headId === "Lost Hours");
+  const lost = ctx(w).s.history.filter((h) => h.kind === "occupancy" && h.headId === LOST_HOURS_ID);
   const total = lost.reduce((a, l) => a + (l.end - l.start), 0);
   expect(total).toBe(hours * H);
   expect(lost.every((l) => l.taskId === null)).toBe(true);

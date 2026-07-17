@@ -17,6 +17,11 @@ const midWeek = (): State => {
       ...base.week,
       startedAt: 5_000, // the week began well before "now"
       offDays: [0, 6],
+      // Balances every planned (non-OFF) day to exactly 24h alongside the
+      // always-present Sleep entry (8h) — §11.2's gate now genuinely applies
+      // from a fresh state (Sleep alone was always going to be incomplete),
+      // so START_WEEK below needs a balanced day to actually succeed.
+      budgets: [...base.week.budgets, { headId: "Work", categoryId: "Core Work", kind: "absolute", minutes: 960, weekdays: [1, 2, 3, 4, 5] }],
       quotaAdjust: [{ headId: "Work", weekday: 3, delta: -30 }], // a live §5.1 ledger
     },
   };

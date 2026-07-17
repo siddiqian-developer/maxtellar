@@ -4,9 +4,12 @@
  */
 import { describe, it, expect } from "vitest";
 import { matchPreset, resolvePreset, SHIPPED_PRESETS, blankPresetFor } from "./presets";
-import { SLEEP_ID, NAP_ID, FOOD_ID, EXERCISE_ID, LEARNING_ID, initialState, type State } from "@maxtellar/core";
+import { SLEEP_ID, NAP, FOOD_ID, EXERCISE_ID, LEARNING_ID, initialState, type State } from "@maxtellar/core";
 
 const find = (id: string) => SHIPPED_PRESETS.find((p) => p.id === id)!;
+// Nap is a Sleep sub-head now, not its own head (revised 2026-07-19) — its
+// preset id is synthesized (see presets.ts's PresetConfig.id comment).
+const NAP_PRESET_ID = `${SLEEP_ID}::${NAP}`;
 
 describe("matchPreset (title → preset auto-switch)", () => {
   it("matches Sleep titles", () => {
@@ -16,9 +19,9 @@ describe("matchPreset (title → preset auto-switch)", () => {
   });
 
   it("matches Nap titles, longest keyword wins over a stray substring", () => {
-    expect(matchPreset("Nap", SHIPPED_PRESETS)?.id).toBe(NAP_ID);
-    expect(matchPreset("power nap", SHIPPED_PRESETS)?.id).toBe(NAP_ID);
-    expect(matchPreset("afternoon siesta", SHIPPED_PRESETS)?.id).toBe(NAP_ID);
+    expect(matchPreset("Nap", SHIPPED_PRESETS)?.id).toBe(NAP_PRESET_ID);
+    expect(matchPreset("power nap", SHIPPED_PRESETS)?.id).toBe(NAP_PRESET_ID);
+    expect(matchPreset("afternoon siesta", SHIPPED_PRESETS)?.id).toBe(NAP_PRESET_ID);
   });
 
   it("matches Food titles including specific meals", () => {
@@ -37,9 +40,9 @@ describe("matchPreset (title → preset auto-switch)", () => {
 });
 
 describe("shipped preset bundles (§2.9/§11.1b/§2.10b)", () => {
-  it("Sleep/Nap are their own built-in heads and lock the title", () => {
+  it("Sleep and Nap are both presets on the Sleep head (revised 2026-07-19: Nap is a sub-head, not its own head) and lock the title", () => {
     expect(find(SLEEP_ID)).toMatchObject({ label: "Sleep", headId: SLEEP_ID, titleLocked: true, timing: "budgeted", budgetSource: "settings" });
-    expect(find(NAP_ID)).toMatchObject({ label: "Nap", headId: NAP_ID, titleLocked: true, timing: "unscheduled" });
+    expect(find(NAP_PRESET_ID)).toMatchObject({ label: "Nap", headId: SLEEP_ID, titleLocked: true, timing: "unscheduled" });
   });
 
   it("Food lives under its own head, unscheduled, editable title", () => {

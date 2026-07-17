@@ -62,16 +62,25 @@ system → light → dark (persisted to localStorage as `theme`, applied via
   glyph (`.hint-glyph`) sits at the row's right edge — `ink-faint`, opacity 0.35, brightens
   to 0.8 on hover/focus. Layout via `.hint-row { display:flex; align-items:center; gap:10px }`
   with the content `flex:1` and the glyph `flex:none`.
-- **Tooltip** (custom, never native `title`): trigger carries `data-tip="…"`; a `::after`
-  renders it. Surface `paper-raised`, 1px hairline border, `ink-soft` 11px/1.35 text
-  (weight 400, no transform), `--shadow-2`, radius 6px, max-width 220px. Above the element
-  (`bottom: 100% + 6px`), fades in (opacity + 3px→0 rise) after a **0.5s dwell**. Glyphs
-  right-anchor the tip and render it **downward** (`top: 100% + 6px`) so it clears the
-  drawer header; form labels left-anchor it and render upward.
-- **Anchor direction follows available space** (general rule): open a tip toward the side
-  that has room. Near the top edge → downward; near the right edge → right-anchored so it
-  opens leftward (e.g. the rightmost flag, `Breakable`); near the left/bottom → the mirror.
-  Default is upward + left-anchored; override per element when it would clip.
+- **Tooltip** (custom, never native `title`): trigger carries `data-tip="…"` — unchanged API,
+  125+ call sites across the app. Positioning is `TooltipHost.tsx` (§7.0.4 named decision,
+  2026-07-20 — `@floating-ui/react`'s `computePosition` + `flip()` + `shift()` middleware),
+  mounted ONCE at the app root; a delegated `mouseover`/`focusin` listener measures whichever
+  `[data-tip]` element is hovered/focused and portals the tooltip card to `document.body` at the
+  computed position. Card surface unchanged: `paper-raised`, 1px hairline border, `ink-soft`
+  11px/1.35 text (weight 400, no transform), `--shadow-2`, radius 6px, max-width 220px, fades in
+  (opacity + 3px→0 rise) after a **0.5s dwell**.
+- **Anchor direction is measured, not hardcoded** (revised 2026-07-20 — replaces the old
+  "override per element when it would clip" manual rule, which is exactly how the reported
+  clipping bug happened: a new trigger near a container edge with no override). Each call site
+  passes a PREFERRED placement as a bias (glyphs → `bottom`, drawer labels → `top-start`, default
+  → `top-end`, matching the old direction hints) but `flip()` overrides it live, every render,
+  the instant the preferred side wouldn't fit the real viewport — so a tooltip can never clip
+  again without someone having to remember a per-element CSS override. `shift()` additionally
+  nudges the card along its axis to stay on-screen even when NO placement fits perfectly (a very
+  cramped container). Whenever a NEW `data-tip` trigger is added anywhere, this is now
+  structural — no manual "will this clip?" check is needed; if one still looks wrong, it's a
+  `TooltipHost.tsx` bug, not a missing override.
 
 ## Global clock (topbar)
 

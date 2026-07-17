@@ -9,14 +9,22 @@ export type Dur = number; // duration in minutes (integer)
 /** Built-in heads (§2.10) — real heads, undeletable. Shared by core (Lost
  * Hours booking at SOD) and the web registry so the names have one source.
  * Two kinds: PLANNABLE (schedulable like any head) and SYSTEM (accounting-owned,
- * never planned). Sleep/Nap/Food/Meditation/Exercise/Socialization/Learning
- * are "Food-pattern" heads (§2.10a) — undeletable AND plannable. Sleep/Nap
- * were sub-heads of a "Recharge" head until 2026-07-18, when they became two
- * distinct built-in HEADS directly under Recharging (headId now carries what
- * `sleepKind` used to — the SOD precondition and every consumer key off
- * headId, not a separate field). */
+ * never planned). Self-Management/Sleep/Food/Meditation/Exercise/Socialization/
+ * Learning are "Food-pattern" heads (§2.10a) — undeletable AND plannable.
+ *
+ * Sleep/Nap history (revised 2026-07-19, reverting 2026-07-18's split): ONE
+ * built-in head `SLEEP` under Recharging — the head of the day. Under it, TWO
+ * sub-heads: `SLEEP` (also built-in/undeletable — the plain-sleep default) and
+ * `NAP` (an ordinary, deletable, seeded sub-head). `NAP` is no longer a head
+ * constant/path — it is only ever a sub-head (activityId) name now. The
+ * day-defining check is `headId === SLEEP_ID && activityId === SLEEP` (NOT
+ * headId alone, since a Nap task shares the same head) — see `ceremony.ts`.
+ * No standalone `sleepKind` field: the (headId, activityId) pair already
+ * carries that distinction, so it was not reintroduced. */
 export const SELF_MANAGEMENT = "Self-Management";
 export const SLEEP = "Sleep";
+/** A sub-head name (activityId) under the Sleep head — never its own head/path
+ * (see the block comment above). */
 export const NAP = "Nap";
 export const FOOD = "Food";
 export const WASTED_TIME = "Wasted Time";
@@ -478,9 +486,23 @@ export type Event =
   // Same mid-week lock as SET_WEEK_PLAN (structural planning). Invalid percent
   // entries (non-Core-Work or Self-Management) are coerced to absolute.
   | { type: "SET_BUDGETS"; budgets: import("./budget.js").HeadBudget[]; categoryTargets?: Record<string, Dur>; weekday?: number; urgent?: boolean }
-  // §11.4 SET_SLEEP_BUDGET — the one global Sleep value (Settings-grade: always
-  // allowed, from either surface). Clamped to [0, 1440].
-  | { type: "SET_SLEEP_BUDGET"; minutes: Dur };
+  // §11.4 SET_SLEEP_BUDGET — the Sleep trio (revised 2026-07-21: timing/anchors
+  // joined the original budget-only shape once Sleep became a real template).
+  // Settings-grade: always allowed, from any of the three synced surfaces
+  // (Settings, BudgetPanel's pinned row, the Calendar block's own editor).
+  // `minutes` stays required (every timing needs SOME budget number — fixed
+  // derives it from the anchors, but the trio's own field always shows one);
+  // clamped to [0, 1440]. `timing`/anchors are optional so a plain budget-only
+  // edit (Settings' simple field) can omit them and leave the template's
+  // current timing/anchors untouched.
+  | {
+      type: "SET_SLEEP_BUDGET";
+      minutes: Dur;
+      timing?: TimingType;
+      anchorStartTod?: number;
+      anchorEndTod?: number;
+      anchorEndDayOffset?: EndDayOffset;
+    };
 
 export interface RunningView {
   mode: TimerMode;

@@ -604,6 +604,11 @@ export interface TaskSpecInit {
   title?: string;
   activityId?: string;
   headId?: string;
+  /** §11.8a/§11.8b: seeded when this editor was opened from a Category's own
+   * `+` (BudgetPanel) — a brand-new head created here is pinned to this
+   * category (SubheadField's `fixedCategory`); has no effect once a sub-head
+   * already resolves to an existing head. */
+  categoryId?: string;
   timing?: TimingType;
   budget?: number;
   anchorStartTod?: number;
@@ -804,7 +809,7 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
   };
 
   return {
-    title, setTitle, activity, setActivity, head, setHead, timing,
+    title, setTitle, activity, setActivity, head, setHead, categoryId: initial.categoryId, timing,
     // §6 type-morph: setting the type pre-fills its fields, like the drawer.
     setTiming: morphTo,
     startTod, endTod, budget,
@@ -854,7 +859,7 @@ export function TaskSpecFieldsView({ sp, hour12, titlePlaceholder }: {
       subhead={
         <div className="field">
           <label>Sub-head <span className="req-dot" aria-label="required">•</span></label>
-          <SubheadField activity={sp.activity} onActivity={sp.setActivity} onHead={sp.setHead} title={sp.title} />
+          <SubheadField activity={sp.activity} onActivity={sp.setActivity} onHead={sp.setHead} title={sp.title} {...(sp.categoryId !== undefined ? { fixedCategory: sp.categoryId } : {})} />
         </div>
       }
       start={

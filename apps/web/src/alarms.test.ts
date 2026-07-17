@@ -3,7 +3,7 @@
  * stable key and that keys are absent when the condition isn't met.
  */
 import { describe, it, expect } from "vitest";
-import { initialState, reduce, SLEEP_ID, type State, type HeadBudget } from "@maxtellar/core";
+import { initialState, reduce, SLEEP_ID, SLEEP, type State, type HeadBudget } from "@maxtellar/core";
 import { alarmSignals } from "./alarms";
 
 const H = 60;
@@ -63,7 +63,7 @@ describe("alarmSignals (§5.3)", () => {
 
   it("SOD reminder fires when two sleeps bound a day and no ceremony is running", () => {
     let s = initialState(T0 + 30 * H);
-    const sleep = (start: number, end: number, id: string) => ({ id, taskId: null, title: "Sleep", headId: SLEEP_ID, activityId: "", kind: "occupancy" as const, start, end, outcome: "completed" as const, channels: { spent: end - start, wasted: 0, managed: 0, breaks: 0 } });
+    const sleep = (start: number, end: number, id: string) => ({ id, taskId: null, title: "Sleep", headId: SLEEP_ID, activityId: SLEEP, kind: "occupancy" as const, start, end, outcome: "completed" as const, channels: { spent: end - start, wasted: 0, managed: 0, breaks: 0 } });
     s = { ...s, history: [sleep(0, 8 * H, "s1"), sleep(24 * H, 30 * H, "s2")] };
     expect(kinds(s)).toContain("sodReminder");
   });

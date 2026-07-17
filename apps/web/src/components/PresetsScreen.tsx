@@ -18,7 +18,6 @@
 
 import { useState } from "react";
 import type { TimingType } from "@maxtellar/core";
-import { headName } from "@maxtellar/core";
 import { useSettings } from "../settings";
 import { useHeads } from "../heads";
 import { headLabels } from "../headDisplay";
@@ -60,7 +59,11 @@ function SortablePresetRow({ p, index, count, hour12, onUpdate, onRemove, onMove
     <div ref={setNodeRef} style={style} className="preset-table-row">
       <span className="preset-row-name">
         <span className="bp-drag" data-tip="Drag to reorder" {...listeners} {...attributes}>⋮⋮</span>
-        {headName(p.headId)}
+        {/* §revised 2026-07-19: p.label, not headName(p.headId) — Sleep and Nap
+         * are now two presets on the SAME head, so the head name alone can't
+         * tell them apart (both would show "Sleep"). label already is the
+         * right per-row name (it's also what resolvePreset uses as subhead). */}
+        {p.label}
       </span>
       <select
         aria-label={`${p.label} timing type`}

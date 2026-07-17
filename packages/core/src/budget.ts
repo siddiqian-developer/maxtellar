@@ -18,13 +18,13 @@
 import {
   SELF_MANAGEMENT,
   SLEEP,
-  NAP,
   FOOD,
   WASTED_TIME,
   LOST_HOURS,
   OFF_PERIOD,
   type Dur,
   type WeekPlan,
+  type WeekTemplate,
 } from "./types.js";
 import { headPath, headName } from "./headPath.js";
 
@@ -66,8 +66,9 @@ export const CATEGORIES = [
  * head exists under Not Work, an ordinary user head). Lost Hours moved from
  * Wasted Time into the new Lost Time category 2026-07-18. */
 export const SELF_MANAGEMENT_ID = headPath(CORE_WORK, SELF_MANAGEMENT);
+/** The head of the day — see the `SLEEP`/`NAP` block comment in types.ts.
+ * `Nap` is a sub-head (activityId) UNDER this head, not its own path. */
 export const SLEEP_ID = headPath(RECHARGING, SLEEP);
-export const NAP_ID = headPath(RECHARGING, NAP);
 export const FOOD_ID = headPath(MAINTENANCE, FOOD);
 export const WASTED_TIME_ID = headPath(TIME_WASTED, WASTED_TIME);
 export const LOST_HOURS_ID = headPath(LOST_TIME, LOST_HOURS);
@@ -81,11 +82,56 @@ export const EXERCISE_ID = headPath(REGENERATION, EXERCISE);
 export const SOCIALIZATION_ID = headPath(REGENERATION, SOCIALIZATION);
 export const LEARNING_ID = headPath(UPGRADING, LEARNING);
 
-/** §11.4 Sleep — the head of the day. A first-class budget line (stored as
- * `week.sleepMinutes`, synced with Settings) rendered under its own pseudo-
- * category so Category roll-ups stay honest (it is not a Maintenance head). */
-export const SLEEP_HEAD = "Sleep";
-export const SLEEP_CATEGORY = "Sleep";
+/** §11.4 Sleep — the head of the day. Revised 2026-07-21: Sleep is a REAL,
+ * always-present, undeletable `WeekTemplate` (this id) that SOD injects like
+ * any other daily template — no longer a synthetic budget-only pseudo-line.
+ * `week.budgets` carries ONE real matching entry keyed `SLEEP_ID` (the head,
+ * Recharging/Sleep) — this is now the ONE source both the 24h envelope math
+ * (`weekDayShape`) AND the scheduler's injection capacity (`injectTodayDetailed`)
+ * read; the old `SLEEP_HEAD`/`SLEEP_CATEGORY`/`sleepEntry()` synthetic-line
+ * mechanism (bare name "Sleep", never actually in `week.budgets`, invisible
+ * to injection) is retired — it was silently disconnected from capacity. */
+export const SLEEP_TEMPLATE_ID = "tpl-sleep";
+
+/** The Sleep template, always present (§11.4 revised 2026-07-21) — built fresh
+ * from its own live fields rather than a fixed shape, so `SET_SLEEP_BUDGET`
+ * (still the ONE dispatch Settings/BudgetPanel/the drawer all use) can update
+ * budget/anchors/timing without the caller re-deriving the whole template.
+ * `budgeted` timing (no anchors) is the default — the trio only shows a real
+ * calendar block once the user sets it to `fixed` (both anchors); see
+ * §11.8b's approximate-time (`~`) convention for the unanchored display. */
+export function sleepTemplate(fields: {
+  budget?: Dur;
+  timing?: WeekTemplate["timing"];
+  anchorStartTod?: number;
+  anchorEndTod?: number;
+  anchorEndDayOffset?: WeekTemplate["anchorEndDayOffset"];
+}): WeekTemplate {
+  return {
+    id: SLEEP_TEMPLATE_ID,
+    rank: "a", // always first — the head of the day (§11.4/§11.5)
+    title: SLEEP,
+    headId: SLEEP_ID,
+    activityId: SLEEP,
+    timing: fields.timing ?? "budgeted",
+    tier: "normal",
+    ommf: false,
+    slideable: false,
+    breakable: false,
+    weekdays: [0, 1, 2, 3, 4, 5, 6],
+    ...(fields.budget !== undefined ? { budget: fields.budget } : {}),
+    ...(fields.anchorStartTod !== undefined ? { anchorStartTod: fields.anchorStartTod } : {}),
+    ...(fields.anchorEndTod !== undefined ? { anchorEndTod: fields.anchorEndTod } : {}),
+    ...(fields.anchorEndDayOffset !== undefined ? { anchorEndDayOffset: fields.anchorEndDayOffset } : {}),
+  };
+}
+
+/** Sleep's real `week.budgets` entry (§11.4 revised 2026-07-21) — the ONE
+ * source both the 24h envelope math and injection capacity read (replaces
+ * the retired synthetic `sleepEntry()` pseudo-line). */
+export function sleepBudgetEntry(minutes: Dur): HeadBudget {
+  return { headId: SLEEP_ID, categoryId: RECHARGING, kind: "absolute", minutes, weekdays: [0, 1, 2, 3, 4, 5, 6] };
+}
 
 export type QuotaType = "atLeast" | "atMost" | "exact"; // §5.1 (exact was "neutral")
 export type BudgetKind = "absolute" | "percent" | "weekly";
@@ -454,20 +500,11 @@ export function redistributeOvershoot(overshoot: Dur, days: RemainingDay[]): Red
 /* --------------------------- week-plan selectors ---------------------------- */
 /* Pure views over WeekPlan — the reducer and the web both read through these. */
 
-/** The Sleep budget as an ordinary absolute line (§11.4). */
-export function sleepEntry(minutes: Dur): HeadBudget {
-  return {
-    headId: SLEEP_HEAD,
-    categoryId: SLEEP_CATEGORY,
-    kind: "absolute",
-    minutes,
-    weekdays: [0, 1, 2, 3, 4, 5, 6],
-  };
-}
-
-/** The full budget-entry list for a week: Sleep + head budgets, with the §5.1
- * redistribution ledger folded into weekly heads' effective shares (the stored
- * budgets — the reusable template — stay untouched, §11.7). */
+/** The full budget-entry list for a week: `week.budgets` (which now includes
+ * Sleep's own real entry, §11.4 revised 2026-07-21 — no more synthetic
+ * pseudo-line prepended here), with the §5.1 redistribution ledger folded
+ * into weekly heads' effective shares (the stored budgets — the reusable
+ * template — stay untouched, §11.7). */
 export function budgetEntries(week: WeekPlan): HeadBudget[] {
   const adjusted = week.budgets.map((b) => {
     if (b.kind !== "weekly") return b;
@@ -481,7 +518,7 @@ export function budgetEntries(week: WeekPlan): HeadBudget[] {
     }
     return { ...b, shares };
   });
-  return [sleepEntry(week.sleepMinutes), ...adjusted];
+  return adjusted;
 }
 
 /** One weekday's resolved shape for a week plan (targets = §11.6 hard fits). */

@@ -14,7 +14,7 @@
  */
 import { useMemo, useState } from "react";
 import type { Channels, Event, HistoryEntry, HistoryOutcome } from "@maxtellar/core";
-import { SLEEP_ID, NAP_ID } from "@maxtellar/core";
+import { SLEEP_ID, SLEEP, NAP } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
 import { resolvePastTime, fitPastInterval, dayStartMin } from "../casualTime";
@@ -49,7 +49,7 @@ const OUTCOME_LABEL: Record<HistoryOutcome, string> = {
 export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClose }: Props): JSX.Element {
   const { timeFormat, showWeekday } = useSettings();
   const hour12 = timeFormat === "12h";
-  const { addActivity, heads } = useHeads();
+  const { addActivity, registry } = useHeads();
 
   const isNew = entry === null;
   // A fresh draft spans the last half hour up to now (both legal past).
@@ -140,14 +140,15 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
     setCalField(null);
   };
 
-  // A Sleep/Nap quick-tag sets the head+activity directly (§2.9/§11.1b —
-  // Sleep/Nap are their own heads, not a separate tag since 2026-07-18;
-  // Sleep is built-in, Nap ordinary/deletable).
-  const kindOfHead = (h: string | undefined): "none" | "sleep" | "nap" =>
-    h === SLEEP_ID ? "sleep" : h === NAP_ID ? "nap" : "none";
+  // A Sleep/Nap quick-tag sets the head+activity directly. Revised 2026-07-19
+  // (reverting 2026-07-18's "own heads" split): Sleep and Nap are sub-heads
+  // of ONE head (SLEEP_ID) now, so the kind is read from (head, activity)
+  // together, not head alone — a Nap task has the same headId as Sleep.
+  const kindOfHead = (h: string | undefined, a: string): "none" | "sleep" | "nap" =>
+    h !== SLEEP_ID ? "none" : a === SLEEP ? "sleep" : a === NAP ? "nap" : "none";
   const chooseKind = (k: "none" | "sleep" | "nap"): void => {
-    if (k === "sleep") { setHead(SLEEP_ID); setActivity("Sleep"); }
-    else if (k === "nap") { setHead(NAP_ID); setActivity("Nap"); }
+    if (k === "sleep") { setHead(SLEEP_ID); setActivity(SLEEP); }
+    else if (k === "nap") { setHead(SLEEP_ID); setActivity(NAP); }
     // "none": leave head/activity as typed — this is a clear-the-tag action,
     // not a reset (the user may already be mid-typing an ordinary activity).
   };
@@ -282,13 +283,14 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
           <div className="field">
             <label>Kind</label>
             <div className="type-chips" role="radiogroup" aria-label="Sleep kind">
-              {/* Nap is an ordinary deletable head (2026-07-18) — its quick-tag
-                  only renders while the head actually exists in the registry. */}
-              {(["none", "sleep", ...(heads.includes(NAP_ID) ? (["nap"] as const) : [])] as const).map((k) => (
+              {/* Nap is an ordinary deletable SUB-head of Sleep (revised
+                  2026-07-19) — its quick-tag only renders while that sub-head
+                  actually exists in the registry under SLEEP_ID. */}
+              {(["none", "sleep", ...((registry[SLEEP_ID] ?? []).includes(NAP) ? (["nap"] as const) : [])] as const).map((k) => (
                 <button
                   key={k}
                   type="button"
-                  className={`type-chip${kindOfHead(head) === k ? " active" : ""}`}
+                  className={`type-chip${kindOfHead(head, activity) === k ? " active" : ""}`}
                   data-status="semi-tail"
                   onClick={() => chooseKind(k)}
                 >

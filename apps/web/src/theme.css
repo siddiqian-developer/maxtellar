@@ -1142,13 +1142,15 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 }
 .hint-glyph:hover, .hint-glyph:focus-visible { opacity: 0.8; outline: none; }
 
-/* subtle custom tooltip (replaces native title) */
-[data-tip] { position: relative; }
-[data-tip]::after {
-  content: attr(data-tip);
-  position: absolute;
-  right: 0;
-  bottom: calc(100% + 6px);
+/* Custom tooltip (replaces native title) — revised 2026-07-20: positioning
+ * moved from a fixed-anchor CSS pseudo-element (which silently clipped near
+ * any container edge, e.g. the budgeting outliner's left-edge rows) to
+ * `TooltipHost.tsx` (floating-ui `flip()`+`shift()`, real viewport
+ * measurement). Every `data-tip="…"` trigger is unchanged; this is just the
+ * shared visual shell floating-ui positions. No more manual per-selector
+ * left/right/top overrides — `flip()` picks a side that fits, always. */
+[data-tip] { cursor: help; }
+.tip-card {
   width: max-content;
   max-width: 220px;
   background: var(--paper-raised);
@@ -1169,24 +1171,12 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   transform: translateY(3px);
   transition: opacity 0.2s ease, transform 0.2s ease;
 }
-[data-tip]:hover::after, [data-tip]:focus-visible::after {
-  opacity: 1;
-  transform: translateY(0);
-  transition-delay: 0.5s;
-}
-/* left-anchor the tip for form labels (glyphs stay right-anchored) */
-.drawer-body label[data-tip]::after { right: auto; left: 0; }
-/* rightmost flag has no room on its right → anchor its tip to the right (opens left) */
-.flag-row label.flag:last-child[data-tip]::after { left: auto; right: 0; }
-
-/* section glyphs sit near the top — render their tip DOWNWARD to avoid the header */
-.hint-glyph[data-tip]::after {
-  top: calc(100% + 6px);
-  bottom: auto;
-  transform: translateY(-3px);
-}
-.hint-glyph[data-tip]:hover::after,
-.hint-glyph[data-tip]:focus-visible::after { transform: translateY(0); }
+.tip-card.tip-shown { opacity: 1; transform: translateY(0); }
+/* Placement-aware rise direction — floating-ui reports which side it landed
+ * on (`data-placement`), so the entrance motion always rises FROM the
+ * trigger, never against the side it actually opened on. */
+.tip-card[data-placement^="bottom"] { transform: translateY(-3px); }
+.tip-card[data-placement^="bottom"].tip-shown { transform: translateY(0); }
 
 /* global wall clock — absolutely centered in the topbar regardless of side content */
 .global-clock {
@@ -2042,8 +2032,10 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 :root[data-theme="dark"] { --cat-maint: #cfa85e; --cat-notwork: #7ea3d6; --cat-wasted: #d08a6a; --cat-sleep: #a493d6; }
 
 .bp-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
-.bp-panes { display: grid; grid-template-columns: minmax(0, 3fr) minmax(240px, 2fr); gap: 18px; align-items: start; }
-@media (max-width: 860px) { .bp-panes { grid-template-columns: 1fr; } }
+/* §11.8 (revised 2026-07-17): the gauge is a SIBLING of .bp-panes, stacked above
+ * it — not a grid column inside it — so it always reads first regardless of
+ * column width. .bp-panes now holds only the outliner. */
+.bp-panes { display: grid; grid-template-columns: 1fr; gap: 18px; align-items: start; margin-top: 18px; }
 
 /* Week Plan two-column layout (§11.8): budgets LEFT, the week itself RIGHT. */
 .wk-body-wide { max-width: 1280px; }
@@ -2066,7 +2058,6 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   max-height: calc(100vh - 136px);
   overflow-y: auto;
 }
-.wk-columns .bp-panes { grid-template-columns: 1fr; }
 .wk-columns .bp-gauge { position: static; }
 @media (max-width: 1000px) {
   .wk-columns { grid-template-columns: 1fr; }
@@ -2077,6 +2068,15 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .bp-row { display: flex; align-items: center; gap: 8px; padding: 5px 6px; border-radius: 6px; min-height: 32px; }
 .bp-row:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
 .bp-pinned { border: 1px dashed var(--hairline); background: color-mix(in srgb, var(--cat-sleep) 8%, transparent); margin-bottom: 8px; }
+/* §11.4 revised 2026-07-21: the pinned Sleep row now hosts the full trio
+ * (timing chips + start/end/budget), far too large for `.bp-row`'s single-
+ * line flex assumption — align-items/height reset so it can stack; the
+ * trio itself owns its internal layout via `.sleep-trio` below. */
+.bp-pinned-trio { align-items: flex-start; min-height: 0; padding: 10px 10px 6px; }
+.bp-pinned-trio .bp-pin { margin-top: 4px; }
+.sleep-trio { flex: 1; display: flex; flex-direction: column; gap: 8px; min-width: 0; }
+.sleep-trio .field { display: flex; flex-direction: column; margin: 0; gap: 3px; }
+.sleep-trio-approx { margin: 0; font-style: italic; }
 .bp-pin { color: var(--ink-soft); font-size: 10px; width: 26px; text-align: center; }
 .bp-name { font-weight: 600; font-size: 13px; color: var(--ink); }
 .bp-head-name { background: none; border: none; padding: 0; cursor: pointer; font: inherit; font-weight: 600; font-size: 13px; color: var(--ink); text-align: left; }
@@ -2115,6 +2115,59 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .bp-empty { padding: 2px 6px 6px 34px; font-size: 11px; color: var(--ink-faint); font-style: italic; }
 .bp-add { margin-top: 12px; }
 .bp-add select { font-size: 12px; padding: 5px 8px; }
+
+/* §11.8a (revised 2026-07-20): HoverInsertRows — the generic hover-reveal
+ * insert affordance shared by any vertical row list. Empty state: the WHOLE
+ * placeholder row is the hover target, + sits before the label, always
+ * left-aligned (no boundary to center on with nothing above/below). Non-empty:
+ * each row gets two full-width, zero-height-until-hovered zones straddling
+ * its top/bottom edge; hovering one reveals a + centered exactly ON that
+ * boundary (half-height overlap via negative margin, so it visually sits
+ * between the two rows rather than inside either one). */
+.hir-empty { display: flex; align-items: center; gap: 6px; padding: 2px 6px 6px 34px; border-radius: 6px; }
+.hir-empty:hover { background: color-mix(in srgb, var(--ink) 4%, transparent); }
+.hir-empty-label { font-size: 11px; color: var(--ink-faint); font-style: italic; }
+.hir-empty-add { visibility: hidden; flex-shrink: 0; }
+.hir-empty:hover .hir-empty-add, .hir-empty:focus-within .hir-empty-add { visibility: visible; }
+
+.hir-row { position: relative; }
+/* Each zone IS the hoverable region for its half (real pointer-events, real
+ * :hover) — NOT just a passive overlay — so top/bottom stay independent:
+ * hovering the row's upper half only ever reveals the top +, never both.
+ * Height is 50% so the whole half genuinely triggers it (per spec: "hover on
+ * the upper half of that row"), but `pointer-events` only turns on for the
+ * revealed button itself — the zone's own background stays click-through, so
+ * it never eats clicks on the row's real controls (inputs, ▲▼, etc.) sitting
+ * underneath it at any other point in that half. */
+.hir-zone {
+  position: absolute; left: 0; right: 0; height: 50%; z-index: 2;
+  display: flex; justify-content: center;
+  pointer-events: none;
+}
+.hir-zone-top { top: 0; align-items: flex-start; }
+.hir-zone-bottom { bottom: 0; align-items: flex-end; }
+.hir-edge-add { visibility: hidden; background: var(--paper); border-radius: 50%; pointer-events: none; }
+/* Seam insert (§11.8a1, named 2026-07-20): the button's OWN CENTER sits
+ * exactly on the seam between two rows — half its height oversteps the
+ * zone's own edge, in the direction that edge points. flex-start/flex-end
+ * (not `center`, which was fighting a compensating negative margin and
+ * landing ~2px short) puts the button flush against the zone's boundary
+ * first; this negative margin is the ONLY adjustment layered on top, so it
+ * composes instead of colliding with the flex alignment. */
+.hir-zone-top .hir-edge-add { margin-top: -9px; }
+.hir-zone-bottom .hir-edge-add { margin-bottom: -9px; }
+/* The row's hover state (not the zone's — the zone can't :hover while
+ * click-through) decides visibility, split top/bottom by cursor Y via JS
+ * (React tracks it — see HoverInsertRows.tsx's onMouseMove); the zone/button
+ * re-enable pointer-events only once actually shown, so it's clickable then. */
+.hir-row[data-hover="top"] .hir-zone-top .hir-edge-add,
+.hir-row[data-hover="bottom"] .hir-zone-bottom .hir-edge-add {
+  visibility: visible; pointer-events: auto;
+}
+/* §11.8a: read-only sub-heads under a head row, plus its own add-sub-head control. */
+.bp-subheads { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 2px 6px 6px 34px; }
+.bp-subhead-chip { font-size: 11px; color: var(--ink-soft); background: color-mix(in srgb, var(--ink) 6%, transparent); border-radius: 999px; padding: 2px 8px; }
+.bp-subhead-input { font-size: 12px; padding: 3px 8px; border: 1px solid var(--hairline); border-radius: 999px; width: 140px; }
 .bp-editor { margin: 2px 0 8px 34px; padding: 10px 12px; border: 1px solid var(--hairline); border-radius: 8px; background: var(--paper-raised); display: flex; flex-direction: column; gap: 10px; }
 .bp-editor-foot { display: flex; justify-content: flex-end; }
 .bp-fit-warn { color: var(--danger, #b3452f); font-weight: 700; }

@@ -189,13 +189,18 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
   6-hour Nap are both legal.
 - Wearable provision: sleep/wake from a pluggable source (`manual` | `wearable`); detected
   sleep only ever *proposes* (never auto-commits).
-- **Sleep and Nap are their own HEADS** (revised 2026-07-18) — not sub-heads of a shared
-  "Recharge" head. "Recharge" no longer exists; there is no `sleepKind` field anywhere in
-  the task/history types. `headId === SLEEP_ID` is what the §4.2 SOD precondition (and every
-  other "was this Sleep?" check) tests — the head IS the explicit type. **Sleep is built-in;
-  Nap is an ORDINARY deletable seeded head** (demoted 2026-07-18, per the user's `*`-marks —
-  §11.1): Nap surfaces (its preset, the History editor's Nap quick-tag) exist only while the
-  head exists in the registry.
+- **Sleep and Nap are SUB-HEADS of ONE head, `Sleep`** (revised 2026-07-19, reverting
+  2026-07-18's "own heads" split back toward the original "Recharge" shape — see §11.1b for the
+  full history). The `Sleep` HEAD is built-in/undeletable (the head of the day); under it, TWO
+  sub-heads: `Sleep` (ALSO built-in/undeletable — a new exception to "no built-in ships with
+  seeded sub-heads", since it's the plain-sleep default that must always exist) and `Nap`
+  (ordinary/deletable, matching its 2026-07-18 demotion — its surfaces, the preset and the
+  History editor's quick-tag, exist only while the sub-head is in the registry).
+- **No standalone `sleepKind` field** — reverting to a separate tag was considered and rejected;
+  the (headId, activityId) pair already carries the distinction, so it was not reintroduced.
+  Every "was this Sleep?" check (the §4.2 SOD precondition, the Analytics sleep-budget
+  "achieved" total) now tests **`headId === SLEEP_ID && activityId === SLEEP`** — headId ALONE
+  is no longer sufficient, since a Nap task shares the same head.
 - **Preset pills (task drawer, §2.10b).** Sleep, Nap, Food, and any other preset are entered from
   a **preset pill row** directly under the timing-type chips — not a free-form flag. A pill
   pre-fills a bundle of fields per the preset's own config (`settings.presetsConfig`, §11.1c):
@@ -219,14 +224,15 @@ into two kinds by whether the user may *plan* a task under them:
 
 **Plannable built-ins** (schedulable like any head; **no** "system" note in the config):
 - **Self-Management** — ceremonies, planning, in-app edit time.
-- **Sleep** — main, day-defining sleep, its own head (§2.9; revised 2026-07-18 — no longer a
-  sub-head of a shared "Recharge" head. **Nap is NOT built-in**: it seeds under Recharging as
-  an ordinary deletable head, demoted 2026-07-18).
+- **Sleep** — the head of the day (§2.9; revised 2026-07-19). Under it, its `Sleep` sub-head is
+  ALSO built-in/undeletable (the one exception to "no seeded sub-heads" below); its `Nap`
+  sub-head is ordinary/deletable, seeded but removable like Rest or Break.
 - **Food** — eating.
 - **Meditation**, **Exercise**, **Socialization** [the Regeneration one — Not Work's
   Socialization is a separate, ordinary head], **Learning** — joined the built-in set 2026-07-18
   with the same "Food-pattern" treatment (§11.1b: undeletable, fixed category, plannable). Every
-  built-in above ships with NO seeded sub-head (2026-07-18) — sub-heads are user-added.
+  built-in above ships with NO seeded sub-head (2026-07-18) — sub-heads are user-added —
+  EXCEPT Sleep's `Sleep` sub-head (§2.9, the one deliberate exception).
 
 **System built-ins** (never plannable; shown in the config as locked, with a one-line note):
 - **Wasted Time** — *explicitly logged* waste (loggable in back-log/gap-fill — a one-tap fill

@@ -5,11 +5,12 @@
  * as more settings are added rather than scattering per-component toggles.
  */
 
-import type { Event } from "@maxtellar/core";
+import type { Event, WeekTemplate } from "@maxtellar/core";
 import { headName } from "@maxtellar/core";
 import { useSettings } from "../settings";
 import { type PresetConfig } from "../presets";
 import { FIELD_ROLES } from "./TaskSpecFields";
+import { SleepTrioFields } from "./SleepTrioFields";
 import { useEscClose } from "../useEscClose";
 import { countStartWeekday } from "../workingDays";
 import { capitalCase } from "../text";
@@ -26,6 +27,9 @@ interface Props {
   semiTailFloor: number;
   /** §11.4 Sleep budget — the one global value, synced with Weekly Planning. */
   sleepMinutes: number;
+  /** §11.4 revised 2026-07-21: the real Sleep WeekTemplate — the trio's
+   * timing/anchors live here (always present, per budget.ts's `sleepTemplate`). */
+  sleepTemplate: WeekTemplate | undefined;
   /** §4.4a: core's OFF set — the weekend must stay a subset of it. */
   offDays: number[];
   dispatch: (e: Event) => void;
@@ -81,8 +85,9 @@ function SortableSummaryRow({ p, index, count, hour12, onMove }: {
   );
 }
 
-export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, offDays, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio, onOpenPresets }: Props): JSX.Element {
+export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleepMinutes, sleepTemplate, offDays, dispatch, onCancel, onDone, onOpenHeadsConfig, onOpenAiStudio, onOpenPresets }: Props): JSX.Element {
   const { timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetsConfig, setPresetsConfig, mlMode, setMlMode, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound } = useSettings();
+  const hour12 = timeFormat === "12h";
 
   // §11.1c: ordering is fully available HERE (drag + ▴▾); all other preset
   // editing lives on the Presets screen (onOpenPresets).
@@ -137,8 +142,6 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
   };
   const gridOptions = [0, 5, 10, 15, 30] as const;
   useEscClose(onCancel);
-  const capHours = Math.round((openExtentCap / 60) * 10) / 10;
-  const floorHours = Math.round((semiTailFloor / 60) * 10) / 10;
 
   return (
     <div className="drawer-overlay" onMouseDown={(e) => { if (e.target === e.currentTarget) onCancel(); }}>
@@ -234,67 +237,47 @@ export function SettingsPanel({ minFragment, openExtentCap, semiTailFloor, sleep
           </div>
           <div className="field">
             <label data-tip="The smallest schedulable piece of a task, in minutes — no budget or split ever goes below it (§3.7). Raising it re-snaps existing budgets up to the new floor.">
-              Minimum fragment (minutes)
+              Minimum fragment
             </label>
-            <input
-              type="number"
-              min={1}
-              max={60}
-              step={1}
-              value={minFragment}
-              onChange={(e) => {
-                const m = Number(e.target.value);
-                if (Number.isFinite(m) && m >= 1) dispatch({ type: "SET_MIN_FRAGMENT", minutes: Math.round(m) });
-              }}
-            />
+            <DurInput ariaLabel="Minimum fragment" value={minFragment} min={1}
+              onCommit={(m) => { if (m !== null && m >= 1) dispatch({ type: "SET_MIN_FRAGMENT", minutes: m }); }} />
           </div>
           <div className="field">
-            <label data-tip="Sleep is the head of the day (§11.4) — an absolute budget in every day's 24h sum. One global value, synced with the Weekly Planning Budgets tab.">
-              Sleep budget (hours)
+            <label data-tip="Sleep is the head of the day (§11.4) — a real, always-planned template. One global value, synced with the Weekly Planning Budgets column AND the Calendar block.">
+              Sleep
             </label>
-            <input
-              type="number"
-              min={0}
-              max={24}
-              step={0.5}
-              value={Math.round((sleepMinutes / 60) * 10) / 10}
-              onChange={(e) => {
-                const h = Number(e.target.value);
-                if (Number.isFinite(h) && h >= 0) dispatch({ type: "SET_SLEEP_BUDGET", minutes: Math.round(h * 60) });
+            <SleepTrioFields
+              hour12={hour12}
+              value={{
+                timing: sleepTemplate?.timing ?? "budgeted",
+                budget: sleepTemplate?.budget ?? sleepMinutes,
+                anchorStartTod: sleepTemplate?.anchorStartTod,
+                anchorEndTod: sleepTemplate?.anchorEndTod,
+                anchorEndDayOffset: sleepTemplate?.anchorEndDayOffset,
               }}
+              onChange={(next) => dispatch({
+                type: "SET_SLEEP_BUDGET",
+                minutes: next.budget ?? sleepMinutes,
+                timing: next.timing,
+                ...(next.anchorStartTod !== undefined ? { anchorStartTod: next.anchorStartTod } : {}),
+                ...(next.anchorEndTod !== undefined ? { anchorEndTod: next.anchorEndTod } : {}),
+                ...(next.anchorEndDayOffset !== undefined ? { anchorEndDayOffset: next.anchorEndDayOffset } : {}),
+              })}
             />
           </div>
           <div className="field">
             <label data-tip="How far an open (unscheduled / budget-less) task fills the day before lower-priority tasks are placed after it (§3.9)">
-              Open-task cap (hours)
+              Open-task cap
             </label>
-            <input
-              type="number"
-              min={0.5}
-              max={24}
-              step={0.5}
-              value={capHours}
-              onChange={(e) => {
-                const h = Number(e.target.value);
-                if (Number.isFinite(h) && h > 0) dispatch({ type: "SET_OPEN_CAP", minutes: Math.round(h * 60) });
-              }}
-            />
+            <DurInput ariaLabel="Open-task cap" value={openExtentCap} min={1}
+              onCommit={(m) => { if (m !== null && m > 0) dispatch({ type: "SET_OPEN_CAP", minutes: m }); }} />
           </div>
           <div className="field">
             <label data-tip="The minimum span an open end-anchored (semi-tail) task's claim can be compressed to by a new task; at the floor it slides later (if slideable) or stays put as an obstacle (§3.9.1)">
-              Semi-tail floor (hours)
+              Semi-tail floor
             </label>
-            <input
-              type="number"
-              min={0.5}
-              max={24}
-              step={0.5}
-              value={floorHours}
-              onChange={(e) => {
-                const h = Number(e.target.value);
-                if (Number.isFinite(h) && h > 0) dispatch({ type: "SET_TAIL_FLOOR", minutes: Math.round(h * 60) });
-              }}
-            />
+            <DurInput ariaLabel="Semi-tail floor" value={semiTailFloor} min={1}
+              onCommit={(m) => { if (m !== null && m > 0) dispatch({ type: "SET_TAIL_FLOOR", minutes: m }); }} />
           </div>
           <div className="field">
             <label data-tip="Each preset pre-fills a locked bundle in the task drawer — timing type, and the value that timing needs, from a fixed number, today's week-plan line, or (Sleep) Settings' sleep budget. Reorder here (drag or ▴▾); everything else is edited on the Presets screen.">

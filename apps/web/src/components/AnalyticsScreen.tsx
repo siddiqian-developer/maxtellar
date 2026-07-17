@@ -14,7 +14,7 @@
  */
 
 import type { Channels, Dur, Min, State } from "@maxtellar/core";
-import { LOST_HOURS_ID, SELF_MANAGEMENT_ID, SLEEP_HEAD, SLEEP_ID, WASTED_TIME_ID, budgetEntries, headName, trimDeficit, weekDayShape } from "@maxtellar/core";
+import { LOST_HOURS_ID, SELF_MANAGEMENT_ID, SLEEP, SLEEP_ID, WASTED_TIME_ID, budgetEntries, headName, trimDeficit, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -118,10 +118,13 @@ function BudgetSection({ state, todayStart, todayEnd, todayByHead }: {
   const shape = weekDayShape(week, weekday);
   const entries = budgetEntries(week); // quotaAdjust folded into shares
 
+  // §revised 2026-07-19: Nap shares SLEEP_ID now (a sub-head, not its own
+  // head) — excluded here by activityId so a nap never inflates the sleep
+  // budget's "achieved" total (same exclusion ceremony.ts's SOD check makes).
   const sleepToday = state.history
-    .filter((h) => h.kind === "occupancy" && h.headId === SLEEP_ID)
+    .filter((h) => h.kind === "occupancy" && h.headId === SLEEP_ID && h.activityId === SLEEP)
     .reduce((a, h) => a + overlap(h.start, h.end, todayStart, todayEnd), 0);
-  const achievedFor = (headId: string): Dur => (headId === SLEEP_HEAD ? sleepToday : todayByHead.get(headId) ?? 0);
+  const achievedFor = (headId: string): Dur => (headId === SLEEP_ID ? sleepToday : todayByHead.get(headId) ?? 0);
 
   // Weekly quotas: achieved since the week started (or the last 7 days when no
   // week is running — degrade gracefully, §4.4 reality 3).

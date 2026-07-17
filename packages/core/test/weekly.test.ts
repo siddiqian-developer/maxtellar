@@ -70,26 +70,34 @@ describe("injectToday helper", () => {
 
 describe("SET_WEEK_PLAN mid-week lock (§4.4)", () => {
   const one = [tpl({ title: "T", budget: 30, weekdays: [MON] })];
+  // §11.4 (revised 2026-07-21): SET_WEEK_PLAN always carries the Sleep
+  // template forward even when the caller's own list omits it — so "one"
+  // template supplied becomes 2 stored (T + Sleep). Also: START_WEEK now
+  // needs a genuinely balanced day (Sleep alone is never enough, and no
+  // exemption was widened for it, per the 2026-07-21 ruling) — this helper
+  // balances Mon-Fri before starting so these fixtures actually roll over.
+  const startedWeek = (): State => {
+    let s = initialState(DAY0);
+    s = reduce(s, { type: "SET_BUDGETS", budgets: [...s.week.budgets, { headId: "Work", categoryId: "Core Work", kind: "absolute", minutes: 960, weekdays: [1, 2, 3, 4, 5, 6] }], weekday: SUN });
+    return reduce(s, { type: "START_WEEK", firstWeekday: MON, offDays: [SUN] });
+  };
   it("accepts before any week is started", () => {
     let s = initialState(DAY0);
     s = reduce(s, { type: "SET_WEEK_PLAN", templates: one, weekday: MON });
-    expect(s.week.templates).toHaveLength(1);
+    expect(s.week.templates).toHaveLength(2);
   });
   it("rejects mid-week on a non-OFF weekday", () => {
-    let s = initialState(DAY0);
-    s = reduce(s, { type: "START_WEEK", firstWeekday: MON, offDays: [SUN] });
-    const before = s;
-    s = reduce(s, { type: "SET_WEEK_PLAN", templates: one, weekday: MON }); // Mon, not OFF
+    const before = startedWeek();
+    const s = reduce(before, { type: "SET_WEEK_PLAN", templates: one, weekday: MON }); // Mon, not OFF
     expect(s).toEqual(before); // no-op
     expect(canPlanWeek(before, MON)).toBe(false);
   });
   it("accepts on an OFF weekday, and with the urgent bypass", () => {
-    let s = initialState(DAY0);
-    s = reduce(s, { type: "START_WEEK", firstWeekday: MON, offDays: [SUN] });
+    const s = startedWeek();
     const off = reduce(s, { type: "SET_WEEK_PLAN", templates: one, weekday: SUN });
-    expect(off.week.templates).toHaveLength(1);
+    expect(off.week.templates).toHaveLength(2);
     const urgent = reduce(s, { type: "SET_WEEK_PLAN", templates: one, weekday: MON, urgent: true });
-    expect(urgent.week.templates).toHaveLength(1);
+    expect(urgent.week.templates).toHaveLength(2);
   });
 });
 
@@ -97,15 +105,23 @@ describe("START_WEEK — three rollover realities (§4.4)", () => {
   it("1) planned week starts with its plan intact", () => {
     let s = initialState(DAY0);
     s = reduce(s, { type: "SET_WEEK_PLAN", templates: [tpl({ title: "T", budget: 30, weekdays: [MON] })], weekday: SUN });
+    // §11.2 gate: Sleep (8h) alone leaves every planned day unbalanced — a
+    // fresh week must genuinely balance to 24h before Start Week succeeds
+    // (2026-07-21 ruling: no widened exemption for the always-present Sleep
+    // entry). One absolute head covering the remainder is enough here.
+    s = reduce(s, { type: "SET_BUDGETS", budgets: [...s.week.budgets, { headId: "Work", categoryId: "Core Work", kind: "absolute", minutes: 960, weekdays: [1, 2, 3, 4, 5, 6] }], weekday: SUN });
     s = reduce(s, { type: "START_WEEK", firstWeekday: MON, startedAt: DAY0 });
     expect(s.week.startedAt).toBe(DAY0);
-    expect(s.week.templates).toHaveLength(1);
+    expect(s.week.templates).toHaveLength(2);
   });
   it("2) no plan at rollover still starts the week", () => {
     let s = initialState(DAY0);
+    // Same 24h-gate reasoning as above — OFF day is Sunday only by default,
+    // so Mon-Fri (all 5) needs balancing.
+    s = reduce(s, { type: "SET_BUDGETS", budgets: [...s.week.budgets, { headId: "Work", categoryId: "Core Work", kind: "absolute", minutes: 960, weekdays: [1, 2, 3, 4, 5, 6] }], weekday: SUN });
     s = reduce(s, { type: "START_WEEK", firstWeekday: MON, startedAt: DAY0 });
     expect(s.week.startedAt).toBe(DAY0);
-    expect(s.week.templates).toHaveLength(0);
+    expect(s.week.templates).toHaveLength(1);
   });
   it("3) a week never planned → PRUNING_DONE injection is a no-op", () => {
     // week.startedAt null → injection skipped even if inject data is supplied.

@@ -16,7 +16,7 @@
  */
 import { useEffect, useMemo, useState } from "react";
 import type { DatedTask, Event, State, TemplateOverride, WeekTemplate } from "@maxtellar/core";
-import { canPlanWeek } from "@maxtellar/core";
+import { canPlanWeek, SLEEP_TEMPLATE_ID } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { WeekGridRBC } from "./WeekGridRBC";
 import { countStartWeekday } from "../workingDays";
@@ -25,6 +25,7 @@ import { fmtClock, fmtDur, toDate } from "../time";
 import { diffOverride, weekPreview, type WeekColumn } from "../weekPreview";
 import { BudgetPanel, DurInput } from "./BudgetPanel";
 import { useTaskSpec, TaskSpecFieldsView, DateField, TodField, type TaskSpecInit } from "./TaskSpecFields";
+import { useHeads } from "../heads";
 import { weekBudgetValidity } from "@maxtellar/core";
 import { SnapToast, useSnapToast } from "../SnapToast";
 
@@ -63,11 +64,15 @@ function columnsFrom(weekStart: number): WeekColumn[] {
 
 export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Props): JSX.Element {
   const { timeFormat, weekendDays } = useSettings();
+  const { categoryFor } = useHeads();
   const hour12 = timeFormat === "12h";
   const [mode, setMode] = useState<"week" | "calendar">(initialMode);
   /** A NEW template carries an optional seed (prefilled from a grid gesture, §4.4);
-   * an existing one is the template itself. */
-  const [editing, setEditing] = useState<WeekTemplate | { new: true; seed?: TaskSpecInit; weekdays?: number[] } | null>(null);
+   * an existing one is the template itself. `budgetInsertAt`: when set (the
+   * HoverInsertRows `+` on a category's head list, §11.8a revised
+   * 2026-07-20), the resulting budget line is spliced into `week.budgets` at
+   * this position WITHIN that category's own heads, instead of appended. */
+  const [editing, setEditing] = useState<WeekTemplate | { new: true; seed?: TaskSpecInit; weekdays?: number[]; budgetInsertAt?: number } | null>(null);
   const [datedEdit, setDatedEdit] = useState<{ date: number; task: DatedTask | null } | null>(null);
   const [tplMenu, setTplMenu] = useState<{ date: number; templateId: string; title: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
@@ -117,6 +122,53 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
   const upsert = (t: WeekTemplate): void => {
     const exists = state.week.templates.some((x) => x.id === t.id);
     commit(exists ? state.week.templates.map((x) => (x.id === t.id ? t : x)) : [...state.week.templates, t]);
+    // §11.8a: a template started from a Category's own `+` promises the head
+    // shows up under that category's budget outliner — a template alone never
+    // touches `week.budgets`, so without this the head is registered but
+    // invisible on the LEFT column until separately picked from "+ Budget a
+    // head…". Only fires once, for a head with no budget line yet.
+    if (editing && "new" in editing && editing.seed?.categoryId && !state.week.budgets.some((b) => b.headId === t.headId)) {
+      // Fixed 2026-07-20: `categoryId` MUST come from the head that actually
+      // got resolved, not the category the drawer was opened FROM — typing a
+      // sub-head that already exists under a DIFFERENT head (SubheadField's
+      // `derived` wins over any seed) used to insert the new budget line
+      // under the wrong category's outliner, since this hardcoded the seed's
+      // category regardless of what head the save actually produced.
+      const categoryId = categoryFor(t.headId);
+      // Fixed 2026-07-20: use the template's OWN budget (whatever the drawer
+      // resolved for it — a `budgeted`/semi-* timing's `budget` field, or a
+      // `fixed` timing's end−start span) instead of a hardcoded 60m that
+      // silently discarded whatever the user actually entered. Only an
+      // `unscheduled` template (genuinely budget-less) falls back to 60m.
+      const minutes = t.budget ?? (t.anchorStartTod !== undefined && t.anchorEndTod !== undefined
+        ? (t.anchorEndTod + (t.anchorEndDayOffset ?? 0) * 1440 - t.anchorStartTod)
+        : 60);
+      const entry = { headId: t.headId, categoryId, kind: "absolute" as const, minutes, weekdays: t.weekdays };
+      // §11.8a revised 2026-07-20 (HoverInsertRows): `budgetInsertAt` is an
+      // index WITHIN this category's own heads (0 = before its first) — map
+      // it to `week.budgets`' real (all-categories) position, same way
+      // BudgetPanel's own reorder (`move`) does: walk to the Nth head whose
+      // categoryId matches, insert right before it; past the last one (or no
+      // index at all) appends after the category's last head, same as today.
+      const budgets = [...state.week.budgets];
+      const catIdxs = budgets.reduce<number[]>((acc, b, i) => (b.categoryId === categoryId ? [...acc, i] : acc), []);
+      // No index (plain "+ Budget a head…"), or one past this category's last
+      // head → append right after its last head (or as the category's first,
+      // if it has none yet) — same place the old always-append behavior put
+      // it. Otherwise splice in right before the head currently at that slot.
+      const insertAt =
+        editing.budgetInsertAt === undefined || editing.budgetInsertAt >= catIdxs.length
+          ? (catIdxs[catIdxs.length - 1] ?? -1) + 1
+          : catIdxs[editing.budgetInsertAt]!;
+      budgets.splice(insertAt, 0, entry);
+      dispatch({
+        type: "SET_BUDGETS",
+        budgets,
+        categoryTargets: state.week.categoryTargets,
+        weekday: todayWeekday,
+        urgent,
+      });
+    }
     setEditing(null);
   };
   const removeTpl = (id: string): void => {
@@ -306,7 +358,8 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
         {/* Week Plan is two columns (§11.8): budgets LEFT, the week itself RIGHT. */}
         <div className={mode === "week" ? "wk-columns" : "wk-col-main"}>
           {mode === "week" && (
-            <BudgetPanel state={state} dispatch={dispatch} locked={locked} urgent={urgent} todayWeekday={todayWeekday} onBack={onBack} escActive={!anyOverlay} />
+            <BudgetPanel state={state} dispatch={dispatch} locked={locked} urgent={urgent} todayWeekday={todayWeekday} onBack={onBack} escActive={!anyOverlay}
+              onAddForCategory={(categoryId, atIndex) => setEditing({ new: true, seed: { categoryId }, budgetInsertAt: atIndex })} />
           )}
 
           <div className="wk-col-main">
@@ -563,6 +616,7 @@ function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment
   useEscClose(onClose);
   const isNew = template === null;
   const sp = useTaskSpec(template ?? seed ?? {}, minFragment);
+  const { headFor, addActivity } = useHeads();
   const [weekdays, setWeekdays] = useState<number[]>(template?.weekdays ?? seedWeekdays ?? [1, 2, 3, 4, 5]);
   const [err, setErr] = useState<string | null>(null);
   const toggleDay = (d: number): void => setWeekdays((w) => (w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort()));
@@ -595,6 +649,11 @@ function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment
       return setErr("The range's end is before its start.");
     const r = sp.resolve();
     if ("error" in r) return setErr(r.error);
+    // §11.8a: a sub-head (and, transitively, a brand-new head/category) typed
+    // here is registered exactly like the New Task drawer does — the shared
+    // SubheadField already resolved `r.spec.headId` to the right (category,
+    // name) PATH id; this just persists the (head, sub-head) pair.
+    if (headFor(r.spec.activityId) === undefined) addActivity(r.spec.headId, r.spec.activityId);
     const validity = buildValidity();
     onSave({
       id: template?.id ?? `tpl-${Date.now().toString(36)}`,
@@ -655,7 +714,14 @@ function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment
           <button className="primary" onClick={save}>{isNew ? "Add" : "Save"}</button>
           <button className="cancel-accent" onClick={onClose}>Cancel</button>
           <span style={{ flex: 1 }} />
-          {!isNew && <button className="cancel-accent delete-btn" onClick={() => onDelete(template!.id)} data-tip="Delete template">Delete</button>}
+          {/* §11.4 revised 2026-07-21: Sleep's template is undeletable — the
+           * head of the day, pinned same as its BudgetPanel row. The
+           * reducer's own SET_WEEK_PLAN guard would re-inject it even if this
+           * were somehow bypassed, but hiding the button avoids a visibly
+           * "successful" delete that silently does nothing. */}
+          {!isNew && template!.id !== SLEEP_TEMPLATE_ID && (
+            <button className="cancel-accent delete-btn" onClick={() => onDelete(template!.id)} data-tip="Delete template">Delete</button>
+          )}
         </div>
       </div>
     </div>

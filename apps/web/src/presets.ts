@@ -24,7 +24,7 @@
  * shipped defaults, since both are pure and used by multiple surfaces.
  */
 
-import { SLEEP_ID, NAP_ID, FOOD_ID, MEDITATION_ID, EXERCISE_ID, LEARNING_ID, headName } from "@maxtellar/core";
+import { SLEEP_ID, NAP, FOOD_ID, MEDITATION_ID, EXERCISE_ID, LEARNING_ID, headName } from "@maxtellar/core";
 import type { State, TimingType, WeekTemplate } from "@maxtellar/core";
 import { templateValidOn, weekDayShape } from "@maxtellar/core";
 
@@ -32,12 +32,19 @@ export type BudgetSource = "flat" | "weekPlan" | "settings";
 export type AnchorSource = "flat" | "weekPlan";
 
 export interface PresetConfig {
-  /** Stable row id — the head's PATH id (one preset per head; re-adding a
-   * removed head's preset reuses the same id, no duplicates). */
+  /** Stable row id. Usually the head's PATH id (one preset per head;
+   * re-adding a removed head's preset reuses the same id, no duplicates) —
+   * EXCEPT Sleep/Nap (revised 2026-07-19): both are presets for the SAME
+   * head (`SLEEP_ID`) now that Nap is a sub-head, not its own head, so Nap's
+   * `id` is synthesized (`${SLEEP_ID}::Nap`) to stay distinct from Sleep's
+   * (`SLEEP_ID`). `id` is opaque everywhere it's used (dnd-kit sort key,
+   * update/remove lookup) — nothing assumes `id === headId`. */
   id: string;
   headId: string;
-  /** Pill label / seed title. Title is user-editable at log time unless
-   * `titleLocked` (Sleep/Nap keep a fixed title, matching §2.9). */
+  /** Pill label / seed title, and — for Sleep/Nap specifically — the
+   * sub-head `resolvePreset` resolves to (`subhead: p.label`, below). Title
+   * is user-editable at log time unless `titleLocked` (Sleep/Nap keep a
+   * fixed title, matching §2.9). */
   label: string;
   titleLocked: boolean;
   timing: TimingType;
@@ -97,8 +104,10 @@ export const SHIPPED_PRESETS: PresetConfig[] = [
     keywords: ["learning", "study", "studying", "course", "practice"],
   },
   {
-    id: NAP_ID,
-    headId: NAP_ID,
+    // Nap is a Sleep sub-head now, not its own head (revised 2026-07-19) — see
+    // the `id` field comment above for why this can't just be `SLEEP_ID`.
+    id: `${SLEEP_ID}::${NAP}`,
+    headId: SLEEP_ID,
     label: "Nap",
     titleLocked: true,
     timing: "unscheduled",

@@ -18,13 +18,14 @@ import { EodButton } from "./components/EodButton";
 import { OffPeriodControl } from "./components/OffPeriodControl";
 import { WeekView } from "./components/WeekView";
 import { SnapToast } from "./SnapToast";
+import { TooltipHost } from "./TooltipHost";
 import { PomodoroModal } from "./components/PomodoroModal";
 import { AlarmCenter } from "./components/AlarmCenter";
 import { useAlarms } from "./useAlarms";
 import { useManagedTime } from "./useManagedTime";
 import { GapFillModal } from "./components/GapFillModal";
-import { LOST_HOURS_ID, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
-import type { PomodoroConfig } from "@maxtellar/core";
+import { LOST_HOURS_ID, SLEEP_TEMPLATE_ID, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
+import type { PomodoroConfig, TimingType, EndDayOffset } from "@maxtellar/core";
 import { fmtDur } from "./time";
 import { useSettings, type AiLevels, type AlarmBehavior, type GridGranularity, type TimeFormat } from "./settings";
 import type { PresetConfig } from "./presets";
@@ -162,9 +163,16 @@ export function App(): JSX.Element {
     alarmBehavior: AlarmBehavior;
     alarmSound: SoundChoice;
     customSounds: CustomSound[];
-    /** §11.4 Sleep is edited here too (SET_SLEEP_BUDGET) — core state, so it needs
-     * the same revert as minFragment/openCap/tailFloor. */
+    /** §11.4 Sleep is edited here too (SET_SLEEP_BUDGET) — core state, so it
+     * needs the same revert as minFragment/openCap/tailFloor. Revised
+     * 2026-07-21: the full trio (timing/anchors), not just the budget number
+     * — Settings edits the same real WeekTemplate BudgetPanel/Calendar do
+     * now, so a Cancel must restore all of it, not just minutes. */
     sleepMinutes: number;
+    sleepTiming: TimingType | undefined;
+    sleepAnchorStartTod: number | undefined;
+    sleepAnchorEndTod: number | undefined;
+    sleepAnchorEndDayOffset: EndDayOffset | undefined;
   }
   const [settingsSnapshot, setSettingsSnapshot] = useState<SettingsSnapshot | null>(null);
   const openSettings = (): void => {
@@ -187,6 +195,10 @@ export function App(): JSX.Element {
         alarmSound: settings.alarmSound,
         customSounds: settings.customSounds,
         sleepMinutes: state.week.sleepMinutes,
+        sleepTiming: state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID)?.timing,
+        sleepAnchorStartTod: state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID)?.anchorStartTod,
+        sleepAnchorEndTod: state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID)?.anchorEndTod,
+        sleepAnchorEndDayOffset: state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID)?.anchorEndDayOffset,
       });
     }
     setSettingsOpen(true);
@@ -201,7 +213,26 @@ export function App(): JSX.Element {
       if (s.minFragment !== state.minFragment) dispatch({ type: "SET_MIN_FRAGMENT", minutes: s.minFragment });
       if (s.openExtentCap !== state.openExtentCap) dispatch({ type: "SET_OPEN_CAP", minutes: s.openExtentCap });
       if (s.semiTailFloor !== state.semiTailFloor) dispatch({ type: "SET_TAIL_FLOOR", minutes: s.semiTailFloor });
-      if (s.sleepMinutes !== state.week.sleepMinutes) dispatch({ type: "SET_SLEEP_BUDGET", minutes: s.sleepMinutes });
+      // §11.4 (revised 2026-07-21): revert the WHOLE trio, not just minutes —
+      // Settings now edits the same real Sleep template BudgetPanel/Calendar
+      // do, so a Cancel must restore timing/anchors too, or a live edit to
+      // those would survive Esc/scrim/Cancel while the budget alone reverted.
+      const curTpl = state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID);
+      const sleepChanged = s.sleepMinutes !== state.week.sleepMinutes
+        || s.sleepTiming !== curTpl?.timing
+        || s.sleepAnchorStartTod !== curTpl?.anchorStartTod
+        || s.sleepAnchorEndTod !== curTpl?.anchorEndTod
+        || s.sleepAnchorEndDayOffset !== curTpl?.anchorEndDayOffset;
+      if (sleepChanged) {
+        dispatch({
+          type: "SET_SLEEP_BUDGET",
+          minutes: s.sleepMinutes,
+          ...(s.sleepTiming !== undefined ? { timing: s.sleepTiming } : {}),
+          ...(s.sleepAnchorStartTod !== undefined ? { anchorStartTod: s.sleepAnchorStartTod } : {}),
+          ...(s.sleepAnchorEndTod !== undefined ? { anchorEndTod: s.sleepAnchorEndTod } : {}),
+          ...(s.sleepAnchorEndDayOffset !== undefined ? { anchorEndDayOffset: s.sleepAnchorEndDayOffset } : {}),
+        });
+      }
       settings.setTimeFormat(s.timeFormat);
       settings.setGridGranularity(s.gridGranularity);
       settings.setDevSandbox(s.devSandboxVal);
@@ -527,6 +558,7 @@ export function App(): JSX.Element {
           openExtentCap={state.openExtentCap}
           semiTailFloor={state.semiTailFloor}
           sleepMinutes={state.week.sleepMinutes}
+          sleepTemplate={state.week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID)}
           offDays={state.week.offDays}
           dispatch={(e) => void dispatch(e)}
           onCancel={revertSettings}
@@ -546,6 +578,7 @@ export function App(): JSX.Element {
       <AlarmCenter alarms={alarms} onDismiss={dismissAlarm} />
       {error && <div className="error-toast">{error}</div>}
       <SnapToast text={noticeToast} />
+      <TooltipHost />
       {splashPhase !== "gone" && <Splash leaving={splashPhase === "leave"} />}
     </div>
   );

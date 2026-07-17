@@ -23,7 +23,8 @@ import {
   CORE_WORK,
   MIN_PER_DAY,
   SELF_MANAGEMENT_ID,
-  SLEEP_HEAD,
+  SLEEP_ID,
+  SLEEP_TEMPLATE_ID,
   headName,
   weekBudgetValidity,
   weekDayShape,
@@ -32,12 +33,17 @@ import {
   snapTo24h,
   fixedShare,
 } from "@maxtellar/core";
+import type { TimingType, EndDayOffset } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { useHeads } from "../heads";
+import { useSettings } from "../settings";
 import { parseCasualDuration } from "../casualTime";
 import { fmtDurUnits } from "../time";
 import { SnapToast, useSnapToast } from "../SnapToast";
 import { StepperField } from "./StepperField";
+import { AddCircleButton } from "./AddCircleButton";
+import { HoverInsertRows } from "./HoverInsertRows";
+import { SleepTrioFields } from "./SleepTrioFields";
 
 const WD = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const QUOTA_LABEL: Record<QuotaType, string> = { atLeast: "at least", atMost: "at most", exact: "exact" };
@@ -52,11 +58,22 @@ interface Props {
   onBack: () => void;
   /** False while the host screen has an overlay up — that overlay owns Esc. */
   escActive: boolean;
+  /** §11.8a (revised 2026-07-20, HoverInsertRows): opens the Add Template
+   * drawer seeded with this category (a brand-new head it creates is pinned
+   * there), inserting the resulting budget line at `atIndex` WITHIN that
+   * category's own head list (0 = first). Triggered by hovering the empty
+   * "no X budgets" row (index always 0) or a budgeted row's top/bottom edge. */
+  onAddForCategory: (categoryId: string, atIndex: number) => void;
 }
 
-export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onBack, escActive }: Props): JSX.Element {
-  const { plannableHeads, categories, categoryFor } = useHeads();
+export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onBack, escActive, onAddForCategory }: Props): JSX.Element {
+  const { plannableHeads, categories, categoryFor, registry, addActivity } = useHeads();
+  const { timeFormat } = useSettings();
+  const hour12 = timeFormat === "12h";
+  const [addingSubhead, setAddingSubhead] = useState<string | null>(null);
+  const [newSubhead, setNewSubhead] = useState("");
   const week = state.week;
+  const sleepTpl = week.templates.find((t) => t.id === SLEEP_TEMPLATE_ID);
   const plannedDays = useMemo(
     () => [0, 1, 2, 3, 4, 5, 6].filter((d) => !week.offDays.includes(d)),
     [week.offDays],
@@ -118,18 +135,30 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
 
   /* --------------------------- edit handlers ---------------------------- */
 
-  const setSleep = (minutes: number): void => {
+  /** §11.4 (revised 2026-07-21): the trio's budget edit, with the same
+   * snap-to-24h chain every absolute head gets — probes against `week.budgets`
+   * with Sleep's REAL entry swapped in (no more `sleepMinutes`-only probe;
+   * that field stopped being what the day-shape math reads). */
+  const setSleep = (minutes: number, timing?: TimingType, anchors?: { start: number | undefined; end: number | undefined; dayOffset: EndDayOffset | undefined }): void => {
     let val = Math.max(0, Math.min(1440, minutes));
-    const probe = { ...week, sleepMinutes: val };
+    const withVal = (v: number): HeadBudget[] =>
+      week.budgets.map((b) => (b.headId === SLEEP_ID ? { ...b, minutes: v } : b));
     for (const wd of plannedDays) {
-      const shape = weekDayShape(probe, wd);
+      const shape = weekDayShape({ ...week, budgets: withVal(val) }, wd);
       if (shape.delta < 0) {
-        const a = snapTo24h(budgetEntries(probe), wd, SLEEP_HEAD);
+        const a = snapTo24h(budgetEntries({ ...week, budgets: withVal(val) }), wd, SLEEP_ID);
         if (a !== null && a < val) val = a;
       }
     }
-    if (val !== minutes) notify(`Snapped Sleep to ${fmtDurUnits(val)} — a day must equal exactly 24h`, SLEEP_HEAD);
-    dispatch({ type: "SET_SLEEP_BUDGET", minutes: val });
+    if (val !== minutes) notify(`Snapped Sleep to ${fmtDurUnits(val)} — a day must equal exactly 24h`, SLEEP_ID);
+    dispatch({
+      type: "SET_SLEEP_BUDGET",
+      minutes: val,
+      ...(timing !== undefined ? { timing } : {}),
+      ...(anchors?.start !== undefined ? { anchorStartTod: anchors.start } : {}),
+      ...(anchors?.end !== undefined ? { anchorEndTod: anchors.end } : {}),
+      ...(anchors?.dayOffset !== undefined ? { anchorEndDayOffset: anchors.dayOffset } : {}),
+    });
   };
 
   /** Absolute minutes (or weekly quota) edit with the full snap chain. */
@@ -324,7 +353,9 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
     });
 
   const flashCls = (headId: string): string => (flash?.headId === headId ? " bp-flash" : "");
-  const catOfFlash = flash ? (flash.headId === SLEEP_HEAD ? null : week.budgets.find((b) => b.headId === flash.headId)?.categoryId) : null;
+  // §11.4 revised 2026-07-21: Sleep now has a real categoryId (Recharging) in
+  // week.budgets like any other head — no more special-case null here.
+  const catOfFlash = flash ? week.budgets.find((b) => b.headId === flash.headId)?.categoryId : null;
 
   const badDays = validity.days.filter((d) => !d.ok || !d.coreFit.ok || d.categories.some((c) => !c.ok)).map((d) => d.weekday);
 
@@ -349,14 +380,71 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
         <button className="link-btn" onClick={toggleAll}>{allCollapsed ? "Expand all" : "Collapse all"}</button>
       </div>
 
+      <div className="bp-gauge">
+        <h4 className="bp-gauge-title">{WD[selWd]} — the 24h wall</h4>
+        <div className={`bp-bar${shape.delta < 0 ? " over" : ""}`} role="img" aria-label={`24 hour allocation bar for ${WD[selWd]}`}>
+          {shape.lines.filter((l) => l.minutes > 0).map((l) => (
+            <div key={l.headId} className={`bp-seg${flashCls(l.headId)}`} data-cat={l.categoryId}
+              style={{ width: `${(Math.min(l.minutes, MIN_PER_DAY) / MIN_PER_DAY) * 100}%` }}
+              data-tip={`${headName(l.headId)} · ${fmtDurUnits(l.minutes)}${l.pct !== undefined ? ` (${l.pct}%)` : ""}`} />
+          ))}
+        </div>
+        <div className={`bp-delta num${shape.ok ? " ok" : ""}`}>
+          {shape.ok
+            ? `Balanced — exactly 24h ✓`
+            : shape.delta > 0
+              ? `needs ${fmtDurUnits(shape.delta)} more`
+              : `over by ${fmtDurUnits(-shape.delta)}`}
+        </div>
+        <div className="bp-facts">
+          <div className="bp-fact"><span>netCore</span><span className="num">{fmtDurUnits(shape.netCore)}</span></div>
+          {shape.lines.some((l) => l.pct !== undefined) && (
+            <div className="bp-fact">
+              <span>core %s</span>
+              <span className={`num${shape.coreFit.ok ? "" : " bp-fit-warn"}`}>
+                {Math.round(shape.coreFit.pctSum * 10) / 10}% / {Math.round(shape.coreFit.requiredPctSum * 10) / 10}%{shape.coreFit.ok ? " ✓" : ""}
+              </span>
+            </div>
+          )}
+          {shape.categories.map((c) => (
+            <div key={c.categoryId} className="bp-fact">
+              <span><i className="bp-dot" data-cat={c.categoryId} />{c.categoryId}</span>
+              <span className="num">
+                {fmtDurUnits(c.minutes)}
+                {c.target !== undefined && <span className={c.ok ? "bp-fit-ok" : "bp-fit-warn"}> / {fmtDurUnits(c.target)}{c.ok ? " ✓" : " ✗"}</span>}
+              </span>
+            </div>
+          ))}
+        </div>
+        {badDays.length > 0 && (
+          <div className="form-warning" role="status">
+            {badDays.map((d) => WD[d]).join(", ")} {badDays.length === 1 ? "does" : "do"} not balance to exactly 24h — Start Week stays gated until every planned day does.
+          </div>
+        )}
+      </div>
+
       <div className="bp-panes">
         <div className="bp-outliner">
-          {/* Sleep — the head of the day (pinned, §11.4). */}
-          <div className={`bp-row bp-pinned${flashCls(SLEEP_HEAD)}`}>
-            <span className="bp-pin" data-tip="Pinned — Sleep is the head of the day (synced with Settings)">◆</span>
+          {/* Sleep — the head of the day (pinned, §11.4; revised 2026-07-21: a
+           * real WeekTemplate now, so the trio — not just a budget — lives
+           * here. Settings-grade: editable even under the mid-week lock, same
+           * as before. */}
+          <div className={`bp-row bp-pinned bp-pinned-trio${flashCls(SLEEP_ID)}`}>
+            <span className="bp-pin" data-tip="Pinned — Sleep is the head of the day (synced with Settings and the Calendar)">◆</span>
             <span className="bp-name">Sleep</span>
-            {/* Settings-grade (§11.4): editable even under the mid-week lock. */}
-            <DurInput ariaLabel="Sleep budget" value={week.sleepMinutes} onCommit={(m) => { if (m !== null) setSleep(m); }} />
+            <SleepTrioFields
+              hour12={hour12}
+              value={{
+                timing: sleepTpl?.timing ?? "budgeted",
+                budget: sleepTpl?.budget,
+                anchorStartTod: sleepTpl?.anchorStartTod,
+                anchorEndTod: sleepTpl?.anchorEndTod,
+                anchorEndDayOffset: sleepTpl?.anchorEndDayOffset,
+              }}
+              onChange={(next) => setSleep(next.budget ?? sleepTpl?.budget ?? 0, next.timing, {
+                start: next.anchorStartTod, end: next.anchorEndTod, dayOffset: next.anchorEndDayOffset,
+              })}
+            />
           </div>
 
           {categories.map((cat) => {
@@ -378,102 +466,139 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
                     <span className="bp-fit-warn" data-tip={`Hard fit: heads must total exactly ${fmtDurUnits(target)} (now ${fmtDurUnits(cs.minutes)})`}>✗</span>
                   )}
                 </div>
-                {!isCollapsed && heads.map((b) => {
-                  const line = lineFor(b.headId);
-                  const pinned = b.headId === SELF_MANAGEMENT_ID;
-                  const onDay = b.weekdays.includes(selWd);
-                  return (
-                    <div key={b.headId} className={`bp-head${flashCls(b.headId)}`}>
-                      <div className={`bp-row bp-head-row${onDay ? "" : " bp-offday"}`}
-                        draggable={!locked && !pinned}
-                        onDragStart={() => { dragId.current = b.headId; }}
-                        onDragOver={(e) => e.preventDefault()}
-                        onDrop={() => dropOn(b.headId)}>
-                        {pinned
-                          ? <span className="bp-pin" data-tip="Pinned — Self-Management is protected overhead (subtracted before the residual)">◆</span>
-                          : <span className="bp-drag" data-tip="Drag to re-rank (fill order at SOD)">⋮⋮</span>}
-                        {!pinned && (
-                          <span className="bp-arrows">
-                            <button aria-label={`Move ${headName(b.headId)} up`} disabled={locked} onClick={() => move(b.headId, -1)}>▲</button>
-                            <button aria-label={`Move ${headName(b.headId)} down`} disabled={locked} onClick={() => move(b.headId, 1)}>▼</button>
-                          </span>
-                        )}
-                        <button className="bp-name bp-head-name" onClick={() => setExpanded(expanded === b.headId ? null : b.headId)}>
-                          {headName(b.headId)}
-                        </button>
-                        {b.kind === "percent" && (
-                          <>
-                            <PctInput ariaLabel={`${headName(b.headId)} percent`} value={b.pct ?? 0} disabled={locked} onCommit={(p) => setHeadPct(b.headId, p)} />
-                            <span className="bp-badge num" data-tip="Live-elastic: % of netCore, reflows as overhead changes">
-                              → {fmtDurUnits(line?.minutes ?? 0)}
-                            </span>
-                          </>
-                        )}
-                        {b.kind === "absolute" && (
-                          <DurInput ariaLabel={`${headName(b.headId)} daily budget`} value={fixedShare(b, selWd) || (b.minutes ?? 0)} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
-                        )}
-                        {b.kind === "weekly" && (
-                          <>
-                            <DurInput ariaLabel={`${headName(b.headId)} weekly quota`} value={b.quotaMinutes ?? 0} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
-                            <span className="bp-badge num" data-tip={`Weekly quota (${QUOTA_LABEL[b.quotaType ?? "atLeast"]}) — ${WD[selWd]}'s share`}>
-                              /wk · {fmtDurUnits(onDay ? weeklyShare(b, selWd) : 0)}
-                            </span>
-                          </>
-                        )}
-                        {!onDay && <span className="bp-badge">not {WD[selWd]}</span>}
-                      </div>
-                      {expanded === b.headId && (
-                        <div className="bp-editor">
-                          <div className="field">
-                            <label>Budget kind</label>
-                            <div className="type-chips" role="radiogroup" aria-label="Budget kind">
-                              <button type="button" className={`type-chip${b.kind === "absolute" ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => setKind(b.headId, "absolute")}>Daily hours</button>
-                              {b.categoryId === CORE_WORK && !pinned && (
-                                <button type="button" className={`type-chip${b.kind === "percent" ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => setKind(b.headId, "percent")} data-tip="% of netCore — only Core Work heads get this">% of core</button>
-                              )}
-                              <button type="button" className={`type-chip${b.kind === "weekly" ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => setKind(b.headId, "weekly")}>Weekly quota</button>
-                            </div>
+                {!isCollapsed && (
+                  <HoverInsertRows
+                    items={heads}
+                    keyFor={(b) => b.headId}
+                    addLabel={`Add a head to ${cat}`}
+                    emptyLabel={`no ${cat} budgets`}
+                    disabled={locked}
+                    onInsert={(atIndex) => onAddForCategory(cat, atIndex)}
+                    renderRow={(b) => {
+                      const line = lineFor(b.headId);
+                      const pinned = b.headId === SELF_MANAGEMENT_ID;
+                      const onDay = b.weekdays.includes(selWd);
+                      return (
+                        <div key={b.headId} className={`bp-head${flashCls(b.headId)}`}>
+                          <div className={`bp-row bp-head-row${onDay ? "" : " bp-offday"}`}
+                            draggable={!locked && !pinned}
+                            onDragStart={() => { dragId.current = b.headId; }}
+                            onDragOver={(e) => e.preventDefault()}
+                            onDrop={() => dropOn(b.headId)}>
+                            {pinned
+                              ? <span className="bp-pin" data-tip="Pinned — Self-Management is protected overhead (subtracted before the residual)">◆</span>
+                              : <span className="bp-drag" data-tip="Drag to re-rank (fill order at SOD)">⋮⋮</span>}
+                            {!pinned && (
+                              <span className="bp-arrows">
+                                <button aria-label={`Move ${headName(b.headId)} up`} disabled={locked} onClick={() => move(b.headId, -1)}>▲</button>
+                                <button aria-label={`Move ${headName(b.headId)} down`} disabled={locked} onClick={() => move(b.headId, 1)}>▼</button>
+                              </span>
+                            )}
+                            <button className="bp-name bp-head-name" onClick={() => setExpanded(expanded === b.headId ? null : b.headId)}>
+                              {headName(b.headId)}
+                            </button>
+                            {b.kind === "percent" && (
+                              <>
+                                <PctInput ariaLabel={`${headName(b.headId)} percent`} value={b.pct ?? 0} disabled={locked} onCommit={(p) => setHeadPct(b.headId, p)} />
+                                <span className="bp-badge num" data-tip="Live-elastic: % of netCore, reflows as overhead changes">
+                                  → {fmtDurUnits(line?.minutes ?? 0)}
+                                </span>
+                              </>
+                            )}
+                            {b.kind === "absolute" && (
+                              <DurInput ariaLabel={`${headName(b.headId)} daily budget`} value={fixedShare(b, selWd) || (b.minutes ?? 0)} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
+                            )}
+                            {b.kind === "weekly" && (
+                              <>
+                                <DurInput ariaLabel={`${headName(b.headId)} weekly quota`} value={b.quotaMinutes ?? 0} disabled={locked} onCommit={(m) => { if (m !== null) setHeadValue(b.headId, m); }} />
+                                <span className="bp-badge num" data-tip={`Weekly quota (${QUOTA_LABEL[b.quotaType ?? "atLeast"]}) — ${WD[selWd]}'s share`}>
+                                  /wk · {fmtDurUnits(onDay ? weeklyShare(b, selWd) : 0)}
+                                </span>
+                              </>
+                            )}
+                            {!onDay && <span className="bp-badge">not {WD[selWd]}</span>}
                           </div>
-                          {b.kind === "weekly" && (
-                            <div className="field">
-                              <label>Quota type</label>
-                              <div className="type-chips" role="radiogroup" aria-label="Quota type">
-                                {(["atLeast", "atMost", "exact"] as QuotaType[]).map((q) => (
-                                  <button key={q} type="button" className={`type-chip${(b.quotaType ?? "atLeast") === q ? " active" : ""}`} data-status="semi-head" disabled={locked} onClick={() => setQuotaType(b.headId, q)}>
-                                    {QUOTA_LABEL[q]}
-                                  </button>
-                                ))}
+                          {/* §11.8a: read-only sub-heads under the head, plus its own
+                           * `+` to grow the registry only (no template/task made). */}
+                          <div className="bp-subheads">
+                            {(registry[b.headId] ?? []).map((sub) => (
+                              <span key={sub} className="bp-subhead-chip">{sub}</span>
+                            ))}
+                            {addingSubhead === b.headId ? (
+                              <input
+                                className="bp-subhead-input"
+                                autoFocus
+                                aria-label={`New sub-head for ${headName(b.headId)}`}
+                                value={newSubhead}
+                                placeholder="Sub-head name…"
+                                onChange={(e) => setNewSubhead(e.target.value)}
+                                onKeyDown={(e) => {
+                                  if (e.key === "Escape") { e.stopPropagation(); setAddingSubhead(null); setNewSubhead(""); }
+                                }}
+                                onBlur={() => {
+                                  if (newSubhead.trim()) addActivity(b.headId, newSubhead.trim());
+                                  setAddingSubhead(null);
+                                  setNewSubhead("");
+                                }}
+                              />
+                            ) : (
+                              <AddCircleButton label={`Add a sub-head to ${headName(b.headId)}`} tip="Add a sub-head to this head" size={18}
+                                onClick={() => setAddingSubhead(b.headId)} />
+                            )}
+                          </div>
+                          {expanded === b.headId && (
+                            <div className="bp-editor">
+                              <div className="field">
+                                <label>Budget kind</label>
+                                <div className="type-chips" role="radiogroup" aria-label="Budget kind">
+                                  <button type="button" className={`type-chip${b.kind === "absolute" ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => setKind(b.headId, "absolute")}>Daily hours</button>
+                                  {b.categoryId === CORE_WORK && !pinned && (
+                                    <button type="button" className={`type-chip${b.kind === "percent" ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => setKind(b.headId, "percent")} data-tip="% of netCore — only Core Work heads get this">% of core</button>
+                                  )}
+                                  <button type="button" className={`type-chip${b.kind === "weekly" ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => setKind(b.headId, "weekly")}>Weekly quota</button>
+                                </div>
+                              </div>
+                              {b.kind === "weekly" && (
+                                <div className="field">
+                                  <label>Quota type</label>
+                                  <div className="type-chips" role="radiogroup" aria-label="Quota type">
+                                    {(["atLeast", "atMost", "exact"] as QuotaType[]).map((q) => (
+                                      <button key={q} type="button" className={`type-chip${(b.quotaType ?? "atLeast") === q ? " active" : ""}`} data-status="semi-head" disabled={locked} onClick={() => setQuotaType(b.headId, q)}>
+                                        {QUOTA_LABEL[q]}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+                              <div className="field">
+                                <label>Planned on</label>
+                                <div className="type-chips" role="group" aria-label={`${headName(b.headId)} weekdays`}>
+                                  {WD.map((w, d) => (
+                                    <button key={d} type="button" className={`type-chip${b.weekdays.includes(d) ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => toggleWeekday(b.headId, d)}>
+                                      {w}
+                                    </button>
+                                  ))}
+                                </div>
+                              </div>
+                              {b.kind !== "percent" && onDay && (
+                                <div className="field">
+                                  <label>{WD[selWd]} override <span className="field-desc">(this weekday only — blank = default)</span></label>
+                                  <DurInput ariaLabel={`${headName(b.headId)} ${WD[selWd]} override`}
+                                    value={b.kind === "weekly" ? b.shares?.[selWd] : b.perDay?.[selWd]}
+                                    placeholder={fmtDurUnits(fixedShare(b, selWd))} allowEmpty disabled={locked}
+                                    onCommit={(m) => setDayOverride(b.headId, m)} />
+                                </div>
+                              )}
+                              <div className="bp-editor-foot">
+                                <button className="cancel-accent delete-btn" disabled={locked} onClick={() => removeHead(b.headId)}>Remove budget</button>
                               </div>
                             </div>
                           )}
-                          <div className="field">
-                            <label>Planned on</label>
-                            <div className="type-chips" role="group" aria-label={`${headName(b.headId)} weekdays`}>
-                              {WD.map((w, d) => (
-                                <button key={d} type="button" className={`type-chip${b.weekdays.includes(d) ? " active" : ""}`} data-status="budgeted" disabled={locked} onClick={() => toggleWeekday(b.headId, d)}>
-                                  {w}
-                                </button>
-                              ))}
-                            </div>
-                          </div>
-                          {b.kind !== "percent" && onDay && (
-                            <div className="field">
-                              <label>{WD[selWd]} override <span className="field-desc">(this weekday only — blank = default)</span></label>
-                              <DurInput ariaLabel={`${headName(b.headId)} ${WD[selWd]} override`}
-                                value={b.kind === "weekly" ? b.shares?.[selWd] : b.perDay?.[selWd]}
-                                placeholder={fmtDurUnits(fixedShare(b, selWd))} allowEmpty disabled={locked}
-                                onCommit={(m) => setDayOverride(b.headId, m)} />
-                            </div>
-                          )}
-                          <div className="bp-editor-foot">
-                            <button className="cancel-accent delete-btn" disabled={locked} onClick={() => removeHead(b.headId)}>Remove budget</button>
-                          </div>
                         </div>
-                      )}
-                    </div>
-                  );
-                })}
-                {!isCollapsed && heads.length === 0 && <div className="bp-empty">no {cat} budgets</div>}
+                      );
+                    }}
+                  />
+                )}
               </div>
             );
           })}
@@ -487,49 +612,6 @@ export function BudgetPanel({ state, dispatch, locked, urgent, todayWeekday, onB
               ))}
             </select>
           </div>
-        </div>
-
-        <div className="bp-gauge">
-          <h4 className="bp-gauge-title">{WD[selWd]} — the 24h wall</h4>
-          <div className={`bp-bar${shape.delta < 0 ? " over" : ""}`} role="img" aria-label={`24 hour allocation bar for ${WD[selWd]}`}>
-            {shape.lines.filter((l) => l.minutes > 0).map((l) => (
-              <div key={l.headId} className={`bp-seg${flashCls(l.headId)}`} data-cat={l.categoryId}
-                style={{ width: `${(Math.min(l.minutes, MIN_PER_DAY) / MIN_PER_DAY) * 100}%` }}
-                data-tip={`${headName(l.headId)} · ${fmtDurUnits(l.minutes)}${l.pct !== undefined ? ` (${l.pct}%)` : ""}`} />
-            ))}
-          </div>
-          <div className={`bp-delta num${shape.ok ? " ok" : ""}`}>
-            {shape.ok
-              ? `Balanced — exactly 24h ✓`
-              : shape.delta > 0
-                ? `needs ${fmtDurUnits(shape.delta)} more`
-                : `over by ${fmtDurUnits(-shape.delta)}`}
-          </div>
-          <div className="bp-facts">
-            <div className="bp-fact"><span>netCore</span><span className="num">{fmtDurUnits(shape.netCore)}</span></div>
-            {shape.lines.some((l) => l.pct !== undefined) && (
-              <div className="bp-fact">
-                <span>core %s</span>
-                <span className={`num${shape.coreFit.ok ? "" : " bp-fit-warn"}`}>
-                  {Math.round(shape.coreFit.pctSum * 10) / 10}% / {Math.round(shape.coreFit.requiredPctSum * 10) / 10}%{shape.coreFit.ok ? " ✓" : ""}
-                </span>
-              </div>
-            )}
-            {shape.categories.map((c) => (
-              <div key={c.categoryId} className="bp-fact">
-                <span><i className="bp-dot" data-cat={c.categoryId} />{c.categoryId}</span>
-                <span className="num">
-                  {fmtDurUnits(c.minutes)}
-                  {c.target !== undefined && <span className={c.ok ? "bp-fit-ok" : "bp-fit-warn"}> / {fmtDurUnits(c.target)}{c.ok ? " ✓" : " ✗"}</span>}
-                </span>
-              </div>
-            ))}
-          </div>
-          {badDays.length > 0 && (
-            <div className="form-warning" role="status">
-              {badDays.map((d) => WD[d]).join(", ")} {badDays.length === 1 ? "does" : "do"} not balance to exactly 24h — Start Week stays gated until every planned day does.
-            </div>
-          )}
         </div>
       </div>
 

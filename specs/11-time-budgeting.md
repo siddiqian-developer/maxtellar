@@ -23,10 +23,10 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
   order is user-controllable** (§11.1a) and is the order everything category-grouped renders in
   (registry screen, budgeting panels). **All 8 shipped categories are themselves built-in**
   (2026-07-18) — reorderable, never renamed/removed.
-- **Shipped default categories, in order** (the data the app ships with; tree corrected 2026-07-18
-  — the user's list is Category → Head, FLAT, no sub-heads below the head tier except the one
-  pre-existing §2.9 exception noted below):
-  1. **Recharging** — Sleep* · Nap
+- **Shipped default categories, in order** (the data the app ships with; tree corrected 2026-07-18,
+  Sleep/Nap revised 2026-07-19 — the user's list is Category → Head, FLAT, no sub-heads below the
+  head tier except the two §2.9 exceptions noted below):
+  1. **Recharging** — Sleep* [sub-heads: Sleep*, Nap]
   2. **Core Work** — Self-Management* · Strategy and Planning · Research · Project Execution · Job ·
      Sales · Fundraising · Job Search · Marketing · Public Speaking · Investor Hunting · Networking ·
      Other Work #1 · Other Work #2
@@ -37,47 +37,64 @@ Introduce a level **above** heads: **Category → Head → Sub-head** (was Head 
   7. **Wasted Time** — Social Media · Socialization · Entertainment
   8. **Lost Time** — (Lost Hours, the system head, lives here — see below)
 
-  (* = built-in head, §2.10 — undeletable, fixed category, "Food-pattern" plannable: Recharge/
-  Self-Management/Food were already built-in; **Meditation, Exercise, Socialization [the
+  (* = built-in head, §2.10 — undeletable, fixed category, "Food-pattern" plannable: Self-
+  Management/Food were already built-in; **Meditation, Exercise, Socialization [the
   Regeneration one — Not Work's Socialization is an ordinary, separate head], and Learning joined
-  2026-07-18** with the same Food-pattern treatment, §2.10a. **Nap carries NO `*`** — confirmed
-  2026-07-18: Nap is an ORDINARY seeded head, deletable like Rest or Break, demoted from its
-  brief built-in status when Recharge was split.) The tree is **fully flat** — the earlier
-  Kitchen-work-under-Food §2.9 sub-head exception was dropped 2026-07-18 (user: "there are no
-  subheads"); Kitchen work is ONLY a Maintenance head, and NO sub-heads ship in the seed,
-  period. Names locked 2026-07-16 for the
-  original four; expanded to seven 2026-07-17, to eight (Lost Time added, Lost Hours moved into
-  it from Wasted Time) 2026-07-18. "Time Wasted" was renamed "Wasted Time" 2026-07-17. The full
-  seed tree (all built-ins + this list) OVERRIDES any prior seed — re-seeded from scratch
+  2026-07-18** with the same Food-pattern treatment, §2.10a. **Sleep/Nap history**: Recharge →
+  (2026-07-18) two distinct heads Sleep\*/Nap → (2026-07-19, REVERTED back toward the original
+  shape) ONE head `Sleep`\*, with sub-heads `Sleep`\* (also built-in — the marked exception) and
+  `Nap` (ordinary/deletable, seeded but removable like Rest or Break).) The tree is **fully
+  flat** except those two Sleep sub-heads — the earlier Kitchen-work-under-Food §2.9 sub-head
+  exception was dropped 2026-07-18 (user: "there are no subheads"); Kitchen work is ONLY a
+  Maintenance head, and NO OTHER sub-heads ship in the seed, period. Names locked 2026-07-16 for
+  the original four; expanded to seven 2026-07-17, to eight (Lost Time added, Lost Hours moved
+  into it from Wasted Time) 2026-07-18. "Time Wasted" was renamed "Wasted Time" 2026-07-17. The
+  full seed tree (all built-ins + this list) OVERRIDES any prior seed — re-seeded from scratch
   2026-07-18, not merged with earlier example heads. **Existing stores get a one-time seed
-  TOP-UP, not a wipe** (fixed 2026-07-18 — before this, only fresh stores saw the full seed): a
-  `seedVersion` stamp, separate from the path-format stamp, triggers a single merge that adds
-  every missing seed head to the stored registry (seed display order first, the user's own heads
-  after; user heads, sub-heads, ML training, settings and category order all survive). After
-  that merge the §2.1 no-resurrection rule holds — a deleted seed head stays deleted across
-  reloads until the stamp is next bumped.
+  TOP-UP, not a wipe** (fixed 2026-07-18 — before this, only fresh stores saw the full seed;
+  extended 2026-07-19 to also merge in Sleep's two sub-heads and drop a stray `NAP_ID` head key
+  from stores created under the 2026-07-18 shape): a `seedVersion` stamp, separate from the
+  path-format stamp, triggers a single merge that adds every missing seed head to the stored
+  registry (seed display order first, the user's own heads after; user heads, sub-heads, ML
+  training, settings and category order all survive). After that merge the §2.1 no-resurrection
+  rule holds — a deleted seed head/sub-head stays deleted across reloads until the stamp is next
+  bumped (Sleep's `Sleep` sub-head is the one exception: it's re-guaranteed present on every
+  load, like an undeletable head's key, since it's undeletable itself).
 - **Identity is the PATH, not the name.** The same head name may live under two Categories with
   different meaning — e.g. *Socialization* under Regeneration (regenerative, built-in) vs under
   Wasted Time (indulgent, ordinary). A head is `(category, head)`, not a global string. This
   confirms the tree is load-bearing, and the head registry (`heads.tsx`, §2.1) carries a Category
   parent.
 
-### 11.1b Food-pattern built-in HEADS (§2.10a, added 2026-07-18)
+### 11.1b Food-pattern built-in HEADS (§2.10a, added 2026-07-18; Sleep/Nap revised 2026-07-19)
 Sleep/Self-Management/Food/Meditation/Exercise/Socialization[Regeneration]/Learning share one
 treatment, distinct from the system built-ins (Wasted Time/Lost Hours/Off-Periods):
 - **Undeletable, fixed category** — same as every built-in.
 - **Plannable** — schedulable like any ordinary head (no config note), unlike the system built-ins.
-- **Each is its OWN head**, not a sub-head of a parent. **"Recharge" no longer exists** (revised
-  2026-07-18): **Sleep** and **Nap** are two distinct heads directly under Recharging —
-  replacing the earlier model where both were sub-heads of one "Recharge" head distinguished by a
-  `sleepKind` field. **Nap is NOT in this built-in set** (demoted 2026-07-18, matching the user's
-  `*`-marks): it seeds under Recharging but is ordinary/deletable; it stays a shipped preset, and
-  the History editor's Sleep/Nap kind quick-tag offers "Nap" only while the head exists in the
-  registry. `sleepKind` is REMOVED from every task/history type; the head id itself now
-  carries what it used to (`headId === SLEEP_ID` is what the §4.2 SOD precondition counts). No
-  built-in ships with a seeded sub-head (2026-07-18) — sub-heads exist in the schema but are
+- **Each is its OWN head, not a sub-head of a parent** — EXCEPT Sleep/Nap, which went through
+  three shapes:
+  1. **Original**: both were sub-heads of one "Recharge" head, distinguished by a `sleepKind`
+     field on the task/history entry.
+  2. **2026-07-18**: `sleepKind` REMOVED; Sleep and Nap became two distinct built-in heads
+     directly under Recharging, Nap immediately demoted to ordinary/deletable (matching the
+     user's `*`-marks) — the headId itself carried what `sleepKind` used to.
+  3. **2026-07-19 (current, REVERTED back toward the original)**: ONE built-in head, `Sleep` —
+     the head of the day. Under it, two sub-heads: `Sleep` (ALSO built-in/undeletable — the one
+     marked exception to "no built-in ships with a seeded sub-head", below) and `Nap`
+     (ordinary/deletable, same treatment as its 2026-07-18 demotion — it stays a shipped preset,
+     and the History editor's Sleep/Nap kind quick-tag offers "Nap" only while the sub-head
+     exists in the registry under `SLEEP_ID`). **Still no `sleepKind`** — reintroducing a
+     separate tag was considered and rejected; the (headId, activityId) pair already carries the
+     distinction. Every "was this Sleep?" check (the §4.2 SOD precondition, the Analytics sleep-
+     budget "achieved" total) now tests `headId === SLEEP_ID && activityId === SLEEP` — headId
+     alone is insufficient since Nap shares it.
+- No built-in ships with a seeded sub-head (2026-07-18) — sub-heads exist in the schema but are
   added later, by the user, never in the shipped seed (this includes Food, which no longer ships
-  with a "Food"-named sub-head either).
+  with a "Food"-named sub-head either) — **EXCEPT Sleep's own `Sleep` sub-head** (2026-07-19),
+  the one deliberate exception: it must always exist since it's what the day-defining check now
+  keys on, so it gets the same "always present, no resurrection needed" guarantee an undeletable
+  HEAD's registry key gets. `Nap`, Sleep's other sub-head, is NOT this exception — it seeds but
+  stays ordinary/deletable, no different from any other user-added sub-head once it exists.
 
 ### 11.1c The preset system (§2.9/§2.10b, rebuilt 2026-07-18)
 Presets are a **user-editable LIST** (`settings.presetsConfig`), not a fixed set of ids — any
@@ -88,13 +105,21 @@ registry head can be added as a preset, any preset can be removed, and the list 
   **Socialization is explicitly NOT a preset** (removed 2026-07-18) — it stays a plain built-in
   head, just with no preset/quick-add treatment.
 - **Deleting a head prunes its presets** (2026-07-18): removing a head from the registry also
-  removes every preset pointing at it — a preset never dangles on a nonexistent head. (This is
-  how the shipped Nap preset dies if the user deletes the now-ordinary Nap head.)
-- **Each preset row:** `{ headId, label, titleLocked, timing, budgetFlat, budgetSource,
-  startFlat, endFlat, anchorSource }`. `timing` is the preset's own TimingType — tapping the pill
-  sets the drawer/editor to that timing AND fills whichever field(s) §2.5's FIELD_ROLES matrix
-  requires for it (budget for `budgeted`; start+end for `fixed`; start only for `semi-head`; end
-  only for `semi-tail`; nothing for `unscheduled`).
+  removes every preset pointing at it — a preset never dangles on a nonexistent head. (Revised
+  2026-07-19: the shipped Nap preset now dies when the user deletes the `Nap` SUB-head under
+  Sleep, not a head — pruning keys off whether the preset's `(headId, activityId)` pair still
+  resolves, not headId alone, now that Sleep and Nap share one head.)
+- **Each preset row:** `{ id, headId, label, titleLocked, timing, budgetFlat, budgetSource,
+  startFlat, endFlat, anchorSource }`. `id` is USUALLY the head's PATH id (one preset per head)
+  — EXCEPT Sleep/Nap (revised 2026-07-19): both are presets on the SAME head now, so Nap's `id`
+  is synthesized (`${SLEEP_ID}::Nap`) to stay distinct from Sleep's own (`SLEEP_ID`); `id` is
+  opaque everywhere it's used (sort key, lookup) so this costs nothing elsewhere. `label` doubles
+  as the sub-head `resolvePreset` resolves to — the config table's head-name column shows
+  `label`, not `headName(headId)`, for exactly this reason (two rows can share a headId).
+  `timing` is the preset's own TimingType — tapping the pill sets the drawer/editor to that
+  timing AND fills whichever field(s) §2.5's FIELD_ROLES matrix requires for it (budget for
+  `budgeted`; start+end for `fixed`; start only for `semi-head`; end only for `semi-tail`;
+  nothing for `unscheduled`).
 - **Value SOURCE per preset** (configurable, not fixed):
   - `flat` — a fixed number the user set in Settings (minutes for budget; a time-of-day for
     start/end).
@@ -201,11 +226,57 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   so the day re-balances by construction.
 - Self-Management is **never** a percentage (it is overhead, subtracted before the residual).
 
-## 11.4 Sleep — the head of the day
+## 11.4 Sleep — the head of the day (revised 2026-07-21: the trio + real injection)
 - Sleep is a first-class head with an **absolute** budget, part of the 24h sum ("sleep is the head
-  of the day"). Editable in **both** weekly planning and Settings, **synced** (one source of truth).
+  of the day"). Editable from **three** synced surfaces — Settings, BudgetPanel's pinned row, and
+  the Calendar block's own editor (the ordinary `TemplateEditor`, since Sleep is a real template
+  now) — **one source of truth**, kept in sync by the ONE dispatch, `SET_SLEEP_BUDGET`.
 - **One global value, no per-weekday variance** (locked 2026-07-16): every planned day carries the
-  same Sleep budget; editing it from either surface updates the single shared value.
+  same Sleep budget; editing it from any surface updates the single shared value.
+- **Sleep is a REAL, always-present, undeletable `WeekTemplate`** (id `tpl-sleep`,
+  `SLEEP_TEMPLATE_ID`) — no longer a synthetic budget-only line. It genuinely injects at SOD like
+  any other daily template and consumes real scheduler capacity, matching the user's ruling: "Sleep
+  is a task which has to be planned and placed in the spine during the weekly planning. This is
+  non-negotiable." Both `SET_WEEK_PLAN` and `SET_BUDGETS` (which each REPLACE their whole array)
+  re-inject Sleep's template/budget entry if the caller's own list omits it — the same
+  "always-present, no resurrection needed for THIS one" guarantee an undeletable head's registry
+  key gets (§11.1c). The Calendar's `TemplateEditor` hides Sleep's own Delete button.
+- **The trio — start / end / budget — reuses the ordinary timing-type machinery**
+  (`TimingTypeChips`/`FIELD_ROLES`/`RoleField`, §7.0.6), composed as one shared component
+  (`SleepTrioFields.tsx`) so Settings and BudgetPanel render the identical fields, not two
+  hand-rolled widgets (§7.0.5 symmetry). `budgeted` (no anchors) is the practical default and the
+  common case: **you cannot "start" the Sleep task live** — by the time you've fallen asleep the
+  task can't be started, and a genuine "Sleepless Bedtime" (an ordinary Wasted-Time head — lying
+  in bed, unable to sleep, sometimes getting back up to work, sometimes eventually sleeping) means
+  the actual sleep window is unknowable until you wake and can look back. In practice, Sleep is
+  ALWAYS planned in the weekly template (non-negotiable, above) but ALMOST ALWAYS logged as a
+  backlog/gap-fill entry after waking, not started live — the injected instance simply goes
+  unstarted and prunes away like any other template's daily leftover when the user instead
+  backlogs the real span (no special-casing needed anywhere in the SOD/pruning pipeline: the SOD
+  sweep is purely history-driven — `ceremony.ts`'s `isHeadOfDay`/`sodPrecondition` scan
+  `state.history`, never `state.plan` — so an injected-but-unstarted Sleep task can never itself
+  satisfy or interfere with the sweep; only a REAL logged span counts). Switching the trio to
+  `fixed` (both anchors set) is supported for the rarer case of an actually-scheduled sleep window,
+  and places a real block on the Calendar grid like any other fixed template.
+- **Approximate display (`~`) when unanchored**: when the trio's timing isn't `fixed`, BudgetPanel
+  and Settings show `~<budget> — no fixed clock time` instead of blank/dashed start-end fields —
+  the same "~" convention Timeline.tsx already uses for a floating (non-anchored) edge, applied to
+  text rather than a drawn block. The Calendar grid needs no special "~" treatment of its own: it
+  already draws every budgeted (non-fixed) template at wherever `weekPreview` resolves it, exactly
+  like any other budget-only block.
+- **Real budget-math consolidation** (retires the old synthetic line): `week.budgets` carries ONE
+  real entry keyed `SLEEP_ID` (the head, `Recharging/Sleep` — not the OLD bare-name `SLEEP_HEAD`/
+  `SLEEP_CATEGORY` pseudo-identifiers, which are removed). This is now the ONE source both the 24h
+  envelope math (`weekDayShape`/`netCore`) AND the scheduler's injection capacity
+  (`injectTodayDetailed`'s `headIdx`/`remaining` draw-down) read — previously these were two
+  disconnected mechanisms: the synthetic line fed the 24h math but was invisible to injection
+  capacity (a Sleep template would have injected completely uncapped). `sleepEntry()` is retired;
+  `budgetEntries()` now just returns `week.budgets` (already including Sleep) unmodified.
+- **The 24h gate genuinely applies from a fresh install** (ruling 2026-07-21, no exemption
+  widened): `weekBudgetValidity`'s old "empty budgets ⇒ exempt" no longer fires by default, since
+  `week.budgets` is never actually empty (Sleep's own entry is always there). A brand-new app with
+  only Sleep budgeted (8h) is UNBALANCED and Start Week stays correctly gated until the rest of the
+  day is budgeted too — matching §11.2's law by its letter, not a special-cased convenience.
 
 ## 11.5 Timing, pinned vs ranked, and the rank mechanism
 - A weekly head's timing is **`fixed`** (clock-anchored) or **`budgeted`** (flexible fill) **only** —
@@ -246,14 +317,17 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   instantiation path, never dropped); (5) every trim/spill/unredistributable remainder raises
   the universal snap-NOTIFY notice.
 
-## 11.8 UI — beside the calendar in weekly planning (built 2026-07-16)
-- **Two-pane**: a **collapsible outliner** (Category ▸ Head; budgets + % badge inline; drag-rank
-  AND ▲▼ arrows; collapse-all in the pane header) on one side, a **live 24h stacked bar** (the
-  conservation gauge — fills as you allocate, flashes the offending segment on breach) on the
-  other. The existing **week calendar grid** (§4.4/§4.6) remains the placement-preview surface.
+## 11.8 UI — beside the calendar in weekly planning (built 2026-07-16; revised 2026-07-17)
+- **Outliner + gauge are siblings, gauge on top (revised 2026-07-17)**: the pane wrapper
+  (`.bp-panes`) holds only the **collapsible outliner** (Category ▸ Head; budgets + % badge
+  inline; drag-rank AND ▲▼ arrows; collapse-all in the pane header). The **live 24h stacked bar**
+  (the conservation gauge — fills as you allocate, flashes the offending segment on breach) is a
+  **sibling of `.bp-panes`, stacked ABOVE it** — not a grid-column child — so the gauge always
+  reads first regardless of column width. The existing **week calendar grid** (§4.4/§4.6) remains
+  the placement-preview surface, unaffected.
 - **Placement (revised 2026-07-16)**: the toggle is **`[ Week Plan | Calendar ]`** — there is NO
   separate *Budgets* tab. **Week Plan is a two-column screen**: the **LEFT column hosts the budget
-  panel** (outliner + gauge, stacked vertically), the **RIGHT column keeps the week-plan content
+  panel** (gauge above outliner), the **RIGHT column keeps the week-plan content
   as-is** (OFF days, conflicts, the placed-week grid). Heading stays "Weekly Planning". The
   **Start Week button is disabled** (with the gate reason) while §11.2 fails.
 - A **weekday selector** (chips; OFF days disabled) picks which day-shape the bar + roll-ups
@@ -264,11 +338,114 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
   edited entry back to the fit-restoring value (toast names head + rule, flash on row + bar
   segment + Category row); UNDER → never snaps, live indicator only ("needs X more") with the
   Start-Week gate doing the blocking.**
-- **Sleep row is Settings-grade**: editable even under the mid-week structural lock (§11.4 — it
-  syncs with Settings, which is never locked); all other budget edits obey the §4.4 lock
-  (OFF-day window / urgent bypass).
+- **Sleep row is Settings-grade**: the WHOLE trio (timing/start/end/budget) is editable even under
+  the mid-week structural lock (§11.4 — it syncs with Settings, which is never locked; `SET_SLEEP_
+  BUDGET` carries no lock check, unlike `SET_WEEK_PLAN`/`SET_BUDGETS`); all other budget edits obey
+  the §4.4 lock (OFF-day window / urgent bypass).
 - The Heads & Sub-heads config screen assigns each head's **Category** (new heads default to
   Core Work); a budget entry snapshots the category at creation.
+
+## 11.8a Adding heads/sub-heads/templates from the outliner (2026-07-17; category `+` placement
+revised 2026-07-20 — `HoverInsertRows`)
+The budget outliner is now also the entry point for growing the registry and for creating
+recurring templates:
+- **A category's head list is `HoverInsertRows`** (§11.8a1, a shared component) instead of a
+  static list with one persistent `+` in the category header. **Empty category** ("no X
+  budgets"): hovering the WHOLE placeholder row reveals a centered `+` before the label —
+  clicking it is the same "add a head to this category" action the old header `+` was, just
+  relocated (the header itself no longer carries a `+`). **Non-empty category**: hovering a
+  budgeted row's UPPER half reveals a `+` centered on that row's top boundary; hovering its LOWER
+  half reveals one on the bottom boundary. Either click opens the **Add Template drawer**
+  (WeekView's `TemplateEditor`) exactly as the old `+` did (category context carried through, per
+  the bullet below) — the only difference is WHERE the resulting budget line lands: spliced in
+  right above (upper +) or right below (lower +) the hovered head, instead of always appended at
+  the category's end.
+- **Category context carried through** (unchanged from 2026-07-17): the drawer's Sub-head field
+  works exactly as always (free pick/type; ML title→sub-head suggestion) — BUT the "new sub-head's
+  head" picker restricting to that category is a UX bias only, not an identity guarantee: typing a
+  sub-head that already exists under a DIFFERENT head resolves to THAT head regardless of which
+  category's `+` opened the drawer (`SubheadField`'s `derived` always wins). Saving the template
+  does THREE things: registers the (head, sub-head) pair in the shared registry; appends the
+  template to `state.week`; AND, if the RESOLVED head has no budget line yet, splices one for it
+  into `week.budgets` at the position the triggering `+` implied. **Two bugs fixed 2026-07-21**:
+  (1) the spliced entry's `categoryId` is now `categoryFor(resolvedHeadId)` — the head's REAL
+  category — never the seed category the drawer merely opened from (the earlier cut hardcoded the
+  seed's category regardless of what head the save actually produced, so a sub-head resolving to a
+  different category silently landed under the wrong category's outliner); (2) the spliced entry's
+  `minutes` is now the template's OWN resolved budget (a `budgeted`/semi-* timing's `budget`
+  field, or a `fixed` timing's end−start span) instead of an unconditional 60m that discarded
+  whatever the user actually entered — only a genuinely budget-less `unscheduled` timing still
+  falls back to 60m. A head added via a category's own `+` is a budgeting action, so it must show
+  up immediately, in the right category, with the right budget (fixed 2026-07-17 for the first two
+  effects — the outliner-empty bug; position-awareness added 2026-07-20; the category/budget
+  correctness bugs above fixed 2026-07-21). Since the budgeting column and the Calendar both render
+  off the same `state.week`, all three effects are visible immediately in both places (§11.8c).
+- **Under each Head row** (expanded or not, below its budget line): the existing sub-heads for
+  that head are listed read-only, plus an `AddCircleButton` meaning **"add a sub-head to this
+  head"**. It opens a lightweight inline field (no drawer) — type a sub-head name, Enter/blur
+  commits via the registry's `addActivity(headId, name)` (idempotent, same call the drawer's
+  Sub-head field uses when it registers a new pair). This does not create a template or task; it
+  only grows the registry, exactly like typing a brand-new sub-head anywhere else does. This
+  affordance is unaffected by the `HoverInsertRows` change above — it stays a persistent
+  `AddCircleButton`, not hover-revealed (it's a per-row action, not a between-rows insertion).
+- Every `+` in this section uses the shared `AddCircleButton` component (`AddCircleButton.tsx`)
+  already used by the Presets screen — no new add-button styling.
+
+### 11.8a1 `HoverInsertRows` — the shared hover-reveal insert primitive (2026-07-20)
+`apps/web/src/components/HoverInsertRows.tsx` is a generic, reusable component for "add a row at
+this exact spot" on any vertical list — built for the budget outliner's per-category head list,
+explicitly meant to be reused elsewhere a row list wants the same affordance (task lists, etc.).
+- **Contract**: `items`, `keyFor`, `renderRow(item, index)`, `emptyLabel`, `addLabel`,
+  `onInsert(atIndex)` (an index into `items`, 0..length), `disabled?`. It is deliberately dumb — it
+  never reorders or mutates anything itself; it only ever reports WHERE the caller should insert.
+  What "insert" DOES (open a drawer, splice an array, dispatch an event) is entirely the caller's.
+- **Empty state**: the whole placeholder row is one hover target; `+` appears before the label
+  (left-aligned — there's no boundary above/below to center on with zero rows). `onInsert(0)`.
+- **Non-empty — the "seam insert" pattern (named 2026-07-20)**: each row is wrapped so hovering
+  its upper half reveals a `+` centered ON that row's top boundary (`onInsert(index)` — pushes
+  this row and everything after down one), and hovering its lower half reveals one on the bottom
+  boundary (`onInsert(index + 1)`). "Seam insert" names the visual contract precisely: the
+  button's own CENTER coincides EXACTLY with the seam between two rows — not floating inside
+  either one — so it reads as "insert right here, between these two," not as a control belonging
+  to either row. (Fixed 2026-07-20: the first cut used flex `align-items: center` PLUS a
+  compensating negative margin, which fought each other and landed the center ~2px off the seam;
+  the fix aligns the button to the zone's own edge first — `flex-start`/`flex-end`, not `center`
+  — so the negative margin is the only adjustment layered on top instead of colliding with a
+  second one.) Cursor Y within the row decides which half is "hot" (JS-tracked, not pure-CSS
+  `:hover` — a single element can't split by cursor position in CSS alone); the two candidate
+  `+`s stay invisible/click-through until their half is actually hovered, so they never intercept
+  clicks on the row's own controls. Any future list wanting this exact affordance should reuse
+  `HoverInsertRows` rather than re-deriving the seam-centering math.
+- **Not this component's job**: what happens after `onInsert` fires (BudgetPanel opens the Add
+  Template drawer seeded with the category and the insert index, §11.8a) — that logic lives with
+  the caller, keeping `HoverInsertRows` reusable for surfaces where "insert" means something else
+  entirely (e.g. a plain reorderable task list where `onInsert` opens New Task pre-anchored at
+  that rank).
+
+## 11.8b Head → Category UX parity (2026-07-17)
+`TaskSpecFields`/`SubheadField`'s existing **sub-head → head** duality (§7.0.1: "new sub-head's
+head" picker, ML-suggested but never autofilled, always user-confirmed) gets a matching
+**head → category** tier, applied one level up:
+- `TaskSpecInit` gains an optional `categoryId` field alongside `headId`.
+- When the resolved head is **brand-new** (not in the registry), the field set that already shows
+  "New sub-head's head" additionally shows **"New head's category"** — a picker restricted, when
+  opened from a category's `+` (§11.8a), to that one category (pre-selected, not editable in that
+  entry path); opened from any other surface (Presets, Heads & Sub-heads config, drawer used
+  standalone) it is a normal full-category picker with no ML suggestion (there's no signal to
+  suggest from at this tier — category is a coarser, user-decided grouping, not inferred).
+- Exactly like the sub-head tier: **the resolved value is always user-confirmed before save**;
+  nothing autofills a category the user didn't see and could not have changed. This is a UX/entry
+  affordance only — it does not change head identity (`headId` remains the `(category, name)`
+  PATH id, §11.1 — the category picker is really choosing which path the new head is created
+  under).
+
+## 11.8c Sync (2026-07-17)
+The budgeting column (`BudgetPanel`, Week Plan mode) and the Calendar view were already reading
+and writing the same `state.week` / one dispatch (`WeekView` passes both down unchanged) — there
+is no separate calendar store to drift. §11.8a's new add-affordances keep that: a template saved
+from a category's `+` dispatches the same `SET_WEEK_PLAN`-family event the "+ Add template" button
+already uses, so it appears in both the outliner's roll-ups and the placed-week grid the instant
+it's saved, with no extra wiring.
 
 ## 11.9 Data-model deltas (sketch, for the build chat)
 - `Category` tier (id, name, order) above `WeekTemplate.headId`; head registry gains a category.

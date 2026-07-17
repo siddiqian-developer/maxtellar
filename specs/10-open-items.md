@@ -130,3 +130,22 @@ only instances; other `.find(x => x.id === …)` sites resolve real ids in real 
   counterexample is a latent settle/tick bug, not from the day's changes. The failing seed was
   lost to output filtering. Next occurrence will be capturable: record the printed seed +
   shrunk counterexample verbatim, pin it as a regression test, then fix.
+- **DEFERRED (2026-07-21): the Core Work / Upgrading two-way elastic-pool percentage redesign —
+  spec first, implement next, NOT yet built.** User-specified math (verbatim, for the eventual
+  spec pass): `net = 24 − Σ(all categories EXCEPT Core Work and Upgrading) − Self-Management`;
+  this `net` splits BETWEEN "net Core Work" (`= Core Work − Self-Management`) and Upgrading by a
+  user-set percentage pair that must sum to 100 (setting one auto-derives the other); percentage
+  TARGETS are additionally allowed for individual heads AND sub-heads within those two
+  categories, with the rule "the sum of a parent's children must equal the parent's own budget,
+  and if a parent HAS a target, its children are restricted to summing to it (or the target is
+  removed)." A worked example the user gave: with `net = 11h`, Self-Management `1h`, Core Work
+  target `60%` (Upgrading auto-derives `40%`) → net Core Work `= 60% × (11−1)h = 6h`, Upgrading
+  `= 4h`. This is a genuine revision of §11.3's CURRENTLY LOCKED law (today: ONE elastic pool,
+  Core Work only, `netCore = 1440 − Sleep − Σ(non-core) − Self-Management`; percent budgeting
+  exists ONLY at the head tier, never sub-head, §11.6's own note: "Budgets at HEAD level only for
+  now; sub-head depth is §11.10" — this item picks that thread back up). Deliberately NOT
+  implemented in the same turn as the 2026-07-21 bug fixes/smart-input parity/Sleep-trio work — a
+  core-law change this size (touches `netCore`, `resolveDay`, `coreFit`, the snap-restore chain,
+  AND needs a new sub-head-level budget-entry concept that doesn't exist in the schema at all
+  today) needs its own dedicated §11.3 rewrite, reviewed BEFORE code, not folded into an unrelated
+  turn's diff.
