@@ -20,6 +20,19 @@ import { useEscClose } from "../useEscClose";
 import { rehomeActivity } from "../ml/vectorStore";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 import { useHeadSuggestion } from "../ml/useHeadSuggestion";
+import {
+  DndContext,
+  pointerWithin,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  useDraggable,
+  useDroppable,
+  type DragEndEvent,
+} from "@dnd-kit/core";
+import { SortableContext, verticalListSortingStrategy, useSortable, arrayMove, sortableKeyboardCoordinates } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 
 interface Props {
   state: State;
@@ -55,12 +68,205 @@ function usedActivitiesUnderHead(state: State, headId: string): string[] {
  * sub-head used under it, moved to the same target). */
 type ReassignTarget = { headId: string; activityId: string } | { headId: string; activityId: null };
 
+/** §11.1a: one head row — draggable onto another category (dnd-kit
+ * `useDraggable`; drop targets are the category sections, `useDroppable`
+ * below). Built-ins aren't draggable (their category is fixed). */
+function HeadRow({
+  headId,
+  heads,
+  registry,
+  categories,
+  categoryFor,
+  moveHead,
+  headInUse,
+  requestDeleteHead,
+  requestDeleteActivity,
+  activityInUse,
+}: {
+  headId: string;
+  heads: string[];
+  registry: Record<string, string[]>;
+  categories: string[];
+  categoryFor: (h: string) => string;
+  moveHead: (h: string, c: string) => string | null;
+  headInUse: (h: string) => boolean;
+  requestDeleteHead: (h: string) => void;
+  requestDeleteActivity: (h: string, a: string) => void;
+  activityInUse: (h: string, a: string) => boolean;
+}): JSX.Element {
+  const builtIn = BUILT_IN_HEADS.includes(headId);
+  const { attributes, listeners, setNodeRef, transform, isDragging } = useDraggable({
+    id: `head:${headId}`,
+    data: { headId },
+    disabled: builtIn,
+  });
+  const [moveOpen, setMoveOpen] = useState(false);
+  const style = transform
+    ? { transform: `translate3d(${transform.x}px, ${transform.y}px, 0)`, zIndex: 5 }
+    : undefined;
+
+  return (
+    <div ref={setNodeRef} style={style} className={`config-head-row${isDragging ? " dragging" : ""}`}>
+      <div className="config-head-title">
+        {!builtIn && (
+          <span className="bp-drag" data-tip="Drag onto another category to move this head" {...listeners} {...attributes}>⋮⋮</span>
+        )}
+        <span className="config-head-name">{headLabel(headId, heads)}</span>
+        {builtIn && (
+          <span className="built-in-dot" aria-label="Built-in head" data-tip="Built-in — can't be deleted or moved" />
+        )}
+        {BUILT_IN_HEAD_NOTES[headId] && (
+          <span className="config-head-note">{BUILT_IN_HEAD_NOTES[headId]}</span>
+        )}
+        {!builtIn && (
+          <span className="config-move-wrap">
+            <button
+              type="button"
+              className="config-move-btn"
+              aria-label={`Move ${headName(headId)} to another category`}
+              data-tip="Move to another category"
+              onClick={() => setMoveOpen((v) => !v)}
+            >
+              ⇄
+            </button>
+            {moveOpen && (
+              <ul className="config-move-list" role="menu">
+                {categories.filter((c) => c !== categoryFor(headId)).map((c) => (
+                  <li key={c}>
+                    <button
+                      type="button"
+                      role="menuitem"
+                      onClick={() => { moveHead(headId, c); setMoveOpen(false); }}
+                    >
+                      to: {c}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </span>
+        )}
+        {!builtIn && (
+          <button
+            type="button"
+            className="chip-delete"
+            aria-label={`Delete head ${headName(headId)}`}
+            data-tip={
+              headInUse(headId)
+                ? "In use by a task — deleting will ask you to reassign first"
+                : (registry[headId] ?? []).length > 0
+                  ? `Deletes this head and its ${(registry[headId] ?? []).length} sub-head(s) from the registry`
+                  : "Removes this head from the registry"
+            }
+            onClick={() => requestDeleteHead(headId)}
+          >
+            &times;
+          </button>
+        )}
+      </div>
+      <div className="config-activities">
+        {(registry[headId] ?? []).length === 0 && <span className="config-empty">no sub-heads yet</span>}
+        {(registry[headId] ?? []).map((a) =>
+          isBuiltInActivity(headId, a) ? (
+            <span key={a} className="type-chip">
+              {a}
+              <span className="built-in-dot" aria-label="Built-in sub-head" data-tip="Built-in preset — can't be deleted" />
+            </span>
+          ) : (
+            <span key={a} className="type-chip chip-deletable">
+              {a}
+              <button
+                type="button"
+                className="chip-delete"
+                aria-label={`Delete sub-head ${a}`}
+                data-tip={
+                  activityInUse(headId, a)
+                    ? "In use by a task — deleting will ask you to reassign first"
+                    : "Remove this sub-head from the registry"
+                }
+                onClick={() => requestDeleteActivity(headId, a)}
+              >
+                &times;
+              </button>
+            </span>
+          ),
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** §11.1a: one category section — a drop target for head DnD, and itself a
+ * sortable item (category reordering, dragged by its header grip). */
+function CategorySection({
+  category,
+  headsIn,
+  ...rowProps
+}: {
+  category: string;
+  headsIn: string[];
+} & Omit<Parameters<typeof HeadRow>[0], "headId">): JSX.Element {
+  const { setNodeRef: setDropRef, isOver } = useDroppable({ id: `cat:${category}`, data: { category } });
+  const { attributes, listeners, setNodeRef: setSortRef, transform, transition } = useSortable({ id: `catsort:${category}` });
+  const style = { transform: CSS.Transform.toString(transform), transition };
+
+  return (
+    <div ref={setSortRef} style={style} className={`config-cat-section${isOver ? " cat-drop-over" : ""}`}>
+      <div className="config-cat-header">
+        <span className="bp-drag" data-tip="Drag to reorder categories" {...listeners} {...attributes}>⋮⋮</span>
+        <h4>{category}</h4>
+      </div>
+      <div ref={setDropRef} className="config-cat-drop">
+        {headsIn.length === 0 && <span className="config-empty">no heads yet — drag one here, or move one via ⇄</span>}
+        {headsIn.map((h) => <HeadRow key={h} headId={h} {...rowProps} />)}
+      </div>
+    </div>
+  );
+}
+
 export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Element {
-  const { registry, heads, categories, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, moveHead } = useHeads();
+  const { registry, heads, categories, addHead, addActivity, deleteActivity, deleteHead, headFor, categoryFor, moveHead, addCategory, reorderCategories } = useHeads();
   const [newHead, setNewHead] = useState("");
   const [activityHead, setActivityHead] = useState("");
   const [newActivity, setNewActivity] = useState("");
   const [headTouched, setHeadTouched] = useState(false);
+  const [newCategory, setNewCategory] = useState("");
+
+  const dndSensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 4 } }),
+    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
+  );
+
+  /** A category section registers TWO overlapping droppables — the whole-card
+   * `cat:` (head DnD target) and the header-only `catsort:` (category-reorder
+   * target, dnd-kit sortable). `cat:`'s box is much bigger, so `closestCenter`
+   * often wins it even when the drag is a category-reorder — resolve either
+   * id form down to the plain category name here. */
+  const overCategory = (overId: string): string | null =>
+    overId.startsWith("cat:") ? overId.slice(4) : overId.startsWith("catsort:") ? overId.slice(8) : null;
+
+  const onDndEnd = (e: DragEndEvent): void => {
+    const { active, over } = e;
+    if (!over) return;
+    const activeId = String(active.id);
+    const overCat = overCategory(String(over.id));
+    if (overCat === null) return;
+    if (activeId.startsWith("head:")) {
+      moveHead(activeId.slice(5), overCat);
+      return;
+    }
+    if (activeId.startsWith("catsort:")) {
+      const from = categories.indexOf(activeId.slice(8));
+      const to = categories.indexOf(overCat);
+      if (from >= 0 && to >= 0 && from !== to) reorderCategories(arrayMove(categories, from, to));
+    }
+  };
+
+  const submitCategory = (): void => {
+    if (!newCategory.trim()) return;
+    addCategory(newCategory);
+    setNewCategory("");
+  };
 
   const [reassign, setReassign] = useState<ReassignTarget | null>(null);
   const [reassignValue, setReassignValue] = useState("");
@@ -284,85 +490,51 @@ export function HeadsConfigScreen({ state, dispatch, onBack }: Props): JSX.Eleme
         )}
 
         <section className="config-section">
-          <h3>Registry</h3>
-          {[...heads].sort((a, b) => {
-            const aBuiltIn = BUILT_IN_HEADS.includes(a);
-            const bBuiltIn = BUILT_IN_HEADS.includes(b);
-            if (aBuiltIn !== bBuiltIn) return aBuiltIn ? -1 : 1;
-            return 0; // stable: preserves existing relative order within each group
-          }).map((h) => (
-            <div key={h} className="config-head-row">
-              <div className="config-head-title">
-                <span className="config-head-name">{headLabel(h, heads)}</span>
-                {BUILT_IN_HEADS.includes(h) && (
-                  <span className="built-in-dot" aria-label="Built-in head" data-tip="Built-in — can't be deleted" />
-                )}
-                {BUILT_IN_HEAD_NOTES[h] && (
-                  <span className="config-head-note">{BUILT_IN_HEAD_NOTES[h]}</span>
-                )}
-                {/* §11.1 Category tier — every head lives under one Category. Built-ins
-                    keep a fixed category (§11.1a) — no picker for them. */}
-                {!BUILT_IN_HEADS.includes(h) && (
-                  <select
-                    className="config-cat-select"
-                    aria-label={`Category for ${headName(h)}`}
-                    data-tip="Category (§11) — drives budgeting roll-ups and the netCore math"
-                    value={categoryFor(h)}
-                    onChange={(e) => moveHead(h, e.target.value)}
-                  >
-                    {categories.map((c) => (
-                      <option key={c} value={c}>{c}</option>
-                    ))}
-                  </select>
-                )}
-                {!BUILT_IN_HEADS.includes(h) && (
-                  <button
-                    type="button"
-                    className="chip-delete"
-                    aria-label={`Delete head ${headName(h)}`}
-                    data-tip={
-                      headInUse(state, h)
-                        ? "In use by a task — deleting will ask you to reassign first"
-                        : (registry[h] ?? []).length > 0
-                          ? `Deletes this head and its ${(registry[h] ?? []).length} sub-head(s) from the registry`
-                          : "Removes this head from the registry"
-                    }
-                    onClick={() => requestDeleteHead(h)}
-                  >
-                    &times;
-                  </button>
-                )}
-              </div>
-              <div className="config-activities">
-                {(registry[h] ?? []).length === 0 && <span className="config-empty">no sub-heads yet</span>}
-                {(registry[h] ?? []).map((a) =>
-                  isBuiltInActivity(h, a) ? (
-                    <span key={a} className="type-chip">
-                      {a}
-                      <span className="built-in-dot" aria-label="Built-in sub-head" data-tip="Built-in preset — can't be deleted" />
-                    </span>
-                  ) : (
-                    <span key={a} className="type-chip chip-deletable">
-                      {a}
-                      <button
-                        type="button"
-                        className="chip-delete"
-                        aria-label={`Delete sub-head ${a}`}
-                        data-tip={
-                          activityInUse(state, h, a)
-                            ? "In use by a task — deleting will ask you to reassign first"
-                            : "Remove this sub-head from the registry"
-                        }
-                        onClick={() => requestDeleteActivity(h, a)}
-                      >
-                        &times;
-                      </button>
-                    </span>
-                  ),
-                )}
-              </div>
+          <div className="config-section-head-row">
+            <h3>Registry</h3>
+            <div className="config-form-row config-add-cat">
+              <input
+                value={newCategory}
+                onChange={(e) => setNewCategory(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submitCategory(); }}
+                placeholder="New category name"
+                aria-label="New category name"
+              />
+              <button className="primary" onClick={submitCategory} disabled={!newCategory.trim()}>+ Add category</button>
             </div>
-          ))}
+          </div>
+          <p className="config-empty" style={{ marginBottom: 8 }}>
+            Drag a category by its grip (⋮⋮) to reorder. Drag a head onto another category, or use its
+            ⇄ button, to move it — built-ins stay put.
+          </p>
+          {/* pointerWithin, not closestCenter: each category registers TWO droppables
+              (the whole card for head-drop, the header for category-reorder) that
+              overlap in the same screen region. closestCenter picked the big card's
+              far-off center over the small header's near one on short drags —
+              pointerWithin instead picks whichever rect the pointer is actually inside. */}
+          <DndContext sensors={dndSensors} collisionDetection={pointerWithin} onDragEnd={onDndEnd}>
+            <SortableContext items={categories.map((c) => `catsort:${c}`)} strategy={verticalListSortingStrategy}>
+              {categories.map((c) => {
+                const inCat = [...BUILT_IN_HEADS.filter((h) => categoryFor(h) === c), ...heads.filter((h) => !BUILT_IN_HEADS.includes(h) && categoryFor(h) === c)];
+                return (
+                  <CategorySection
+                    key={c}
+                    category={c}
+                    headsIn={inCat}
+                    heads={heads}
+                    registry={registry}
+                    categories={categories}
+                    categoryFor={categoryFor}
+                    moveHead={moveHead}
+                    headInUse={(h) => headInUse(state, h)}
+                    requestDeleteHead={requestDeleteHead}
+                    requestDeleteActivity={requestDeleteActivity}
+                    activityInUse={(h, a) => activityInUse(state, h, a)}
+                  />
+                );
+              })}
+            </SortableContext>
+          </DndContext>
         </section>
       </div>
     </div>

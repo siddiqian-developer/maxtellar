@@ -1320,7 +1320,11 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   background: var(--paper-raised);
   z-index: 1;
 }
-.config-body { padding: 24px; max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+/* §11.1a: the screen takes the full width — the category-grouped registry is
+   options-heavy and benefits from the room; forms above it stay comfortably
+   narrow via their own max-width so they don't stretch into unreadable rows. */
+.config-body { padding: 24px 32px; max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 28px; }
+.config-body > .config-section:not(:last-child) { max-width: 640px; }
 .config-section h3 { font-size: 14px; margin: 0 0 10px; color: var(--ink-soft); }
 .config-form-row { display: flex; gap: 8px; }
 .config-form-row input, .config-form-row select { flex: 1; }
@@ -1328,6 +1332,75 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .config-head-name { font-weight: 600; }
 .config-activities { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
 .config-empty { font-size: 12px; color: var(--ink-faint); font-style: italic; }
+
+.config-section-head-row { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+.config-section-head-row h3 { margin: 0; }
+.config-add-cat { max-width: 340px; }
+
+.config-cat-section {
+  border: 1px solid var(--hairline);
+  border-radius: 8px;
+  margin-bottom: 14px;
+  background: var(--paper-raised);
+}
+.config-cat-section.cat-drop-over { outline: 2px solid var(--accent); outline-offset: -2px; }
+.config-cat-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--hairline);
+}
+.config-cat-header h4 {
+  margin: 0;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--ink-soft);
+}
+.config-cat-drop { padding: 4px 12px 8px; min-height: 32px; }
+.config-cat-drop .config-head-row:last-child { border-bottom: none; }
+.config-head-row.dragging { opacity: 0.5; }
+
+.config-move-wrap { position: relative; display: inline-flex; }
+.config-move-btn {
+  background: transparent;
+  border: 1px solid var(--hairline);
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1;
+  padding: 2px 5px;
+  color: var(--ink-soft);
+}
+.config-move-btn:hover { color: var(--ink); border-color: var(--ink-soft); }
+.config-move-list {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: 10;
+  margin: 4px 0 0;
+  padding: 4px;
+  list-style: none;
+  background: var(--paper-raised);
+  border: 1px solid var(--hairline);
+  border-radius: 6px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  min-width: 160px;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.config-move-list button {
+  display: block;
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  padding: 5px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  color: var(--ink);
+}
+.config-move-list button:hover { background: var(--paper-hover, var(--hairline)); }
 
 .derived-head {
   margin-top: 6px;
@@ -1953,7 +2026,7 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
 .bp-row .time-stepper input { font-size: 12px; padding: 3px 6px; }
 .bp-head-row .bp-head-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .bp-offday { opacity: .55; }
-.bp-drag { cursor: grab; color: var(--ink-faint); font-size: 11px; width: 14px; letter-spacing: -1px; }
+.bp-drag { cursor: grab; color: var(--ink-faint); font-size: 11px; width: 14px; letter-spacing: -1px; touch-action: none; }
 .bp-arrows { display: inline-flex; flex-direction: column; gap: 0; }
 .bp-arrows button { background: none; border: none; cursor: pointer; color: var(--ink-faint); font-size: 8px; line-height: 1; padding: 1px 2px; }
 .bp-arrows button:hover { color: var(--ink); }
