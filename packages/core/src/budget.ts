@@ -17,7 +17,8 @@
 
 import {
   SELF_MANAGEMENT,
-  RECHARGE,
+  SLEEP,
+  NAP,
   FOOD,
   WASTED_TIME,
   LOST_HOURS,
@@ -29,10 +30,13 @@ import { headPath, headName } from "./headPath.js";
 
 export const MIN_PER_DAY = 1440;
 
-/** §11.1 Category tier. Original four names locked 2026-07-16; expanded to the
- * seven shipped defaults 2026-07-17 (users may ADD more, add-only). CATEGORIES
- * is the SHIPPED DEFAULT ORDER — the user can reorder + append at runtime; that
- * live order lives in the web layer (`heads.tsx`), not here. */
+/** §11.1 Category tier. Original four names locked 2026-07-16; expanded to
+ * seven 2026-07-17, then to the eight shipped defaults 2026-07-18 (Lost Time
+ * added). ALL EIGHT are built-in (2026-07-18: users may still ADD more,
+ * add-only, but none of these eight can be renamed/removed/reordered away —
+ * reordering position is still user-controllable). CATEGORIES is the SHIPPED
+ * DEFAULT ORDER — the live order (after any user reorder/append) lives in the
+ * web layer (`heads.tsx`), not here. */
 export const RECHARGING = "Recharging";
 export const CORE_WORK = "Core Work";
 export const MAINTENANCE = "Maintenance";
@@ -40,6 +44,7 @@ export const REGENERATION = "Regeneration";
 export const UPGRADING = "Upgrading";
 export const NOT_WORK = "Not Work";
 export const TIME_WASTED = "Wasted Time";
+export const LOST_TIME = "Lost Time";
 export const CATEGORIES = [
   RECHARGING,
   CORE_WORK,
@@ -48,18 +53,33 @@ export const CATEGORIES = [
   UPGRADING,
   NOT_WORK,
   TIME_WASTED,
+  LOST_TIME,
 ] as const;
 
 /** §11.1 canonical PATH ids of the built-in heads (identity = path, encoded as
  * one string — headPath.ts). Built-ins keep their default category (§11.1a),
  * so these ids are stable; core books/compares by them, never bare names.
- * Built-in NAMES are reserved: no user head may take one, in any category. */
+ * Built-in NAMES are reserved: no user head may take one, in any category.
+ * Meditation/Exercise/Socialization/Learning joined the built-in set
+ * 2026-07-18 (Food-pattern parity: preset + quick-add, §2.10) — Socialization
+ * here is specifically the Regeneration one (a second, unrelated Socialization
+ * head exists under Not Work, an ordinary user head). Lost Hours moved from
+ * Wasted Time into the new Lost Time category 2026-07-18. */
 export const SELF_MANAGEMENT_ID = headPath(CORE_WORK, SELF_MANAGEMENT);
-export const RECHARGE_ID = headPath(RECHARGING, RECHARGE);
+export const SLEEP_ID = headPath(RECHARGING, SLEEP);
+export const NAP_ID = headPath(RECHARGING, NAP);
 export const FOOD_ID = headPath(MAINTENANCE, FOOD);
 export const WASTED_TIME_ID = headPath(TIME_WASTED, WASTED_TIME);
-export const LOST_HOURS_ID = headPath(TIME_WASTED, LOST_HOURS);
+export const LOST_HOURS_ID = headPath(LOST_TIME, LOST_HOURS);
 export const OFF_PERIOD_ID = headPath(MAINTENANCE, OFF_PERIOD);
+export const MEDITATION = "Meditation";
+export const EXERCISE = "Exercise";
+export const SOCIALIZATION = "Socialization";
+export const LEARNING = "Learning";
+export const MEDITATION_ID = headPath(REGENERATION, MEDITATION);
+export const EXERCISE_ID = headPath(REGENERATION, EXERCISE);
+export const SOCIALIZATION_ID = headPath(REGENERATION, SOCIALIZATION);
+export const LEARNING_ID = headPath(UPGRADING, LEARNING);
 
 /** §11.4 Sleep — the head of the day. A first-class budget line (stored as
  * `week.sleepMinutes`, synced with Settings) rendered under its own pseudo-

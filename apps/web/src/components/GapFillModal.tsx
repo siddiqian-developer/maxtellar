@@ -2,24 +2,28 @@
  * Gap-fill "what happened?" modal (§4.2 / §2.9 / §2.10) — the single >30-min
  * missing-data component. Given an unaccounted span [from, to] (both ≤ now), it
  * asks what happened and books it via BACKLOG. Fill types: a named Activity, a
- * Sleep or Nap (Recharge head, sleepKind set), Wasted (the system Wasted-Time
- * head, loggable here though never plannable, §2.10), or Leave → the residue
- * stays unaccounted and becomes Lost Hours at the next SOD (no event).
+ * Food-pattern built-in quick-fill (Sleep/Nap/Food/Meditation/Exercise/
+ * Socialization/Learning — each its own head, §11.1b), Wasted (the system
+ * Wasted-Time head, loggable here though never plannable, §2.10), or Leave →
+ * the residue stays unaccounted and becomes Lost Hours at the next SOD (no
+ * event).
  *
  * Built as ONE component with two entry points: the history editor's gap rows
  * now, and the SOD missing-data ceremony in Stage 4. Reuses the drawer chrome;
  * Esc → back to the opener.
  */
 import { useMemo, useState } from "react";
-import type { Event, HistoryEntry } from "@maxtellar/core";
-import { FOOD, RECHARGE, WASTED_TIME } from "@maxtellar/core";
+import type { Event, HistoryEntry, State } from "@maxtellar/core";
+import { WASTED_TIME_ID } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
 import { fmtDayTime, fmtDur } from "../time";
 import { useEscClose } from "../useEscClose";
 import { SubheadField } from "./SubheadField";
+import { resolvePreset } from "../presets";
 
 interface Props {
+  state: State;
   from: number;
   to: number;
   now: number;
@@ -27,9 +31,9 @@ interface Props {
   onClose: () => void;
 }
 
-export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.Element {
+export function GapFillModal({ state, from, to, now, dispatch, onClose }: Props): JSX.Element {
   useEscClose(onClose);
-  const { timeFormat, showWeekday } = useSettings();
+  const { timeFormat, showWeekday, presetsConfig } = useSettings();
   const hour12 = timeFormat === "12h";
   const { addActivity } = useHeads();
 
@@ -39,12 +43,7 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
 
   const span = Math.max(0, to - from);
 
-  const book = (
-    entryTitle: string,
-    headId: string,
-    activityId: string,
-    sleepKind?: HistoryEntry["sleepKind"],
-  ): void => {
+  const book = (entryTitle: string, headId: string, activityId: string): void => {
     const entry: Omit<HistoryEntry, "id"> = {
       taskId: null,
       title: entryTitle,
@@ -55,7 +54,6 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
       end: to,
       outcome: "completed",
       channels: { spent: span, wasted: 0, managed: 0, breaks: 0 },
-      ...(sleepKind ? { sleepKind } : {}),
     };
     dispatch({ type: "BACKLOG", entry });
     onClose();
@@ -86,14 +84,17 @@ export function GapFillModal({ from, to, now, dispatch, onClose }: Props): JSX.E
             <strong className="num">{fmtDayTime(to, now, hour12, showWeekday)}</strong> ({fmtDur(span)}).
           </p>
 
-          {/* Quick single-tap fills */}
+          {/* Quick single-tap fills — one per Food-pattern built-in (§11.1b), plus Wasted. */}
           <div className="field">
             <label>Quick fill</label>
             <div className="type-chips" role="group" aria-label="Quick fill">
-              <button type="button" className="type-chip" data-status="semi-tail" onClick={() => book("Sleep", RECHARGE, "Sleep", "sleep")}>Sleep</button>
-              <button type="button" className="type-chip" data-status="semi-tail" onClick={() => book("Nap", RECHARGE, "Nap", "nap")}>Nap</button>
-              <button type="button" className="type-chip" data-status="semi-tail" onClick={() => book("Food", FOOD, "Food")}>Food</button>
-              <button type="button" className="type-chip" data-status="fixed" onClick={() => book("Wasted", WASTED_TIME, "")}>Wasted</button>
+              {presetsConfig.map((p) => {
+                const r = resolvePreset(p, state);
+                return (
+                  <button key={p.id} type="button" className="type-chip" data-status="semi-tail" onClick={() => book(r.title, r.headId, r.subhead)}>{p.label}</button>
+                );
+              })}
+              <button type="button" className="type-chip" data-status="fixed" onClick={() => book("Wasted", WASTED_TIME_ID, "")}>Wasted</button>
             </div>
           </div>
 

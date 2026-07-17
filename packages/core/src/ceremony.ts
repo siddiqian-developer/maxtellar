@@ -6,6 +6,7 @@
  */
 
 import type { HistoryEntry, Min, State, UnstartedTask } from "./types.js";
+import { SLEEP_ID } from "./budget.js";
 
 /** [start,end) intersection width, clamped ≥ 0. */
 export function clip(start: Min, end: Min, winStart: Min, winEnd: Min): Min {
@@ -24,7 +25,7 @@ export function formingDayStart(s: State): Min {
   const occ = s.history
     .filter((h) => h.kind === "occupancy" && h.end > h.start)
     .sort((a, b) => a.start - b.start);
-  const firstSleep = occ.find((h) => h.sleepKind === "sleep");
+  const firstSleep = occ.find((h) => h.headId === SLEEP_ID);
   if (firstSleep) return firstSleep.start;
   if (occ.length) return occ[0]!.start;
   return s.now;
@@ -44,7 +45,7 @@ export interface SodPrecondition {
 }
 
 /**
- * §4.2 precondition. Counts Finished Sleep occupancy (sleepKind==="sleep") in
+ * §4.2 precondition. Counts Finished Sleep occupancy (headId===SLEEP_ID) in
  * the forming day (history with `start ≥ formingDayStart`). Scoping ruling
  * (grilled 2026-07-15): 0 or 1 → not ok (UI opens the missing-data GapFillModal
  * to log the missing sleep); exactly 2 → sweep [A,B); **3+ → sweep the first two**
@@ -59,7 +60,7 @@ export function sodPrecondition(s: State): SodPrecondition {
       (h) =>
         h.kind === "occupancy" &&
         h.end > h.start &&
-        h.sleepKind === "sleep" &&
+        h.headId === SLEEP_ID &&
         h.start >= formingStart,
     )
     .sort((a, b) => a.start - b.start || a.end - b.end);

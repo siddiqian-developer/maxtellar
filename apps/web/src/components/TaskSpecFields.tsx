@@ -7,8 +7,8 @@
  *  - `TodField`   — a smart TIME-OF-DAY input (casual parse → snap → reformat on
  *                   blur) with the ±5-min stepper. No calendar: a recurring "9am"
  *                   anchor has no date (§7.0.5 exemption).
- *  - `PresetPills`— the Sleep / Nap / Food preset row (§2.9), pre-filling a
- *                   locked bundle (title / sub-head / head / sleepKind).
+ *  - `PresetPills`— the Sleep / Nap / Food / … preset row (§2.9/§11.1b),
+ *                   pre-filling a locked bundle (title / sub-head / head).
  *  - `TaskFlagsRow` — OMMF / slideable / breakable, guarded by the §2.5 validity
  *                   matrix (fixed → never slideable; budgeted → always slideable;
  *                   breakable only for a budgeted, non-ommf, non-preset task).
@@ -18,12 +18,12 @@
  * hand-roll a raw time input that silently drops snap/steppers.
  */
 import { useState } from "react";
-import type { EndDayOffset, SleepKind, TimingType } from "@maxtellar/core";
+import type { EndDayOffset, State, TimingType } from "@maxtellar/core";
 import { DEFAULT_MIN_FRAGMENT } from "@maxtellar/core";
 import { parseTimeOfDay, parseAnchorEnd } from "../casualTime";
 import { fmtTod, toDate } from "../time";
-import { PRESETS, presetById } from "../presets";
-import type { PresetId } from "../settings";
+import { resolvePreset, type PresetConfig } from "../presets";
+import { useSettings } from "../settings";
 import { SubheadField } from "./SubheadField";
 import { DurInput } from "./BudgetPanel";
 import { DatePicker } from "./DatePicker";
@@ -103,20 +103,23 @@ export function TodField({ value, onChange, hour12, ariaLabel, disabled }: {
   );
 }
 
-/** §2.9 preset pill row. `active` = the selected preset id (null = none, which
- * IS "ordinary" — there is no ordinary pill). Toggling re-taps the active pill. */
+/** §2.9/§2.10b preset pill row — the user's own configurable list
+ * (`settings.presetsConfig`), in their order. `active` = the selected preset
+ * id (null = none, which IS "ordinary" — there is no ordinary pill). Toggling
+ * re-taps the active pill. */
 export function PresetPills({ active, onToggle, autoId }: {
-  active: PresetId | null;
-  onToggle: (id: PresetId) => void;
+  active: string | null;
+  onToggle: (id: string) => void;
   /** The preset that was auto-selected from the title (§2.9) — tagged "auto" so
    * the user can see it wasn't their pick. Null when the choice was the user's
    * (source ≠ value: an accepted suggestion is the user's, never app-owned). */
-  autoId?: PresetId | null;
+  autoId?: string | null;
 }): JSX.Element {
+  const { presetsConfig } = useSettings();
   return (
     <div className="hint-row">
       <div className="type-chips" role="radiogroup" aria-label="Presets">
-        {PRESETS.map((p) => (
+        {presetsConfig.map((p) => (
           <button
             key={p.id}
             type="button"
@@ -131,7 +134,7 @@ export function PresetPills({ active, onToggle, autoId }: {
           </button>
         ))}
       </div>
-      <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Sleep / Nap / Food pre-fill a locked bundle; typing a matching title selects one automatically (§2.9)">ⓘ</span>
+      <span className="hint-glyph" tabIndex={0} aria-label="Presets help" data-tip="Presets pre-fill a locked bundle; typing a matching title selects one automatically (§2.9). Configure the list in Settings.">ⓘ</span>
     </div>
   );
 }
@@ -532,9 +535,9 @@ export function TaskOptionsSection({
 }: {
   timing: TimingType;
   onTiming: (t: TimingType) => void;
-  preset: PresetId | null;
-  onTogglePreset: (id: PresetId) => void;
-  presetAutoId?: PresetId | null;
+  preset: string | null;
+  onTogglePreset: (id: string) => void;
+  presetAutoId?: string | null;
   title: JSX.Element;
   subhead: JSX.Element;
   start: JSX.Element;
@@ -610,7 +613,6 @@ export interface TaskSpecInit {
   ommf?: boolean;
   slideable?: boolean;
   breakable?: boolean;
-  sleepKind?: SleepKind;
 }
 
 export interface ResolvedSpec {
@@ -626,14 +628,21 @@ export interface ResolvedSpec {
   anchorEndTod?: number;
   /** §4.4 overnight span — omitted when 0 (same day). */
   anchorEndDayOffset?: EndDayOffset;
-  sleepKind?: SleepKind;
 }
 
 /** All the common New-Task options as ONE hook — timing, presets, flags, and
  * the smart time/budget fields — so every task-spec editor gets full parity by
  * construction (§7.0.5). Callers add only their own extras (weekdays / date /
- * recurrence) and a footer. */
-export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT_MIN_FRAGMENT) {
+ * recurrence) and a footer.
+ *
+ * `state` drives week-plan/settings preset SOURCES (§2.10b) when available.
+ * The week-plan template editor calls this with no live `state.now` context
+ * (a template has no "today") — pass `state` anyway (for its budgets/
+ * sleepMinutes, which ARE meaningful without a date) and a sourced preset
+ * with no matching template just falls back to its flat value, same as any
+ * other day where the source can't resolve. */
+export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT_MIN_FRAGMENT, state?: State) {
+  const { presetsConfig } = useSettings();
   const [title, setTitle] = useState(initial.title ?? "");
   const [activity, setActivity] = useState(initial.activityId ?? "");
   const [head, setHead] = useState<string | undefined>(initial.headId);
@@ -655,8 +664,7 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
     slideable: initial.slideable ?? true,
     breakable: initial.breakable ?? false,
   });
-  const [preset, setPreset] = useState<PresetId | null>(null);
-  const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(initial.sleepKind);
+  const [preset, setPreset] = useState<string | null>(null);
 
   // Derived from the ONE role table (§7.0.6) — never a second opinion on what a
   // type needs. "need*" = REQUIRED; an "optional" field is still offered and
@@ -734,15 +742,24 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
   /** The offset these times IMPLY — snapped and shown, never assumed silently. */
   const impliedOffset = (): EndDayOffset => impliedEndDayOffset(endDayOffset, startTod, endTod);
 
-  const togglePreset = (id: PresetId): void => {
-    if (preset === id) { setPreset(null); setSleepKind(undefined); return; }
-    const p = presetById(id);
+  const togglePreset = (id: string): void => {
+    if (preset === id) { setPreset(null); return; }
+    const p = presetsConfig.find((c) => c.id === id);
+    if (!p) return;
+    const r = resolvePreset(p, state);
     setPreset(id);
-    setTitle(p.title);
-    setActivity(p.subhead);
-    setHead(p.head);
-    setSleepKind(p.sleepKind);
+    setTitle(r.title);
+    setActivity(r.subhead);
+    setHead(r.headId);
     setFlags((f) => ({ ...f, breakable: false }));
+    // The preset's own timing + resolved fields — mirrors morphTo's prefill so
+    // a preset behaves exactly like tapping its timing type would, just with
+    // the preset's (possibly sourced) values instead of the generic defaults.
+    setTiming(r.timing);
+    setStartTod(r.startTod);
+    setEndTod(r.endTod);
+    setEndDayOffsetRaw(0);
+    setBudget(r.budget);
   };
 
   const resolve = (): { spec: ResolvedSpec } | { error: string } => {
@@ -782,7 +799,6 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
         ...(end !== undefined ? { anchorEndTod: end } : {}),
         // Only meaningful with an end; 0 is the default, so don't persist noise.
         ...(end !== undefined && off > 0 ? { anchorEndDayOffset: off } : {}),
-        ...(sleepKind ? { sleepKind } : {}),
       },
     };
   };
@@ -795,7 +811,7 @@ export function useTaskSpec(initial: TaskSpecInit, minFragment: number = DEFAULT
     // §3.6 3→1: these derive the third field, they don't just assign.
     setStartTod: changeStart, setEndTod: changeEnd, setBudget: changeBudget,
     endDayOffset, setEndDayOffset, impliedOffset,
-    flags, setFlags, preset, togglePreset, sleepKind, minFragment,
+    flags, setFlags, preset, togglePreset, minFragment,
     needStart, needEnd, needBudget, resolve,
   };
 }

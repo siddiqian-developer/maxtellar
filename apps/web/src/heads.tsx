@@ -14,22 +14,36 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import {
   SELF_MANAGEMENT,
-  RECHARGE,
+  SLEEP,
+  NAP,
   FOOD,
   WASTED_TIME,
   LOST_HOURS,
   OFF_PERIOD,
+  MEDITATION,
+  EXERCISE,
+  SOCIALIZATION,
+  LEARNING,
   CATEGORIES,
   RECHARGING,
   CORE_WORK,
   MAINTENANCE,
+  REGENERATION,
+  UPGRADING,
+  NOT_WORK,
   TIME_WASTED,
+  LOST_TIME,
   SELF_MANAGEMENT_ID,
-  RECHARGE_ID,
+  SLEEP_ID,
+  NAP_ID,
   FOOD_ID,
   WASTED_TIME_ID,
   LOST_HOURS_ID,
   OFF_PERIOD_ID,
+  MEDITATION_ID,
+  EXERCISE_ID,
+  SOCIALIZATION_ID,
+  LEARNING_ID,
   headPath,
   headName,
   headCategory,
@@ -42,26 +56,50 @@ import { forgetActivity } from "./ml/vectorStore";
 export type HeadsRegistry = Record<string, string[]>;
 
 /** §2.10 plannable built-ins — schedulable like any head, no config note.
- * Recharge/Food are "inevitable-necessity" heads: undeletable AND plannable. */
-export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [SELF_MANAGEMENT_ID, RECHARGE_ID, FOOD_ID];
+ * Sleep/Nap/Food are "inevitable-necessity" heads: undeletable AND plannable
+ * (Sleep/Nap became distinct built-in HEADS 2026-07-18, replacing the earlier
+ * "Recharge" head + sleepKind sub-distinction — see core `types.ts`).
+ * Meditation/Exercise/Socialization/Learning joined 2026-07-18 with the same
+ * treatment (Food-pattern parity — see §11.1b for the preset+quick-add layer
+ * specific to these plus Sleep/Nap/Food). */
+export const PLANNABLE_BUILT_IN_HEADS: readonly string[] = [
+  SELF_MANAGEMENT_ID,
+  SLEEP_ID,
+  NAP_ID,
+  FOOD_ID,
+  MEDITATION_ID,
+  EXERCISE_ID,
+  SOCIALIZATION_ID,
+  LEARNING_ID,
+];
 /** §2.10/§4.5 system built-ins — accounting-owned, never planned as ordinary
  * tasks; shown in config (with a note) but hidden from the drawer's planning
  * pickers. Off-Periods is booked by the §4.5 off-period mechanism, not planned. */
 export const SYSTEM_BUILT_IN_HEADS: readonly string[] = [WASTED_TIME_ID, LOST_HOURS_ID, OFF_PERIOD_ID];
 /** All undeletable built-ins (plannable + system) — PATH ids. */
 export const BUILT_IN_HEADS: readonly string[] = [...PLANNABLE_BUILT_IN_HEADS, ...SYSTEM_BUILT_IN_HEADS];
+/** All 8 shipped categories are built-in (2026-07-18): reorderable, but never
+ * renamed or removed. Distinct from `CATEGORIES` (the shipped DEFAULT order)
+ * — this is the identity check used to bar removal of any of these eight,
+ * regardless of the live (user-reordered) position. */
+export const BUILT_IN_CATEGORIES: readonly string[] = CATEGORIES;
 /** A built-in's name is reserved only WITHIN its own category (user decision
- * 2026-07-18) — e.g. no user head may be named "Recharge" under Recharging
- * (that collides with the real built-in's path), but "Recharge" is free to
- * use as a user head's name under a different category. Map: name -> its
- * built-in's home category. */
+ * 2026-07-18) — e.g. no user head may be named "Sleep" under Recharging (that
+ * collides with the real built-in's path), but "Sleep" is free to use as a
+ * user head's name under a different category. Map: name -> its built-in's
+ * home category. */
 const RESERVED_IN_CATEGORY: Readonly<Record<string, string>> = {
   [SELF_MANAGEMENT]: CORE_WORK,
-  [RECHARGE]: RECHARGING,
+  [SLEEP]: RECHARGING,
+  [NAP]: RECHARGING,
   [FOOD]: MAINTENANCE,
   [WASTED_TIME]: TIME_WASTED,
-  [LOST_HOURS]: TIME_WASTED,
+  [LOST_HOURS]: LOST_TIME,
   [OFF_PERIOD]: MAINTENANCE,
+  [MEDITATION]: REGENERATION,
+  [EXERCISE]: REGENERATION,
+  [SOCIALIZATION]: REGENERATION,
+  [LEARNING]: UPGRADING,
 };
 
 /** One-line note shown in the config for the non-plannable system heads only
@@ -72,47 +110,86 @@ export const BUILT_IN_HEAD_NOTES: Record<string, string> = {
   [OFF_PERIOD_ID]: "system head — booked by off-periods, never planned",
 };
 
-/** Built-in sub-heads seeded under their head (the §2.9 presets live here). */
-const BUILT_IN_SUBHEADS: Record<string, string[]> = {
-  [RECHARGE_ID]: ["Sleep", "Nap"],
-  [FOOD_ID]: ["Food"],
-};
-
-/** Is (headId, activity) a built-in preset sub-head? Undeletable, like its head. */
-export function isBuiltInActivity(headId: string, activity: string): boolean {
-  return (BUILT_IN_SUBHEADS[headId] ?? []).includes(activity);
+/** Is (headId, activity) a built-in preset sub-head? None shipped in the seed
+ * (2026-07-18: the seed carries zero sub-heads — users add their own later).
+ * Kept as a function (not a flat constant) so a future built-in preset
+ * sub-head has one place to register. */
+export function isBuiltInActivity(_headId: string, _activity: string): boolean {
+  return false;
 }
 
-/** §11.1 shipped seed — BUILT-INS ONLY (2026-07-18: all user/example heads
- * removed pending the user's next authoritative list, which will mark which
- * entries are built-in). Registry object key order IS the display order
- * within a category. */
+/** §11.1 shipped seed — the user's authoritative list (2026-07-18, overrides
+ * the prior seed entirely). The list is Category -> Head, FLAT — NO sub-heads
+ * at all (confirmed by the user: every line under a category is a head, full
+ * stop; sub-heads exist in the schema but are added later, by the user, never
+ * seeded). Built-ins marked `*` in the source list are the PATH constants
+ * (Sleep, Nap, Self-Management, Food, Meditation, Exercise, Socialization
+ * [Regeneration], Learning). Off-Periods/Wasted Time/Lost Hours are system
+ * built-ins with no `*` in the user's list (pre-existing, §4.5/§2.6
+ * accounting heads). Registry object key order IS the display order within
+ * a category. */
 const DEFAULT_REGISTRY: HeadsRegistry = {
   // Recharging
-  [RECHARGE_ID]: [...(BUILT_IN_SUBHEADS[RECHARGE_ID] ?? [])],
+  [SLEEP_ID]: [],
+  [NAP_ID]: [],
   // Core Work
   [SELF_MANAGEMENT_ID]: [],
+  [headPath(CORE_WORK, "Strategy and Planning")]: [],
+  [headPath(CORE_WORK, "Research")]: [],
+  [headPath(CORE_WORK, "Project Execution")]: [],
+  [headPath(CORE_WORK, "Job")]: [],
+  [headPath(CORE_WORK, "Sales")]: [],
+  [headPath(CORE_WORK, "Fundraising")]: [],
+  [headPath(CORE_WORK, "Job Search")]: [],
+  [headPath(CORE_WORK, "Marketing")]: [],
+  [headPath(CORE_WORK, "Public Speaking")]: [],
+  [headPath(CORE_WORK, "Investor Hunting")]: [],
+  [headPath(CORE_WORK, "Networking")]: [],
+  [headPath(CORE_WORK, "Other Work #1")]: [],
+  [headPath(CORE_WORK, "Other Work #2")]: [],
   // Maintenance
-  [FOOD_ID]: [...(BUILT_IN_SUBHEADS[FOOD_ID] ?? [])],
+  [FOOD_ID]: [],
+  [headPath(MAINTENANCE, "Kitchen work")]: [],
+  [headPath(MAINTENANCE, "Cleaning")]: [],
+  [headPath(MAINTENANCE, "Plantcare")]: [],
+  [headPath(MAINTENANCE, "Clothes Work")]: [],
+  [headPath(MAINTENANCE, "Health")]: [],
   [OFF_PERIOD_ID]: [],
+  // Regeneration
+  [headPath(REGENERATION, "Rest")]: [],
+  [MEDITATION_ID]: [],
+  [headPath(REGENERATION, "Break")]: [],
+  [EXERCISE_ID]: [],
+  [SOCIALIZATION_ID]: [],
+  [headPath(REGENERATION, "Entertainment")]: [],
+  // Upgrading
+  [headPath(UPGRADING, "Personal Philosophy")]: [],
+  [LEARNING_ID]: [],
+  [headPath(UPGRADING, "English Speaking Learning/Practice")]: [],
+  // Not Work
+  [headPath(NOT_WORK, "Social Media")]: [],
+  [headPath(NOT_WORK, "Sports")]: [],
+  [headPath(NOT_WORK, "Socialization")]: [],
   // Wasted Time
   [WASTED_TIME_ID]: [],
+  [headPath(TIME_WASTED, "Social Media")]: [],
+  [headPath(TIME_WASTED, "Socialization")]: [],
+  [headPath(TIME_WASTED, "Entertainment")]: [],
+  // Lost Time
   [LOST_HOURS_ID]: [],
 };
 
-/** Merge a persisted registry so every UNDELETABLE built-in head — and its
- * seeded built-in sub-heads — is always present, without dropping the user's
- * own additions (unions sub-head lists for built-in heads). Starts from
- * `stored`, NOT from DEFAULT_REGISTRY: non-built-in seed heads are deletable
- * starters, so once a stored registry exists they must not silently resurrect
- * on reload (bug class fixed 2026-07-16). First run (nothing stored) still
- * gets the full DEFAULT_REGISTRY via the caller. */
+/** Merge a persisted registry so every UNDELETABLE built-in head is always
+ * present, without dropping the user's own additions. Starts from `stored`,
+ * NOT from DEFAULT_REGISTRY: non-built-in seed heads are deletable starters,
+ * so once a stored registry exists they must not silently resurrect on
+ * reload (bug class fixed 2026-07-16). First run (nothing stored) still gets
+ * the full DEFAULT_REGISTRY via the caller. No built-in ships with seeded
+ * sub-heads (2026-07-18) — this is a pure "key exists" guarantee now. */
 function mergeRegistry(stored: HeadsRegistry): HeadsRegistry {
   const merged: HeadsRegistry = { ...stored };
   for (const head of BUILT_IN_HEADS) {
-    const seeded = BUILT_IN_SUBHEADS[head] ?? [];
-    const existing = stored[head] ?? [];
-    merged[head] = [...seeded, ...existing.filter((a) => !seeded.includes(a))];
+    merged[head] = stored[head] ?? [];
   }
   return merged;
 }
@@ -135,7 +212,7 @@ interface HeadsApi {
   registry: HeadsRegistry;
   /** All head PATH ids, in category order (then registry insertion order). */
   heads: string[];
-  /** Ordered categories: the shipped 7 (+ user-added), user-reorderable. */
+  /** Ordered categories: the shipped 8 (+ user-added), user-reorderable. */
   categories: string[];
   /** Only the heads a user may PLAN under — excludes the system built-ins
    * (Wasted Time / Lost Hours / Off-Periods). The drawer's pickers read this. */

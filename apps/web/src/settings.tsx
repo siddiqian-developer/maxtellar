@@ -9,6 +9,8 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import type { PomodoroConfig, TimingType } from "@maxtellar/core";
 import type { CustomSound, SoundChoice } from "./sound";
+import type { PresetConfig } from "./presets";
+import { SHIPPED_PRESETS } from "./presets";
 
 /** §5.3 alarm firing behavior — the single global toggle. */
 export type AlarmBehavior = "oneshot" | "persist";
@@ -18,15 +20,38 @@ export type TimeFormat = "12h" | "24h";
 /** §5.2 pomodoro global default preset (per-task override happens at Start). */
 export const DEFAULT_POMODORO: PomodoroConfig = { workMin: 25, breakMin: 5, longBreakMin: 15, cyclesBeforeLong: 4 };
 
-/** §2.9 preset ids whose default timing type is user-configurable. */
-export type PresetId = "sleep" | "nap" | "food";
-export type PresetDefaults = Record<PresetId, TimingType>;
-const PRESET_DEFAULTS_FALLBACK: PresetDefaults = {
-  sleep: "budgeted",
-  nap: "unscheduled",
-  food: "budgeted",
-};
 const ALL_TIMINGS: TimingType[] = ["unscheduled", "budgeted", "semi-head", "semi-tail", "fixed"];
+const ALL_BUDGET_SOURCES = ["flat", "weekPlan", "settings"];
+const ALL_ANCHOR_SOURCES = ["flat", "weekPlan"];
+
+/** Loose-parse ONE stored preset row, falling back field-by-field to the
+ * matching shipped default (by headId) or a neutral shape for a row the user
+ * added themselves (no shipped counterpart). Never lets corrupt storage
+ * crash the app — an invalid preset row degrades to safe values. */
+function sanitizePreset(raw: unknown, fallback: PresetConfig | undefined): PresetConfig | null {
+  if (!raw || typeof raw !== "object") return null;
+  const r = raw as Record<string, unknown>;
+  const headId = typeof r.headId === "string" && r.headId ? r.headId : fallback?.headId;
+  if (!headId) return null;
+  const f = fallback ?? {
+    id: headId, headId, label: headId, titleLocked: false, timing: "unscheduled" as TimingType,
+    budgetFlat: 30, budgetSource: "flat" as const, startFlat: 9 * 60, endFlat: 9 * 60 + 30,
+    anchorSource: "flat" as const, keywords: [],
+  };
+  return {
+    id: typeof r.id === "string" && r.id ? r.id : headId,
+    headId,
+    label: typeof r.label === "string" && r.label ? r.label : f.label,
+    titleLocked: typeof r.titleLocked === "boolean" ? r.titleLocked : f.titleLocked,
+    timing: ALL_TIMINGS.includes(r.timing as TimingType) ? (r.timing as TimingType) : f.timing,
+    budgetFlat: typeof r.budgetFlat === "number" && r.budgetFlat >= 0 ? r.budgetFlat : f.budgetFlat,
+    budgetSource: ALL_BUDGET_SOURCES.includes(r.budgetSource as string) ? (r.budgetSource as PresetConfig["budgetSource"]) : f.budgetSource,
+    startFlat: typeof r.startFlat === "number" ? r.startFlat : f.startFlat,
+    endFlat: typeof r.endFlat === "number" ? r.endFlat : f.endFlat,
+    anchorSource: ALL_ANCHOR_SOURCES.includes(r.anchorSource as string) ? (r.anchorSource as PresetConfig["anchorSource"]) : f.anchorSource,
+    keywords: Array.isArray(r.keywords) ? r.keywords.filter((k): k is string => typeof k === "string") : f.keywords,
+  };
+}
 
 /** Timeline ruler graduation between the labelled hours. 0 = off (default);
  * otherwise the minor-tick interval in minutes. */
@@ -78,9 +103,10 @@ interface Settings {
    * only exposes extra controls. */
   devSandbox: boolean;
   setDevSandbox: (v: boolean) => void;
-  /** §2.9 configurable default timing type per preset pill. */
-  presetDefaults: PresetDefaults;
-  setPresetDefault: (id: PresetId, timing: TimingType) => void;
+  /** §2.9/§11.1b/§2.10b the preset LIST — user-editable (add any head, remove,
+   * reconfigure timing+source, reorder). Array order IS display order. */
+  presetsConfig: PresetConfig[];
+  setPresetsConfig: (list: PresetConfig[]) => void;
   /** §7.0.3 compute intensity. `mlMode` is the derived GLOBAL state (maximum /
    * lightweight / custom); `setMlMode` writes all features at once. `aiLevels`
    * is the per-feature source of truth (the AI Studio detail screen). */
@@ -167,24 +193,21 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
     : levelVals.every((l) => l === "deterministic")
       ? "lightweight"
       : "custom";
-  const [presetDefaults, setPresetDefaults] = useState<PresetDefaults>(() => {
+  const [presetsConfig, setPresetsConfig] = useState<PresetConfig[]>(() => {
     try {
-      const stored = JSON.parse(localStorage.getItem("presetDefaults") ?? "null");
-      if (stored && typeof stored === "object") {
-        const valid = (t: unknown): t is TimingType => ALL_TIMINGS.includes(t as TimingType);
-        return {
-          sleep: valid(stored.sleep) ? stored.sleep : PRESET_DEFAULTS_FALLBACK.sleep,
-          nap: valid(stored.nap) ? stored.nap : PRESET_DEFAULTS_FALLBACK.nap,
-          food: valid(stored.food) ? stored.food : PRESET_DEFAULTS_FALLBACK.food,
-        };
+      const stored = JSON.parse(localStorage.getItem("presetsConfig") ?? "null");
+      if (Array.isArray(stored)) {
+        const byHead = new Map(SHIPPED_PRESETS.map((p) => [p.headId, p]));
+        const cleaned = stored
+          .map((r) => sanitizePreset(r, typeof r?.headId === "string" ? byHead.get(r.headId) : undefined))
+          .filter((p): p is PresetConfig => p !== null);
+        if (cleaned.length > 0) return cleaned;
       }
     } catch {
-      // fall through to fallback
+      // fall through to shipped defaults
     }
-    return PRESET_DEFAULTS_FALLBACK;
+    return SHIPPED_PRESETS;
   });
-  const setPresetDefault = (id: PresetId, timing: TimingType): void =>
-    setPresetDefaults((d) => ({ ...d, [id]: timing }));
 
   const [pomodoroDefault, setPomodoroDefault] = useState<PomodoroConfig>(() => {
     try {
@@ -220,8 +243,8 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
     localStorage.setItem("weekendDays", JSON.stringify(weekendDays));
   }, [weekendDays]);
   useEffect(() => {
-    localStorage.setItem("presetDefaults", JSON.stringify(presetDefaults));
-  }, [presetDefaults]);
+    localStorage.setItem("presetsConfig", JSON.stringify(presetsConfig));
+  }, [presetsConfig]);
   useEffect(() => {
     localStorage.setItem("aiLevels", JSON.stringify(aiLevels));
   }, [aiLevels]);
@@ -259,7 +282,7 @@ export function SettingsProvider({ children }: { children: React.ReactNode }): J
     localStorage.setItem("customSounds", JSON.stringify(customSounds));
   }, [customSounds]);
   return (
-    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetDefaults, setPresetDefault, mlMode, setMlMode, aiLevels, setAiLevel, setAiLevels, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound, setCustomSounds }}>
+    <SettingsContext.Provider value={{ timeFormat, setTimeFormat, showWeekday, setShowWeekday, weekendDays, setWeekendDays, gridGranularity, setGridGranularity, devSandbox, setDevSandbox, presetsConfig, setPresetsConfig, mlMode, setMlMode, aiLevels, setAiLevel, setAiLevels, pomodoroDefault, setPomodoroDefault, alarmsEnabled, setAlarmsEnabled, alarmBehavior, setAlarmBehavior, alarmSound, setAlarmSound, customSounds, addCustomSound, removeCustomSound, setCustomSounds }}>
       {children}
     </SettingsContext.Provider>
   );

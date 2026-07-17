@@ -14,6 +14,7 @@
  */
 import { useMemo, useState } from "react";
 import type { Channels, Event, HistoryEntry, HistoryOutcome } from "@maxtellar/core";
+import { SLEEP_ID, NAP_ID } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { useSettings } from "../settings";
 import { resolvePastTime, fitPastInterval, dayStartMin } from "../casualTime";
@@ -63,7 +64,6 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
   const [startStr, setStartStr] = useState(fmtDayTime(seedStart, now, hour12, showWeekday));
   const [endStr, setEndStr] = useState(fmtDayTime(seedEnd, now, hour12, showWeekday));
   const [outcome, setOutcome] = useState<HistoryOutcome>(entry?.outcome ?? "completed");
-  const [sleepKind, setSleepKind] = useState<HistoryEntry["sleepKind"]>(entry?.sleepKind);
   const [notes, setNotes] = useState<string[]>([]);
   const [calField, setCalField] = useState<"start" | "end" | null>(null);
   // Esc closes the calendar first, then the drawer (back-navigation stack).
@@ -140,11 +140,16 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
     setCalField(null);
   };
 
-  // A Sleep/Nap tag also names the sub-head (Recharge auto-derives, §2.9).
-  const chooseSleepKind = (k: HistoryEntry["sleepKind"]): void => {
-    setSleepKind(k);
-    if (k === "sleep") setActivity("Sleep");
-    else if (k === "nap") setActivity("Nap");
+  // A Sleep/Nap quick-tag sets the head+activity directly (§2.9/§11.1b —
+  // Sleep/Nap are their own built-in heads, not a separate tag since
+  // 2026-07-18).
+  const kindOfHead = (h: string | undefined): "none" | "sleep" | "nap" =>
+    h === SLEEP_ID ? "sleep" : h === NAP_ID ? "nap" : "none";
+  const chooseKind = (k: "none" | "sleep" | "nap"): void => {
+    if (k === "sleep") { setHead(SLEEP_ID); setActivity("Sleep"); }
+    else if (k === "nap") { setHead(NAP_ID); setActivity("Nap"); }
+    // "none": leave head/activity as typed — this is a clear-the-tag action,
+    // not a reset (the user may already be mid-typing an ordinary activity).
   };
 
   const fieldErr = useMemo<string | null>(() => {
@@ -206,7 +211,6 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
       end: fit.end,
       outcome,
       channels,
-      ...(sleepKind ? { sleepKind } : {}),
       ...(entry?.parentId ? { parentId: entry.parentId } : {}),
       ...(entry?.parentTitle ? { parentTitle: entry.parentTitle } : {}),
     };
@@ -282,9 +286,9 @@ export function HistoryEntryEditor({ entry, history, now, floor, dispatch, onClo
                 <button
                   key={k}
                   type="button"
-                  className={`type-chip${(sleepKind ?? "none") === k ? " active" : ""}`}
+                  className={`type-chip${kindOfHead(head) === k ? " active" : ""}`}
                   data-status="semi-tail"
-                  onClick={() => chooseSleepKind(k === "none" ? undefined : k)}
+                  onClick={() => chooseKind(k)}
                 >
                   {k === "none" ? "Activity" : k === "sleep" ? "Sleep" : "Nap"}
                 </button>

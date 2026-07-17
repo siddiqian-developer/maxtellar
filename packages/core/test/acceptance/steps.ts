@@ -24,7 +24,7 @@ import {
   redistributeOvershoot,
   quotaAdjustmentsAtSod,
   CORE_WORK,
-  RECHARGE,
+  SLEEP_ID,
   type State,
   type Event,
 } from "../../src/index.js";
@@ -180,14 +180,13 @@ Given("the following logged spans in hours since day-start:", (w, table: DataTab
       entry: {
         taskId: null,
         title: isSleep ? "Sleep" : "Work",
-        headId: isSleep ? RECHARGE : "Work",
+        headId: isSleep ? SLEEP_ID : "Work",
         activityId: isSleep ? "Sleep" : "Coding",
         kind: "occupancy",
         start,
         end,
         outcome: "completed",
         channels: { spent: end - start, wasted: 0, managed: 0, breaks: 0 },
-        ...(isSleep ? { sleepKind: "sleep" } : {}),
       } as never,
     });
   }

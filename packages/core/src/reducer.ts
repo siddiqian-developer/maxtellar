@@ -571,7 +571,6 @@ export function reduce(state: State, event: Event): State {
         timing: target.timing,
         startedAt: s.now,
         ...(budget !== undefined ? { budget } : {}),
-        ...(target.sleepKind !== undefined ? { sleepKind: target.sleepKind } : {}),
         ...(target.parentId !== undefined ? { parentId: target.parentId } : {}),
         channels: emptyChannels(),
         // §5.2: begin a pomodoro run when the Start carries a config — first
@@ -611,7 +610,6 @@ export function reduce(state: State, event: Event): State {
         end: state.now,
         outcome: "soft-ended",
         channels: r.channels,
-        ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
         ...parentLink(state.plan, r.parentId),
       };
       let s: State = {
@@ -639,7 +637,6 @@ export function reduce(state: State, event: Event): State {
           breakable: !r.ommf && remBudget !== undefined,
           ...(r.ommf ? { anchorStart: s.now } : {}), // ommf remainder holds its coords (G25)
           ...(remBudget !== undefined ? { budget: remBudget } : {}),
-          ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
           ...(r.parentId !== undefined ? { parentId: r.parentId } : {}), // §2.7: stay a child
           remainderOf: r.id,
         };
@@ -681,7 +678,6 @@ export function reduce(state: State, event: Event): State {
         end: state.now,
         outcome,
         channels: r.channels,
-        ...(r.sleepKind !== undefined ? { sleepKind: r.sleepKind } : {}),
         ...parentLink(state.plan, r.parentId),
       };
       // §2.7 (G24): completing the last leaf completes its ancestors. The
@@ -984,7 +980,6 @@ export function reduce(state: State, event: Event): State {
           ...(spec.budget !== undefined ? { budget: spec.budget } : {}),
           ...(spec.anchorStart !== undefined ? { anchorStart: spec.anchorStart } : {}),
           ...(spec.anchorEnd !== undefined ? { anchorEnd: spec.anchorEnd } : {}),
-          ...(spec.sleepKind !== undefined ? { sleepKind: spec.sleepKind } : {}),
         };
         const { task: snapped } = snapTask(draft, state.minFragment, state.now);
         children.push(snapped);
@@ -1175,7 +1170,6 @@ export function reduce(state: State, event: Event): State {
           ...(t.budget !== undefined ? { budget: t.budget } : {}),
           ...(t.anchorStartTod !== undefined ? { anchorStartTod: t.anchorStartTod } : {}),
           ...(t.anchorEndTod !== undefined ? { anchorEndTod: t.anchorEndTod } : {}),
-          ...(t.sleepKind !== undefined ? { sleepKind: t.sleepKind } : {}),
         };
       });
       return { ...s, week: { ...s.week, templates } };
@@ -1210,7 +1204,6 @@ export function reduce(state: State, event: Event): State {
           ...(a.budget !== undefined ? { budget: a.budget } : {}),
           ...(a.anchorStartTod !== undefined ? { anchorStartTod: a.anchorStartTod } : {}),
           ...(a.anchorEndTod !== undefined ? { anchorEndTod: a.anchorEndTod } : {}),
-          ...(a.sleepKind !== undefined ? { sleepKind: a.sleepKind } : {}),
         };
       });
       const skips = [...new Set(event.skips)];

@@ -423,7 +423,6 @@ export function templateToTask(
     ...(t.budget !== undefined ? { budget: t.budget } : {}),
     ...(t.anchorStartTod !== undefined ? { anchorStart: abs(t.anchorStartTod) } : {}),
     ...(t.anchorEndTod !== undefined ? { anchorEnd: absEnd(t.anchorEndTod) } : {}),
-    ...(t.sleepKind !== undefined ? { sleepKind: t.sleepKind } : {}),
   };
   return task;
 }

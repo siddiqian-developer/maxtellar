@@ -22,7 +22,7 @@ function editableSetters(panel: string): string[] {
   const found = new Set<string>();
   for (const m of panel.matchAll(/\b(set[A-Z]\w*)\s*\(/g)) found.add(m[1]!);
   // Local React state inside the panel (drafts, open/closed) — not app settings.
-  const localOnly = new Set(["setDefaults", "setId", "setSettingsSnapshot"]);
+  const localOnly = new Set(["setDefaults", "setId", "setSettingsSnapshot", "setNewPresetHead"]);
   return [...found].filter((s) => !localOnly.has(s));
 }
 
@@ -41,7 +41,6 @@ describe("§06 — Esc/×/scrim revert EVERY settings field", () => {
         removeCustomSound: "setCustomSounds",
         setMlMode: "setAiLevels",
         setAiLevel: "setAiLevels",
-        setPresetDefault: "setPresetDefault",
       };
       const needed = equivalents[setter] ?? setter;
       return !revert.includes(`${needed}(`);

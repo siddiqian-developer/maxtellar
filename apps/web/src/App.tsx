@@ -25,7 +25,8 @@ import { GapFillModal } from "./components/GapFillModal";
 import { LOST_HOURS_ID, formingDayStart, pomodoroView, sodPrecondition } from "@maxtellar/core";
 import type { PomodoroConfig } from "@maxtellar/core";
 import { fmtDur } from "./time";
-import { useSettings, type AiLevels, type AlarmBehavior, type GridGranularity, type PresetDefaults, type TimeFormat } from "./settings";
+import { useSettings, type AiLevels, type AlarmBehavior, type GridGranularity, type TimeFormat } from "./settings";
+import type { PresetConfig } from "./presets";
 import type { CustomSound, SoundChoice } from "./sound";
 
 type Theme = "light" | "dark" | "system";
@@ -146,7 +147,7 @@ export function App(): JSX.Element {
     timeFormat: TimeFormat;
     gridGranularity: GridGranularity;
     devSandboxVal: boolean;
-    presetDefaults: PresetDefaults;
+    presetsConfig: PresetConfig[];
     /** §4.4a: the weekend is a web setting, but it FORCES core's OFF set — so a
      * cancelled Settings edit must revert both, or they drift apart. */
     weekendDays: number[];
@@ -174,7 +175,7 @@ export function App(): JSX.Element {
         timeFormat: settings.timeFormat,
         gridGranularity: settings.gridGranularity,
         devSandboxVal: settings.devSandbox,
-        presetDefaults: settings.presetDefaults,
+        presetsConfig: settings.presetsConfig,
         weekendDays: settings.weekendDays,
         offDays: state.week.offDays,
         showWeekday: settings.showWeekday,
@@ -203,9 +204,7 @@ export function App(): JSX.Element {
       settings.setTimeFormat(s.timeFormat);
       settings.setGridGranularity(s.gridGranularity);
       settings.setDevSandbox(s.devSandboxVal);
-      settings.setPresetDefault("sleep", s.presetDefaults.sleep);
-      settings.setPresetDefault("nap", s.presetDefaults.nap);
-      settings.setPresetDefault("food", s.presetDefaults.food);
+      settings.setPresetsConfig(s.presetsConfig);
       // §4.4a: the weekend edit also forced core's OFF set (weekend ⊆ offDays), so
       // cancelling must put BOTH back — otherwise the setting reverts while the days
       // it forced OFF stay OFF, and the two definitions drift.
@@ -492,6 +491,7 @@ export function App(): JSX.Element {
           </button>
           {drawerOpen && (
             <TaskDrawer
+              state={state}
               now={state.now}
               minFragment={state.minFragment}
               dispatch={(e) => void dispatch(e)}
@@ -510,6 +510,7 @@ export function App(): JSX.Element {
       )}
       {sodGapFill && (
         <GapFillModal
+          state={state}
           from={sodGapFill.from}
           to={sodGapFill.to}
           now={state.now}

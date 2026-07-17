@@ -14,7 +14,7 @@
  */
 
 import type { Channels, Dur, Min, State } from "@maxtellar/core";
-import { LOST_HOURS_ID, SELF_MANAGEMENT_ID, SLEEP_HEAD, WASTED_TIME_ID, budgetEntries, headName, trimDeficit, weekDayShape } from "@maxtellar/core";
+import { LOST_HOURS_ID, SELF_MANAGEMENT_ID, SLEEP_HEAD, SLEEP_ID, WASTED_TIME_ID, budgetEntries, headName, trimDeficit, weekDayShape } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
 import { fmtDur, toDate } from "../time";
 
@@ -101,7 +101,7 @@ function achievedByHead(state: State, winStart: Min, winEnd: Min): Map<string, D
 }
 
 /** §11 Stage 5 — budget vs achieved. Today's day-shape lines against today's
- * achieved (Sleep matched by sleepKind — its occupancy books under Recharge),
+ * achieved (Sleep matched by headId===SLEEP_ID, the real registry head),
  * plus weekly-quota fulfillment with the §5.1 type semantics: at-least "to go",
  * at-most warn-on-over (track, never block), exact both ways. Redistributed
  * shares (the SOD ledger) are shown so a moved share is never a silent change. */
@@ -119,7 +119,7 @@ function BudgetSection({ state, todayStart, todayEnd, todayByHead }: {
   const entries = budgetEntries(week); // quotaAdjust folded into shares
 
   const sleepToday = state.history
-    .filter((h) => h.kind === "occupancy" && h.sleepKind === "sleep")
+    .filter((h) => h.kind === "occupancy" && h.headId === SLEEP_ID)
     .reduce((a, h) => a + overlap(h.start, h.end, todayStart, todayEnd), 0);
   const achievedFor = (headId: string): Dur => (headId === SLEEP_HEAD ? sleepToday : todayByHead.get(headId) ?? 0);
 

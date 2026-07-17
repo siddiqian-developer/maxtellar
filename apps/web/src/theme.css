@@ -834,6 +834,32 @@ input:focus, select:focus { outline: none; border-color: var(--accent); }
 .card .badge[data-timing="semi-head"], .card .badge[data-timing="semi-tail"] { background: var(--st-semi); border-color: var(--st-semi); }
 .type-chip.active[data-status="fixed"], .card .badge[data-timing="fixed"] { background: var(--st-fixed); border-color: var(--st-fixed); }
 
+/* §2.10b Settings → Presets — a compact table (2026-07-18), replacing the
+   old per-preset pill rows. One dense row per preset: head name, timing
+   select, the value(s) that timing needs (budget, or start/end), a source
+   select, reorder arrows, remove. */
+.preset-table { display: flex; flex-direction: column; gap: 2px; margin-top: 6px; }
+.preset-table-head, .preset-table-row {
+  display: grid;
+  grid-template-columns: 1fr 90px 90px 90px auto;
+  gap: 6px;
+  align-items: center;
+}
+.preset-table-head {
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink-faint);
+  padding: 0 2px 2px;
+}
+.preset-table-row { padding: 3px 0; border-bottom: 1px solid var(--hairline); }
+.preset-table-row select { font-size: 12px; padding: 2px 4px; }
+.preset-row-name { font-size: 12px; font-weight: 600; }
+.preset-row-anchor { font-size: 12px; }
+.preset-row-actions { display: flex; gap: 2px; align-items: center; justify-content: flex-end; }
+.preset-row-actions button { font-size: 11px; padding: 1px 4px; }
+.preset-add-row { border-bottom: none; grid-template-columns: 1fr auto; }
+
 /* §7.0.5/§7.0.6 — the stepper IS the input field, not a field plus loose
  * chevrons beside it (ruled 2026-07-17). The SHELL carries the field's border,
  * background and radius; the input sits borderless inside it; the ▴▾ chevrons

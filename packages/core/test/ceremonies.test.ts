@@ -14,7 +14,7 @@ import {
   formingDayStart,
   deadLeftovers,
   LOST_HOURS_ID,
-  RECHARGE,
+  SLEEP_ID,
   type Event,
   type HistoryEntry,
   type State,
@@ -30,14 +30,13 @@ function sleep(start: number, end: number): Event {
     entry: {
       taskId: null,
       title: "Sleep",
-      headId: RECHARGE,
+      headId: SLEEP_ID,
       activityId: "Sleep",
       kind: "occupancy",
       start,
       end,
       outcome: "completed",
       channels: { spent: end - start, wasted: 0, managed: 0, breaks: 0 },
-      sleepKind: "sleep",
     },
   };
 }

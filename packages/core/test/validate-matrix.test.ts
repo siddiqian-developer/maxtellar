@@ -161,15 +161,13 @@ describe("MIN_FRAGMENT floor (§3.7/7.1: no budget below it, ever)", () => {
 });
 
 describe("orthogonal fields pass through untouched", () => {
-  it("sleepKind and the rider provision survive snapping (§2.8/§2.9)", () => {
+  it("the rider provision survives snapping (§2.8)", () => {
     const { task } = snap({
       timing: "budgeted",
-      sleepKind: "nap",
       riderOf: "primary-1",
       spillPolicy: "dismount",
       lane: 2,
     });
-    expect(task.sleepKind).toBe("nap");
     expect(task.riderOf).toBe("primary-1");
     expect(task.spillPolicy).toBe("dismount");
     expect(task.lane).toBe(2);

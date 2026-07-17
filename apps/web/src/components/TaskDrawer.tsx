@@ -9,13 +9,13 @@
  */
 
 import { useEffect, useMemo, useState } from "react";
-import type { Event, PomodoroConfig, SleepKind, TimingType } from "@maxtellar/core";
+import type { Event, PomodoroConfig, State, TimingType } from "@maxtellar/core";
 import { useHeads } from "../heads";
 import { headName } from "@maxtellar/core";
 import { headLabels } from "../headDisplay";
-import { useSettings, type PresetId } from "../settings";
-import { presetById, matchPreset } from "../presets";
-import { parseCasualTime, parseCasualDuration } from "../casualTime";
+import { useSettings } from "../settings";
+import { matchPreset, resolvePreset, type PresetConfig } from "../presets";
+import { parseCasualTime, parseCasualDuration, dayStartMin } from "../casualTime";
 import { parseTitleGrammar, resolveHash } from "../titleGrammar";
 import { fmtDayTime, fmtDurUnits } from "../time";
 import { DatePicker } from "./DatePicker";
@@ -31,6 +31,7 @@ import { recordDecomposition, suggestDecomposition } from "../ml/decompose";
 import { FuzzyDropdown } from "./FuzzyDropdown";
 
 interface Props {
+  state: State;
   now: number;
   minFragment: number;
   dispatch: (e: Event) => void;
@@ -51,7 +52,6 @@ interface FieldSnapshot {
   budgetMin: number | undefined;
   ommf: boolean;
   flags: { slideable?: boolean; breakable?: boolean };
-  sleepKind: SleepKind | undefined;
   newHeadChoice: string;
   newHeadTouched: boolean;
 }
@@ -169,9 +169,9 @@ function deriveDayAware(
 // called a semi-head's budget "not used" while `useTaskSpec` demanded one. §3.9
 // settles it — a semi-head/semi-tail budget is optional.
 
-export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.Element {
+export function TaskDrawer({ state, now, minFragment, dispatch, onClose }: Props): JSX.Element {
   const { registry, plannableHeads, plannableActivities, headFor, addActivity } = useHeads();
-  const { presetDefaults, timeFormat, aiLevels, showWeekday, pomodoroDefault } = useSettings();
+  const { presetsConfig, timeFormat, aiLevels, showWeekday, pomodoroDefault } = useSettings();
   const hour12 = timeFormat === "12h";
   const fmtT = (m: number): string => fmtDayTime(m, now, hour12, showWeekday);
   // Head-suggester should only ever propose PLANNABLE heads (never the system
@@ -202,9 +202,6 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   const [endMin, setEndMin] = useState<number | undefined>(undefined);
   const [budgetMin, setBudgetMin] = useState<number | undefined>(DEFAULT_BUDGET);
   const [ommf, setOmmf] = useState(false);
-  // §2.9: Sleep/Nap is an EXPLICIT declaration at logging, never inferred — set
-  // by the preset pill (not a free-form control).
-  const [sleepKind, setSleepKind] = useState<SleepKind | undefined>(undefined);
   const [flags, setFlags] = useState<{ slideable?: boolean; breakable?: boolean }>({});
   // §5.2: start this task as a pomodoro (only meaningful on "Add & start now").
   // Work/break override the global default at Start; long-break + cycles inherit.
@@ -233,7 +230,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // auto-switch once the user has toggled a pill this session (intent wins);
   // presetAuto marks a pill that ML selected (so it can auto-deselect on a
   // no-longer-matching editable title, without clobbering what the user typed).
-  const [activePreset, setActivePreset] = useState<PresetId | null>(null);
+  const [activePreset, setActivePreset] = useState<string | null>(null);
   const [presetSnapshot, setPresetSnapshot] = useState<FieldSnapshot | null>(null);
   const [presetTouched, setPresetTouched] = useState(false);
   const [presetAuto, setPresetAuto] = useState(false);
@@ -517,7 +514,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   /* ------------------------- §2.9 preset pills --------------------------- */
 
   const captureFields = (): FieldSnapshot => ({
-    title, activity, subheadSource, startStr, endStr, budgetStr, startMin, endMin, budgetMin, ommf, flags, sleepKind, newHeadChoice, newHeadTouched,
+    title, activity, subheadSource, startStr, endStr, budgetStr, startMin, endMin, budgetMin, ommf, flags, newHeadChoice, newHeadTouched,
   });
   const restoreFields = (snap: FieldSnapshot, keepTitle: boolean): void => {
     if (!keepTitle) setTitle(snap.title);
@@ -531,7 +528,6 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     setBudgetMin(snap.budgetMin);
     setOmmf(snap.ommf);
     setFlags(snap.flags);
-    setSleepKind(snap.sleepKind);
     setNewHeadChoice(snap.newHeadChoice);
     setNewHeadTouched(snap.newHeadTouched);
     setError(null);
@@ -539,22 +535,43 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     setTomorrowOffer(null);
   };
   /** Fill the locked/seeded fields for a preset. Sleep/Nap force the title;
-   * Food (editable title) only seeds it when empty, so a matching typed title
-   * ("Lunch") is preserved. */
-  const applyPreset = (id: PresetId): void => {
-    const p = presetById(id);
-    if (!p.titleEditable) setTitle(p.title);
-    else if (!title.trim()) setTitle(p.title);
-    setActivity(p.subhead);
+   * others (editable title) only seed it when empty, so a matching typed title
+   * ("Lunch") is preserved. `newHeadChoice` carries the preset's own head —
+   * every Food-pattern built-in (§11.1b) ships with NO seeded sub-head, so
+   * `headFor(activity)` can't derive it; the preset supplies it directly
+   * (mirrors §11.1a's "new sub-head's head" path, just pre-filled+hidden).
+   * §2.10b: the preset's timing + its resolved budget/anchor (a fixed value,
+   * or live-sourced from the week plan / Settings sleepMinutes) fill the
+   * fields directly — NOT `shapeTo`'s generic per-timing defaults. */
+  const applyPreset = (id: string): void => {
+    const p = presetsConfig.find((c) => c.id === id);
+    if (!p) return;
+    const r = resolvePreset(p, state);
+    if (!r.titleEditable) setTitle(r.title);
+    else if (!title.trim()) setTitle(r.title);
+    setActivity(r.subhead);
     setSubheadSource("user"); // locked value = user intent (protects from suggester)
-    setSleepKind(p.sleepKind);
     setOmmf(false);
-    setNewHeadChoice("");
+    setNewHeadChoice(r.headId);
     setNewHeadTouched(false);
-    shapeTo(presetDefaults[id]); // seeds timing fields, resets flags, clears error
+    setFlags({});
+    // Preset anchors are time-of-day (§2.10b, the WeekTemplate convention) —
+    // ground them in TODAY's absolute epoch before the trio math, which works
+    // in absolute minutes throughout. A past time-of-day (e.g. Sleep's anchor
+    // already gone by) legitimately snaps forward via deriveDayAware's own
+    // past-time rule, same as any typed time would.
+    const midnight = dayStartMin(now);
+    const startAbs = r.startTod !== undefined ? midnight + r.startTod : undefined;
+    const endAbs = r.endTod !== undefined ? midnight + r.endTod : undefined;
+    commitTrio(deriveDayAware(
+      startAbs !== undefined ? "start" : endAbs !== undefined ? "end" : "budget",
+      { startMin: startAbs, endMin: endAbs, budgetMin: r.budget },
+      { start: false, end: false },
+      now, minFragment, fmtT,
+    ));
   };
   /** Manual pill tap: toggles the preset and silences ML auto-switch for the session. */
-  const togglePreset = (id: PresetId): void => {
+  const togglePreset = (id: string): void => {
     setPresetTouched(true);
     if (activePreset === id) {
       if (presetSnapshot) restoreFields(presetSnapshot, false);
@@ -574,7 +591,7 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
   // without clobbering what the user is typing.
   useEffect(() => {
     if (presetTouched) return;
-    const m = matchPreset(title);
+    const m = matchPreset(title, presetsConfig);
     if (m && activePreset !== m.id) {
       if (activePreset === null) setPresetSnapshot(captureFields());
       setActivePreset(m.id);
@@ -589,8 +606,8 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [title]);
 
-  const activePresetObj = activePreset ? presetById(activePreset) : null;
-  const titleLocked = activePresetObj !== null && !activePresetObj.titleEditable;
+  const activePresetObj = activePreset ? presetsConfig.find((p) => p.id === activePreset) ?? null : null;
+  const titleLocked = activePresetObj !== null && activePresetObj.titleLocked;
 
   const buildEvent = (): Event | null => {
     if (!title.trim()) { setError("Title is required"); return null; }
@@ -628,7 +645,6 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
         ...(anchorStart !== undefined ? { anchorStart } : {}),
         ...(anchorEnd !== undefined ? { anchorEnd } : {}),
         ...(bud !== undefined ? { budget: bud } : {}),
-        ...(sleepKind !== undefined ? { sleepKind } : {}),
       } as never,
     };
   };
@@ -811,12 +827,12 @@ export function TaskDrawer({ now, minFragment, dispatch, onClose }: Props): JSX.
                 </span>
               </div>
             )}
-            {derivedHead && (
+            {(derivedHead ?? (activePresetObj ? activePresetObj.headId : undefined)) && (
               <div className="derived-head" data-tip="Derived from the sub-head — not editable here">
-                Head: <strong>{headName(derivedHead)}</strong>
+                Head: <strong>{headName(derivedHead ?? activePresetObj!.headId)}</strong>
               </div>
             )}
-            {isNewActivity && (
+            {!activePreset && isNewActivity && (
               <div className="field" style={{ marginTop: 8 }}>
                 <label data-tip="This sub-head is new — pick or type the head it belongs to">
                   New sub-head's head <span className="req-dot" aria-label="required">•</span>

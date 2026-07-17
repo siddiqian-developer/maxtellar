@@ -18,28 +18,89 @@ so the cost of overhead stays visible in the one number that matters. See [01-ph
 ## 11.1 The Category tier (3-level hierarchy)
 Introduce a level **above** heads: **Category → Head → Sub-head** (was Head → Sub-head).
 - Categories are an **ordered list** the app ships with, **and the user may ADD their own**
-  (add-only, 2026-07-17). The seeded categories are not renamed or deleted (that keeps the §11.3
+  (add-only). The seeded categories are not renamed or deleted (that keeps the §11.3
   budgeting roll-ups well-defined); a user-added category behaves like any seeded one. **Category
   order is user-controllable** (§11.1a) and is the order everything category-grouped renders in
-  (registry screen, budgeting panels).
-- **Shipped default categories, in order** (the data the app ships with, 2026-07-17):
-  1. **Recharging** — Recharge* → Sleep, Nap
-  2. **Core Work** — Self-Management (Strategy and Planning, Research, Project Execution) · Job
-     (Sales, Fundraising, Job Search, Marketing) · Public Speaking · Investor Hunting · Networking ·
+  (registry screen, budgeting panels). **All 8 shipped categories are themselves built-in**
+  (2026-07-18) — reorderable, never renamed/removed.
+- **Shipped default categories, in order** (the data the app ships with; tree corrected 2026-07-18
+  — the user's list is Category → Head, FLAT, no sub-heads below the head tier except the one
+  pre-existing §2.9 exception noted below):
+  1. **Recharging** — Sleep* · Nap
+  2. **Core Work** — Self-Management* · Strategy and Planning · Research · Project Execution · Job ·
+     Sales · Fundraising · Job Search · Marketing · Public Speaking · Investor Hunting · Networking ·
      Other Work #1 · Other Work #2
-  3. **Maintenance** — Food* (Kitchen work) · Health · Cleaning · Plantcare · Clothes Work
-  4. **Regeneration** — Rest · Meditation · Break · Exercise · Socialization
-  5. **Upgrading** — Personal Philosophy · Learning (English Speaking Learning/Practice)
+  3. **Maintenance** — Food* (→ Kitchen work, §2.9 sub-head exception) · Kitchen work · Cleaning ·
+     Plantcare · Clothes Work · Health
+  4. **Regeneration** — Rest · Meditation* · Break · Exercise* · Socialization* · Entertainment
+  5. **Upgrading** — Personal Philosophy · Learning* · English Speaking Learning/Practice
   6. **Not Work** — Social Media · Sports · Socialization
-  7. **Wasted Time** — Social Media · Socialization
+  7. **Wasted Time** — Social Media · Socialization · Entertainment
+  8. **Lost Time** — (Lost Hours, the system head, lives here — see below)
 
-  (* = built-in inevitable-necessity head, §2.10; Recharge & Food are undeletable.) Names locked
-  2026-07-16 for the original four; the set was expanded to the seven above 2026-07-17. "Time
-  Wasted" was renamed "Wasted Time" 2026-07-17.
-- **Identity is the PATH, not the name.** The same activity name may live under two Categories with
-  different meaning — e.g. *Socialization* under Regeneration (regenerative) vs under Wasted Time
-  (indulgent). A sub-head is `(category, head, sub-head)`, not a global string. This confirms the
-  tree is load-bearing, and the head registry (`heads.tsx`, §2.1) carries a Category parent.
+  (* = built-in head, §2.10 — undeletable, fixed category, "Food-pattern" plannable: Recharge/
+  Self-Management/Food were already built-in; **Meditation, Exercise, Socialization [the
+  Regeneration one — Not Work's Socialization is an ordinary, separate head], and Learning joined
+  2026-07-18** with the same Food-pattern treatment, §2.10a.) "Kitchen work" is listed twice above
+  deliberately: it is Food's ONE pre-existing sub-head (§2.9), the single exception to the
+  otherwise-flat Category→Head tree — kept as-is, not flattened, since Food already had it before
+  this re-seed and demoting it would be an unasked change. Names locked 2026-07-16 for the
+  original four; expanded to seven 2026-07-17, to eight (Lost Time added, Lost Hours moved into
+  it from Wasted Time) 2026-07-18. "Time Wasted" was renamed "Wasted Time" 2026-07-17. The full
+  seed tree (all built-ins + this list) OVERRIDES any prior seed — re-seeded from scratch
+  2026-07-18, not merged with earlier example heads.
+- **Identity is the PATH, not the name.** The same head name may live under two Categories with
+  different meaning — e.g. *Socialization* under Regeneration (regenerative, built-in) vs under
+  Wasted Time (indulgent, ordinary). A head is `(category, head)`, not a global string. This
+  confirms the tree is load-bearing, and the head registry (`heads.tsx`, §2.1) carries a Category
+  parent.
+
+### 11.1b Food-pattern built-in HEADS (§2.10a, added 2026-07-18)
+Sleep/Nap/Self-Management/Food/Meditation/Exercise/Socialization[Regeneration]/Learning share one
+treatment, distinct from the system built-ins (Wasted Time/Lost Hours/Off-Periods):
+- **Undeletable, fixed category** — same as every built-in.
+- **Plannable** — schedulable like any ordinary head (no config note), unlike the system built-ins.
+- **Each is its OWN head**, not a sub-head of a parent. **"Recharge" no longer exists** (revised
+  2026-07-18): **Sleep** and **Nap** are two distinct built-in heads directly under Recharging —
+  replacing the earlier model where both were sub-heads of one "Recharge" head distinguished by a
+  `sleepKind` field. `sleepKind` is REMOVED from every task/history type; the head id itself now
+  carries what it used to (`headId === SLEEP_ID` is what the §4.2 SOD precondition counts). No
+  built-in ships with a seeded sub-head (2026-07-18) — sub-heads exist in the schema but are
+  added later, by the user, never in the shipped seed (this includes Food, which no longer ships
+  with a "Food"-named sub-head either).
+
+### 11.1c The preset system (§2.9/§2.10b, rebuilt 2026-07-18)
+Presets are a **user-editable LIST** (`settings.presetsConfig`), not a fixed set of ids — any
+registry head can be added as a preset, any preset can be removed, and the list is reorderable
+(display order = array order, everywhere presets render).
+
+- **Shipped presets, in this order:** Exercise, Food, Learning, Nap, Meditation, Sleep.
+  **Socialization is explicitly NOT a preset** (removed 2026-07-18) — it stays a plain built-in
+  head, just with no preset/quick-add treatment.
+- **Each preset row:** `{ headId, label, titleLocked, timing, budgetFlat, budgetSource,
+  startFlat, endFlat, anchorSource }`. `timing` is the preset's own TimingType — tapping the pill
+  sets the drawer/editor to that timing AND fills whichever field(s) §2.5's FIELD_ROLES matrix
+  requires for it (budget for `budgeted`; start+end for `fixed`; start only for `semi-head`; end
+  only for `semi-tail`; nothing for `unscheduled`).
+- **Value SOURCE per preset** (configurable, not fixed):
+  - `flat` — a fixed number the user set in Settings (minutes for budget; a time-of-day for
+    start/end).
+  - `weekPlan` — resolved LIVE at apply-time: budget from that head's TODAY line in
+    `weekDayShape` (§11); start/end from a matching WeekTemplate's own anchors, if one fires
+    today for this head.
+  - `settings` — only meaningful for Sleep's budget (`week.sleepMinutes`, §11.4).
+  - A sourced value that can't resolve (no matching template today, no budget line) falls back
+    to the preset's own flat value — a preset never fails to apply.
+- **Shipped defaults:** Exercise = budgeted, budget from week-plan. Food = unscheduled. Learning =
+  fixed, start/end from week-plan (a matching template's anchors). Nap = unscheduled. Meditation =
+  unscheduled. Sleep = budgeted, budget from Settings' `sleepMinutes`.
+- **Settings UI:** a compact TABLE (2026-07-18, replaces the old per-preset pill-button rows) —
+  one row per preset: head name, a timing `<select>`, the value control(s) that timing's
+  FIELD_ROLES require (a duration/time input + a source `<select>`), reorder ▲▼, and a ×. A
+  trailing row picks any not-yet-preset head and appends it ("+ Add preset").
+- **Every OTHER surface keeps the pill row** (`PresetPills` in `TaskSpecFields.tsx`) — New Task
+  drawer, the week-plan template editor, the dated-task editor, Gap-Fill's quick-fill row. Only
+  the Settings CONFIGURATION screen uses the table; pickers stay pills.
 - **Path identity is TASK-LEVEL (decided 2026-07-17):** a task's `headId` IS the path
   `(category, head)`, encoded as one string (`category ␟ name`, an untypeable separator), so two
   same-named heads under different Categories are genuinely distinct everywhere — reducer,
@@ -193,7 +254,7 @@ percentEntry(h) = h.pct / 100 × netCore                     // hours, for a Cor
 The Analytics screen gains a **Budgets** section (only when head budgets exist):
 - **Budget today** — today's resolved day-shape lines (% shown with their hours) vs achieved,
   with Remaining (over → warn styling, never blocked). OFF day → stated, no comparison. Sleep's
-  achieved matches by `sleepKind` (its occupancy books under Recharge).
+  achieved matches by `headId === SLEEP_ID` (its own built-in head, §11.1b).
 - **Weekly quotas** — per weekly head: type, quota, achieved since the week started (last 7 days
   when no week is running — degrade gracefully), and the standing per §5.1 type semantics:
   *at-least* "X to go / met ✓"; *at-most* "headroom / over by X" (warn, never block); *exact*

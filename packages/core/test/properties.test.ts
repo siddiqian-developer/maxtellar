@@ -12,6 +12,7 @@ import {
   checkInvariants,
   checkForwardOnly,
   sodPrecondition,
+  SLEEP_ID,
   type Event,
   type State,
 } from "../src/index.js";
@@ -290,14 +291,13 @@ describe("simulation: long random soup survives thousands of ticks", () => {
         entry: {
           taskId: null,
           title: "Sleep",
-          headId: "Recharge",
+          headId: SLEEP_ID,
           activityId: "Sleep",
           kind: "occupancy",
           start,
           end,
           outcome: "completed",
           channels: { spent: end - start, wasted: 0, managed: 0, breaks: 0 },
-          sleepKind: "sleep",
         },
       });
       lastSleepEnd = end;

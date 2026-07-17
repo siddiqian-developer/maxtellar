@@ -239,6 +239,7 @@ export function HistoryScreen({ state, dispatch, onBack }: Props): JSX.Element {
       )}
       {filling && (
         <GapFillModal
+          state={state}
           from={filling.from}
           to={filling.to}
           now={state.now}

@@ -9,19 +9,21 @@ export type Dur = number; // duration in minutes (integer)
 /** Built-in heads (§2.10) — real heads, undeletable. Shared by core (Lost
  * Hours booking at SOD) and the web registry so the names have one source.
  * Two kinds: PLANNABLE (schedulable like any head) and SYSTEM (accounting-owned,
- * never planned). Recharge/Food are "inevitable-necessity" heads (§2.10). */
+ * never planned). Sleep/Nap/Food/Meditation/Exercise/Socialization/Learning
+ * are "Food-pattern" heads (§2.10a) — undeletable AND plannable. Sleep/Nap
+ * were sub-heads of a "Recharge" head until 2026-07-18, when they became two
+ * distinct built-in HEADS directly under Recharging (headId now carries what
+ * `sleepKind` used to — the SOD precondition and every consumer key off
+ * headId, not a separate field). */
 export const SELF_MANAGEMENT = "Self-Management";
-export const RECHARGE = "Recharge";
+export const SLEEP = "Sleep";
+export const NAP = "Nap";
 export const FOOD = "Food";
 export const WASTED_TIME = "Wasted Time";
 export const LOST_HOURS = "Lost Hours";
 /** §4.5: off-periods (illness, travel, abrupt breaks) book their Inviolable-tier
  * time here — a built-in head, undeletable, never a planning-picker option. */
 export const OFF_PERIOD = "Off-Periods";
-
-/** §2.9 (G14): Sleep = main day-defining sleep; Nap = any other. Explicit at
- * logging, never inferred. Both are ordinary tasks. */
-export type SleepKind = "sleep" | "nap";
 
 /** Task-level accounting identity (§2.6, locked):
  *  wall = spent + wasted + managed + breaks */
@@ -77,8 +79,6 @@ export interface UnstartedTask {
    * suffix (starting a leaf cancels earlier siblings), so the front ordinal of
    * the next leaf = subtaskCount − remaining + 1. */
   subtaskCount?: number;
-  /** §2.9: marks a Sleep/Nap task. Explicit at logging, never inferred. */
-  sleepKind?: SleepKind;
   /** §2.8 rider provision (G9) — schema only in MVP, no behavior. A rider is
    * softly bound to its primary; placement derives from the primary. */
   riderOf?: string;
@@ -140,9 +140,6 @@ export interface HistoryEntry {
   end: Min;
   outcome: HistoryOutcome;
   channels: Channels;
-  /** §2.9: carried from the task (or set directly on back-log). A Finished
-   * Sleep occupancy entry is what the SOD precondition counts (§4.2). */
-  sleepKind?: SleepKind;
   /** §2.7 (G24): if this entry was a subtask leaf, the composition it belonged
    * to — persisted so the timeline can still bracket completed/running/paused
    * leaves as a composed group after the parent task object is gone. */
@@ -206,8 +203,6 @@ export interface RunningTask {
   /** countdown when budget set; stopwatch otherwise. */
   budget?: Dur;
   channels: Channels;
-  /** §2.9: carried from the unstarted task so completion writes it to history. */
-  sleepKind?: SleepKind;
   /** §2.7 (G24): carried from the started leaf so completing the last leaf can
    * complete its ancestors, and a paused remainder stays bound to its parent. */
   parentId?: string;
@@ -254,7 +249,6 @@ export interface TaskSpec {
    * always > 0 and <= 1440.
    */
   anchorEndDayOffset?: EndDayOffset;
-  sleepKind?: SleepKind;
 }
 
 /** §4.4 one-time/ranged template validity (ruled in-scope 2026-07-16). Absent =

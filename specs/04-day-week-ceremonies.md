@@ -126,8 +126,8 @@ Running → modal **[Complete] / [Pause] / [Keep working]**. Real rollover is th
 - **State `week: WeekPlan` = `{ startedAt, firstWeekday, offDays, templates }`** (event-sourced).
   A **`WeekTemplate`** is a reusable task spec: title, head/activity, timing, tier, ommf,
   slideable, breakable, budget?, **anchor time-of-day** `anchorStartTod`/`anchorEndTod` (0..1439 —
-  a "9am meeting", NOT an absolute epoch), sleepKind?, `weekdays: number[]` (0=Sun…6=Sat), and a
-  LexoRank.
+  a "9am meeting", NOT an absolute epoch), `weekdays: number[]` (0=Sun…6=Sat), and a LexoRank.
+  (No `sleepKind` — removed 2026-07-18; Sleep/Nap are distinct built-in heads now, §2.9.)
   **Overnight span — `anchorEndDayOffset` (ruled 2026-07-17).** A template anchor has no date
   (§7.0.5 exemption — hence no 📅), so it can only cross midnight by DAY COUNT. That crossing used to
   be an INFERENCE (`end <= start` → overnight) — invisible to the user. The END anchor therefore

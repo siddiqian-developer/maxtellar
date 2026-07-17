@@ -308,15 +308,18 @@ Drawer behavior (see also `docs/drawer-reference.md`):
   §7.0.5 symmetry; steppers skipped by tab order). Parser is deterministic-grammar-first with an
   ML fallback seam (§7.0.2); never load-bearing.
 - **Preset pill row (directly under the timing-type chips).** Headed by a **`Presets` label** in
-  the main view; the ⓘ glyph carries only the auto-select footnote. `Sleep · Nap · Food` — each a
-  §2.9 preset that pre-fills a bundle (locked Title/Sub-head/Head + `breakable` off + the
-  pill's `sleepKind`; editable timing type, `slideable`, `ommf`). Selecting a pill fills and
-  locks those fields (locked inputs render read-only/disabled); tapping the active pill again
+  the main view; the ⓘ glyph carries only the auto-select footnote. The row is the user's OWN
+  configurable list (`settings.presetsConfig`, §11.1c/§2.10b — shipped default: Exercise, Food,
+  Learning, Nap, Meditation, Sleep) — each pill pre-fills a bundle (locked Title/Sub-head/Head
+  for Sleep/Nap, editable for the rest; `breakable` off; the preset's own timing type +
+  budget/anchor, resolved from a flat value, the week plan, or Settings). Selecting a pill fills
+  and locks those fields (locked inputs render read-only/disabled); tapping the active pill again
   deselects and **restores the pre-activate snapshot**. A title matching a preset auto-selects
   its pill (ML-tagged, undoable), unless the user has already toggled a pill this session
   (intent wins, §7.0.1). The **`auto` tag rides on the active pill's saturated fill** — rendered
   **pure white on dark**, and a white chip with dark text on light, so it reads on either theme.
-  There is **no "ordinary" pill** — no pill selected *is* ordinary.
+  There is **no "ordinary" pill** — no pill selected *is* ordinary. (Settings' own preset
+  CONFIGURATION screen is a compact table, not pills — §11.1c; every picker surface keeps pills.)
 - **Snap-at-entry + universal snap-notify (binding pattern, all input fields — see §7.0.2).**
   A value that violates a floor/physics rule is **corrected the instant it is committed to the
   field**, and **every meaning-changing adjustment is announced** in the inline notice list —
@@ -453,9 +456,10 @@ its head automatically, existing or freshly typed, so this second form is the ex
 not the main path). Plus a listing of the registry grouped by head. Each sub-head chip
 carries a quiet **× delete**
 (ink-faint, turns danger on hover). **Heads carry the same quiet × delete, except the
-built-ins.** All five §2.10 built-ins appear here and are undeletable: the **plannable**
-ones (`Self-Management`, `Recharge` with its Sleep/Nap sub-heads, `Food`) show **no note**;
-the **system** ones (`Wasted Time`, `Lost Hours`) show a quiet one-line note in front —
+built-ins.** The §2.10/§2.10a built-ins appear here and are undeletable: the **plannable**
+ones (`Self-Management`, `Sleep`, `Nap`, `Food`, `Meditation`, `Exercise`, `Socialization`,
+`Learning` — each its own head, §2.9/§11.1b) show **no note**; the **system** ones
+(`Wasted Time`, `Lost Hours`, `Off-Periods`) show a quiet one-line note in front —
 "system head — logged, never planned" / "system head — auto-booked at day close" — since
 their non-plannability is the thing worth surfacing. (`Main Work` is a convenience default
 seed, not a built-in, so it CAN be deleted — **and a deletion sticks across reloads**: the

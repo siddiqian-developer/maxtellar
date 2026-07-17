@@ -189,21 +189,17 @@ remaining         = budget − spent              (clamped ≥ 0 in overrun)
   6-hour Nap are both legal.
 - Wearable provision: sleep/wake from a pluggable source (`manual` | `wearable`); detected
   sleep only ever *proposes* (never auto-commits).
-- **Preset pills (task drawer).** Sleep and Nap (and Food, §2.10) are entered from a **preset
-  pill row** directly under the timing-type chips — not a free-form flag. A pill pre-fills a
-  bundle of fields, some **locked**, some **editable**:
-
-  | Field | Sleep | Nap | Food | Locked? |
-  |---|---|---|---|---|
-  | Title | Sleep | Nap | Food | 🔒 for Sleep/Nap; ✏️ **editable for Food** (Lunch/Dinner/…) — ML auto-switch still applies |
-  | Sub-head | Sleep | Nap | Food | 🔒 locked |
-  | Head | Recharge | Recharge | Food | 🔒 locked |
-  | `sleepKind` | `sleep` | `nap` | — | 🔒 (set by pill) |
-  | `breakable` | off | off | off | 🔒 locked off (never split by the scheduler) |
-  | timing type | **budgeted** | **unscheduled** | **budgeted** | ✏️ editable; **default configurable** in Settings |
-  | `slideable` | on | on | on | ✏️ editable (default on — a slideable Sleep *rides* under pressure, G28, rather than being amputated) |
-  | `ommf` | off | off | off | ✏️ editable (default off — a missed bedtime must slide, not perish; an OMMF nap is a legitimate choice) |
-
+- **Sleep and Nap are their own built-in HEADS** (revised 2026-07-18) — not sub-heads of a
+  shared "Recharge" head. "Recharge" no longer exists; there is no `sleepKind` field anywhere in
+  the task/history types. `headId === SLEEP_ID` is what the §4.2 SOD precondition (and every
+  other "was this Sleep?" check) tests — the head IS the explicit type.
+- **Preset pills (task drawer, §2.10b).** Sleep, Nap, Food, and any other preset are entered from
+  a **preset pill row** directly under the timing-type chips — not a free-form flag. A pill
+  pre-fills a bundle of fields per the preset's own config (`settings.presetsConfig`, §11.1c):
+  title/sub-head/head (Sleep/Nap title+sub-head locked; others editable), the preset's timing
+  type, and whichever budget/anchor field that timing needs — from a flat value, the week plan,
+  or (Sleep only) Settings' sleep budget. `breakable` stays locked off for every preset (never
+  split by the scheduler); `slideable`/`ommf` stay editable.
   - **Deselect restores.** Tapping the active pill again toggles it off and **restores the
     field values captured just before it was activated** (snapshot-on-activate) — no data loss
     from a stray tap.
@@ -220,9 +216,13 @@ into two kinds by whether the user may *plan* a task under them:
 
 **Plannable built-ins** (schedulable like any head; **no** "system" note in the config):
 - **Self-Management** — ceremonies, planning, in-app edit time.
-- **Recharge** — sleep and rest. Sleep is a body-maintenance necessity, not a luxury or a
-  waste; its head name says so. Ships with built-in sub-heads **Sleep** and **Nap** (§2.9).
-- **Food** — eating. Sub-head **Food**.
+- **Sleep**, **Nap** — sleep and rest, each its own head (§2.9; revised 2026-07-18 — no longer
+  sub-heads of a shared "Recharge" head).
+- **Food** — eating.
+- **Meditation**, **Exercise**, **Socialization** [the Regeneration one — Not Work's
+  Socialization is a separate, ordinary head], **Learning** — joined the built-in set 2026-07-18
+  with the same "Food-pattern" treatment (§11.1b: undeletable, fixed category, plannable). Every
+  built-in above ships with NO seeded sub-head (2026-07-18) — sub-heads are user-added.
 
 **System built-ins** (never plannable; shown in the config as locked, with a one-line note):
 - **Wasted Time** — *explicitly logged* waste (loggable in back-log/gap-fill — a one-tap fill
