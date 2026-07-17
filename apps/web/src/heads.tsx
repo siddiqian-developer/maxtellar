@@ -23,9 +23,6 @@ import {
   RECHARGING,
   CORE_WORK,
   MAINTENANCE,
-  REGENERATION,
-  UPGRADING,
-  NOT_WORK,
   TIME_WASTED,
   SELF_MANAGEMENT_ID,
   RECHARGE_ID,
@@ -86,44 +83,21 @@ export function isBuiltInActivity(headId: string, activity: string): boolean {
   return (BUILT_IN_SUBHEADS[headId] ?? []).includes(activity);
 }
 
-/** §11.1 shipped seed — the data the app ships with (user list, 2026-07-17).
- * Registry object key order IS the display order within a category. */
+/** §11.1 shipped seed — BUILT-INS ONLY (2026-07-18: all user/example heads
+ * removed pending the user's next authoritative list, which will mark which
+ * entries are built-in). Registry object key order IS the display order
+ * within a category. */
 const DEFAULT_REGISTRY: HeadsRegistry = {
   // Recharging
   [RECHARGE_ID]: [...(BUILT_IN_SUBHEADS[RECHARGE_ID] ?? [])],
   // Core Work
-  [SELF_MANAGEMENT_ID]: ["Strategy and Planning", "Research", "Project Execution"],
-  [headPath(CORE_WORK, "Job")]: ["Sales", "Fundraising", "Job Search", "Marketing"],
-  [headPath(CORE_WORK, "Public Speaking")]: [],
-  [headPath(CORE_WORK, "Investor Hunting")]: [],
-  [headPath(CORE_WORK, "Networking")]: [],
-  [headPath(CORE_WORK, "Other Work #1")]: [],
-  [headPath(CORE_WORK, "Other Work #2")]: [],
+  [SELF_MANAGEMENT_ID]: [],
   // Maintenance
-  [FOOD_ID]: [...(BUILT_IN_SUBHEADS[FOOD_ID] ?? []), "Kitchen work"],
-  [headPath(MAINTENANCE, "Health")]: [],
-  [headPath(MAINTENANCE, "Cleaning")]: [],
-  [headPath(MAINTENANCE, "Plantcare")]: [],
-  [headPath(MAINTENANCE, "Clothes Work")]: [],
+  [FOOD_ID]: [...(BUILT_IN_SUBHEADS[FOOD_ID] ?? [])],
   [OFF_PERIOD_ID]: [],
-  // Regeneration
-  [headPath(REGENERATION, "Rest")]: [],
-  [headPath(REGENERATION, "Meditation")]: [],
-  [headPath(REGENERATION, "Break")]: [],
-  [headPath(REGENERATION, "Exercise")]: [],
-  [headPath(REGENERATION, "Socialization")]: [],
-  // Upgrading
-  [headPath(UPGRADING, "Personal Philosophy")]: [],
-  [headPath(UPGRADING, "Learning")]: ["English Speaking Learning/Practice"],
-  // Not Work
-  [headPath(NOT_WORK, "Social Media")]: [],
-  [headPath(NOT_WORK, "Sports")]: [],
-  [headPath(NOT_WORK, "Socialization")]: [],
   // Wasted Time
   [WASTED_TIME_ID]: [],
   [LOST_HOURS_ID]: [],
-  [headPath(TIME_WASTED, "Social Media")]: [],
-  [headPath(TIME_WASTED, "Socialization")]: [],
 };
 
 /** Merge a persisted registry so every UNDELETABLE built-in head — and its
