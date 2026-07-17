@@ -1770,8 +1770,8 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   z-index: 3;
 }
 /* The band is the VISUAL: the block you are about to create — the swept columns
-   wide, and ONE ROW tall (its time), not the whole calendar. Its top/height are
-   inline, computed from the grabbed hour. */
+   wide, and as tall as the dragged time-span (tracking the pointer up/down), like
+   dragging out a real gcal event. Its top/height are inline, from start/endTod. */
 .wk-sweep {
   position: absolute;
   z-index: 4;
