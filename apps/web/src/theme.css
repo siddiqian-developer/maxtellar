@@ -1769,17 +1769,25 @@ label.flag { display: flex; gap: 6px; align-items: center; font-size: 13px; colo
   inset: 0;
   z-index: 3;
 }
-/* The band is the VISUAL: the block you are about to create — the swept columns
-   wide, and as tall as the dragged time-span (tracking the pointer up/down), like
-   dragging out a real gcal event. Its top/height are inline, from start/endTod. */
-.wk-sweep {
+/* The selection mark: one per swept weekday column, sized to the block being made
+   and filled with its details — a live preview that keeps updating from the drawer
+   until it closes. Hand-rolled (not RBC's transient ghost) so it can persist and
+   reflect edits. NOT pointer-events:none while dragging — being hit-testable is how
+   the .sweeping shield makes RBC decline. */
+.wk-sel {
   position: absolute;
   z-index: 4;
+  overflow: hidden;
+  padding: 2px 5px;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--accent) 14%, transparent);
-  border-inline: 1px solid var(--accent);
-  /* NOT pointer-events:none — being hit-testable IS the mechanism (see above). */
+  background: color-mix(in srgb, var(--accent) 18%, var(--paper));
+  border: 1px solid var(--accent);
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--ink);
 }
+.wk-sel-title { display: block; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.wk-sel-time { display: block; color: var(--ink-soft); }
 .wk-rbc.sweeping { cursor: ew-resize; user-select: none; }
 .wk-rbc .rbc-time-view { border: none; background: transparent; }
 .wk-rbc .rbc-time-header.rbc-overflowing { border-right: none; }

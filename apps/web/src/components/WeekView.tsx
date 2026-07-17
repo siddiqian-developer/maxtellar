@@ -14,7 +14,7 @@
  * date, so what you see is what SOD will inject. Dated collisions raise a notice.
  * Every time/duration field inherits smart-input (§7.0.2). Esc → back.
  */
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type { DatedTask, Event, State, TemplateOverride, WeekTemplate } from "@maxtellar/core";
 import { canPlanWeek } from "@maxtellar/core";
 import { useEscClose } from "../useEscClose";
@@ -72,6 +72,9 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
   const [tplMenu, setTplMenu] = useState<{ date: number; templateId: string; title: string } | null>(null);
   const [urgent, setUrgent] = useState(false);
   const { toast, notify } = useSnapToast();
+  /** While the Add-template drawer is open on a fresh slot-select, this mirrors the
+   * drawer's LIVE values so the on-calendar selection mark tracks edits (§4.4). */
+  const [selection, setSelection] = useState<{ weekdays: number[]; startTod: number; endTod: number; title?: string } | null>(null);
   // Calendar week offset in weeks from this week (0 = this week).
   const [weekOff, setWeekOff] = useState(1); // default to the COMING week
   const anyOverlay = editing || datedEdit || tplMenu;
@@ -205,6 +208,8 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
     const wanted = isClick ? 30 : endTod - startTod;
     const span = Math.max(wanted, state.minFragment);
     if (span !== wanted) notify(`Snapped to ${fmtDur(span)} — the shortest usable fragment.`);
+    // Seed the on-calendar mark; the drawer takes over updating it via onLiveChange.
+    setSelection({ weekdays, startTod, endTod: startTod + span });
     setEditing({
       new: true,
       // Both edges came from the gesture, so the honest type is `fixed` (start+end
@@ -331,6 +336,7 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
                 onBlockClick={onBlockClick}
                 onAddDated={(date) => setDatedEdit({ date, task: null })}
                 onSlotSelect={onSlotSelect}
+                selection={selection}
                 onBlockResize={(date, b, endTod) => console.log("[stage1] resize", { date, title: b.title, timing: b.timing, from: b.end, to: endTod })}
                 onBlockMove={(date, b, startTod, toWeekday) => console.log("[stage1] move", { date, title: b.title, timing: b.timing, fromStart: b.start, toStart: startTod, toWeekday })}
               />
@@ -348,7 +354,11 @@ export function WeekView({ state, dispatch, onBack, initialMode = "week" }: Prop
           seed={"new" in editing ? editing.seed : undefined}
           seedWeekdays={"new" in editing ? editing.weekdays : undefined}
           hour12={hour12} now={state.now} minFragment={state.minFragment}
-          onSave={upsert} onDelete={removeTpl} onClose={() => setEditing(null)} />
+          // Live values feed the on-calendar selection mark (only meaningful when a
+          // slot-select opened this drawer; a plain "+ Add" leaves `selection` null).
+          onLiveChange={selection ? setSelection : undefined}
+          onSave={upsert} onDelete={removeTpl}
+          onClose={() => { setEditing(null); setSelection(null); }} />
       )}
       {datedEdit && (
         <DatedTaskEditor date={datedEdit.date} task={datedEdit.task} hour12={hour12} minFragment={state.minFragment}
@@ -505,13 +515,15 @@ function DatedTaskEditor({ date, task, hour12, minFragment, onSave, onDelete, on
  * `seed`/`seedWeekdays` prefill a NEW template from a grid gesture (§4.4): passing
  * `timing` in the seed suppresses useTaskSpec's budgeted-30m default, so the times
  * the user actually dragged survive. An existing `template` always wins over a seed. */
-function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment, onSave, onDelete, onClose }: {
+function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment, onLiveChange, onSave, onDelete, onClose }: {
   template: WeekTemplate | null;
   seed?: TaskSpecInit | undefined;
   seedWeekdays?: number[] | undefined;
   hour12: boolean;
   now: number;
   minFragment: number;
+  /** Push live weekdays/time/title so the on-calendar selection mark tracks edits. */
+  onLiveChange?: ((sel: { weekdays: number[]; startTod: number; endTod: number; title?: string }) => void) | undefined;
   onSave: (t: WeekTemplate) => void;
   onDelete: (id: string) => void;
   onClose: () => void;
@@ -522,6 +534,13 @@ function TemplateEditor({ template, seed, seedWeekdays, hour12, now, minFragment
   const [weekdays, setWeekdays] = useState<number[]>(template?.weekdays ?? seedWeekdays ?? [1, 2, 3, 4, 5]);
   const [err, setErr] = useState<string | null>(null);
   const toggleDay = (d: number): void => setWeekdays((w) => (w.includes(d) ? w.filter((x) => x !== d) : [...w, d].sort()));
+
+  // Mirror the drawer's live values to the on-calendar selection mark (§4.4). Only
+  // fires when start+end are both anchored — a budgeted template has no span to draw.
+  useEffect(() => {
+    if (!onLiveChange || sp.startTod === undefined || sp.endTod === undefined) return;
+    onLiveChange({ weekdays, startTod: sp.startTod, endTod: sp.endTod, title: sp.title });
+  }, [onLiveChange, weekdays, sp.startTod, sp.endTod, sp.title]);
 
   // §4.4 one-time/ranged validity. UI mode: every week / once / date range.
   const initialMode: "always" | "once" | "ranged" =
