@@ -281,21 +281,28 @@ export function WeekGridRBC({
         if (!wrap || !slots.length || !sel.weekdays.length) return null;
         const span = preview.winEnd - preview.winStart;
         const tod = (m: number): string => fmtTod(((m % 1440) + 1440) % 1440, hour12);
-        // ONE whole block spanning the swept columns (first→last weekday), not a rect
-        // per day — reads as a single selection, matching the request.
-        const rects = sel.weekdays.map((wd) => slots[wd]?.getBoundingClientRect()).filter(Boolean) as DOMRect[];
-        if (!rects.length) return null;
-        const leftPx = Math.min(...rects.map((r) => r.left));
-        const rightPx = Math.max(...rects.map((r) => r.right));
-        const ref = rects[0]!;
-        const top = ref.top - wrap.top + ((sel.startTod - preview.winStart) / span) * ref.height;
-        const height = Math.max(((sel.endTod - sel.startTod) / span) * ref.height, 6);
-        return (
-          <div className="wk-sel" style={{ left: leftPx - wrap.left, width: rightPx - leftPx, top, height }}>
-            <span className="wk-sel-title">{sel.title || "New template"}</span>
-            <span className="wk-sel-time num">{tod(sel.startTod)}–{tod(sel.endTod)}</span>
-          </div>
-        );
+        // Group the weekdays into CONTIGUOUS runs — one block per run, so gapped days
+        // (Mon+Wed+Fri) draw separate blocks and never mark the skipped days between.
+        const days = [...sel.weekdays].sort((a, b) => a - b);
+        const runs: number[][] = [];
+        for (const d of days) {
+          const last = runs[runs.length - 1];
+          if (last && d === last[last.length - 1]! + 1) last.push(d);
+          else runs.push([d]);
+        }
+        return runs.flatMap((run) => {
+          const first = slots[run[0]!]?.getBoundingClientRect();
+          const last = slots[run[run.length - 1]!]?.getBoundingClientRect();
+          if (!first || !last) return [];
+          const top = first.top - wrap.top + ((sel.startTod - preview.winStart) / span) * first.height;
+          const height = Math.max(((sel.endTod - sel.startTod) / span) * first.height, 6);
+          return [(
+            <div key={run[0]} className="wk-sel" style={{ left: first.left - wrap.left, width: last.right - first.left, top, height }}>
+              <span className="wk-sel-title">{sel.title || "New template"}</span>
+              <span className="wk-sel-time num">{tod(sel.startTod)}–{tod(sel.endTod)}</span>
+            </div>
+          )];
+        });
       })()}
       <DnDCalendar
         localizer={localizer}
